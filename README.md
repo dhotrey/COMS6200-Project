@@ -14,26 +14,33 @@ The intended study is deliberately small: one Layer-2 topology, five controlled 
 
 ## 2. Project Status
 
-The project is currently in the **environment/bootstrap phase**.
+**M0 — Reproducible Environment Bootstrap: Completed**
+
+The project's **base Mininet/Open vSwitch environment** has been installed and verified on the team Ubuntu server.
+
+M0 verifies only that base environment. It does **not** verify later controller, OpenFlow, or project components.
 
 What exists now:
 
 - repository documentation
 - Ubuntu setup and verification scripts
+- a verified base Mininet/Open vSwitch environment on the team Ubuntu server
 - Git workflow notes
 - secret-handling placeholders
 - Cursor project rules
 - a directory for the Part A report
 
-The following have **not** been demonstrated yet and must not be described as working:
+The following have **not** been installed or verified:
 
 - Ryu
-- OpenFlow 1.3 controller integration
+- OS-Ken
+- OpenFlow 1.3 controller operation
+- the final 6-switch / 8-host topology
 - telemetry
 - fault injection
-- LLM diagnosis
+- OpenAI LLM agent
 - the deterministic baseline
-- the 6-switch / 8-host topology
+- experiments
 
 ## 3. Planned Architecture
 
@@ -81,16 +88,38 @@ Because compatibility with the selected Python/Ubuntu environment still needs to
 
 The project may later include **one optional constrained link-failure reroute demonstration**. Automated remediation is not the current priority. Do not add extra mandatory faults.
 
-## 4. Target Environment
+## 4. Verified Base Environment
 
-Current target environment:
+### Verified reference environment
+
+The following **base Mininet/Open vSwitch environment** has been verified on the team Ubuntu server by running `./setup/verify_environment.sh`.
+
+This is the team's currently verified **reference** result. Do not treat it as a result from Kali or any other distribution.
+
+This is **not** a verification of Ryu, OS-Ken, OpenFlow 1.3 controller operation, the planned topology, telemetry, fault injection, the LLM agent, the baseline, or experiments.
+
+Observed versions and results:
 
 - Ubuntu 24.04.4 LTS
 - Python 3.12.3
+- Git 2.43.0
+- Mininet 2.3.0
+- Open vSwitch 3.3.9
+- iperf3 3.16
+- `openvswitch-switch` service: active
+- Basic Mininet/OVS test: `mn --switch ovsbr --test pingall`
+- Result: 0% dropped, 2/2 received
+- M0 verification summary: PASS: 10, FAIL: 0, WARNING: 0
 
-This environment is currently being validated. It is **not** a fully tested environment until `./setup/verify_environment.sh` has been executed successfully on the team Ubuntu server.
+Ryu and OS-Ken were not installed during M0 and have not been verified.
 
-Mininet and Open vSwitch are installed by the setup script. Ryu and OS-Ken are **not** installed during bootstrap.
+### Compatibility policy
+
+The project is intended to run on Linux.
+
+Ubuntu 24.04.4 LTS is the team's currently verified reference environment.
+
+Other Linux distributions such as Debian or Kali may also be used if they satisfy the project's environment verification checks. Passing `./setup/verify_environment.sh` means the environment has passed the current M0 Mininet/Open vSwitch **capability** checks. It does **not** mean controller compatibility has been verified, and it does **not** mean every Linux distribution is officially supported.
 
 ## 5. Quick Start
 
@@ -105,18 +134,22 @@ chmod +x setup/*.sh
 ./setup/verify_environment.sh
 ```
 
-Run the setup and verification scripts on Ubuntu/Linux, not on macOS or Windows.
+Run the setup and verification scripts on Linux, not on macOS or Windows. Ubuntu 24.04.4 is the verified reference; other Linux systems may be used only if verification passes.
 
 ## 6. Ubuntu Environment Setup
 
-On an Ubuntu host:
+`setup/setup_ubuntu.sh` remains the M0 installer. Ubuntu 24.04 is the primary tested target. apt-based Debian-family systems such as Debian or Kali may be able to use it, but package availability can differ. It does not provide universal Linux installation support.
+
+On an apt-based Linux host:
 
 ```bash
 chmod +x setup/*.sh
 ./setup/setup_ubuntu.sh
 ```
 
-The script updates apt, installs Git, Mininet, Open vSwitch, iperf3, Python 3, pip, venv, jq, and curl, enables/starts Open vSwitch, and creates a `.venv` virtual environment if it does not already exist.
+The script updates apt, installs Git, Mininet, Open vSwitch, iperf3, Python 3, pip, venv, jq, and curl, attempts to enable/start Open vSwitch when the Ubuntu-style service unit exists, and creates a `.venv` virtual environment if it does not already exist.
+
+If `apt` is not available, the script stops and asks you to install equivalent dependencies manually.
 
 It does **not** install Ryu, OS-Ken, the OpenAI SDK, or other LLM libraries.
 
@@ -126,19 +159,27 @@ The script cannot activate `.venv` in your current shell. After it finishes, run
 source .venv/bin/activate
 ```
 
+Always follow setup with:
+
+```bash
+./setup/verify_environment.sh
+```
+
 ## 7. Environment Verification
 
 ```bash
 ./setup/verify_environment.sh
 ```
 
-This check reports PASS / FAIL / WARNING for OS, Python, Git, Mininet, Open vSwitch, iperf3, and the Open vSwitch service. It then runs one basic Mininet test:
+Verification is **capability-based**, not Ubuntu-name-based. It reports PASS / FAIL / WARNING for required project capabilities: Linux, Python 3, Git, Mininet, Open vSwitch tools, iperf3, Open vSwitch runtime, and a basic Mininet connectivity test (`mn --switch ovsbr --test pingall`, using `sudo` only when the caller is not root).
 
-```bash
-sudo mn --switch ovsbr --test pingall
-```
+Distribution name is informational. A Debian or Kali host can receive Overall: SUCCESS if the required capabilities work. A passing result means only that the current M0 Mininet/Open vSwitch checks succeeded. It is **not** evidence that Ryu, OS-Ken, or OpenFlow 1.3 controller integration is working.
 
-A passing result means only that Mininet and Open vSwitch can start a simple ping test. It is **not** evidence that the final Ryu/OpenFlow project architecture is working.
+**Observed M0 result on the team Ubuntu server:**
+
+- Basic Mininet/OVS test: `mn --switch ovsbr --test pingall`
+- Result: 0% dropped, 2/2 received
+- Summary: PASS: 10, FAIL: 0, WARNING: 0
 
 ## 8. macOS / Windows Development
 
@@ -146,11 +187,12 @@ Cursor, Git, documentation, and Python code editing may be done from macOS or Wi
 
 Mininet and Open vSwitch experiments must be executed in a Linux environment such as:
 
-- Ubuntu server
+- Ubuntu server (verified reference: Ubuntu 24.04.4 LTS)
 - Ubuntu VM
-- Linux workstation
+- Debian or Kali, if `./setup/verify_environment.sh` passes
+- another Linux workstation/server that passes the same capability checks
 
-Do not redesign the project to run Mininet natively on macOS.
+Do not redesign the project to run Mininet natively on macOS. Do not treat every Linux distribution as officially supported.
 
 ## 9. Git Workflow
 
@@ -261,9 +303,9 @@ COMS6200-Project/
 
 ## 12. Current Milestone
 
-**M0 — Reproducible environment bootstrap.**
+**M0 — Reproducible Environment Bootstrap: Completed**
 
-Success means:
+M0 success criteria were met:
 
 - repository setup documentation exists
 - Ubuntu setup script exists
@@ -271,17 +313,30 @@ Success means:
 - Git workflow is documented
 - secrets are protected
 - Cursor project rules exist
-- team members can clone the repository and follow the same setup process
+- the setup and verification scripts were executed successfully on the real Ubuntu server
+- the base Mininet/OVS checks returned 10 PASS / 0 FAIL / 0 WARNING
 
-M0 does **not** mean the SDN project itself is implemented.
+M0 does **not** mean the SDN project itself is implemented. It does **not** verify Ryu, OS-Ken, OpenFlow 1.3 controller operation, the planned topology, telemetry, fault injection, the LLM agent, the baseline, or experiments.
 
 ## 13. Next Milestone
 
-After this environment has been manually verified on the real Ubuntu server, the next milestone is:
+**M1 — Main Mininet Topology**
 
-**M1 — Main Mininet topology.**
+Implement and validate the agreed 6-switch, 8-host, dual-core Layer-2 Mininet topology with deterministic host addressing and link structure.
 
-That milestone will implement the agreed 6-switch, 8-host, dual-core, Layer-2 topology. M1 is not part of this bootstrap task.
+Controller integration, OpenFlow 1.3 forwarding, telemetry, fault injection, and LLM integration remain later milestones.
+
+M1 has not been started.
+
+Milestone plan:
+
+- M0 — Reproducible Environment Bootstrap — Completed
+- M1 — Main Mininet Topology
+- M2 — Controller + OpenFlow 1.3 Integration
+- M3 — Deterministic Normal Forwarding
+- M4 — Structured Telemetry
+- M5 — First Automated Fault + Reset
+- M6 — First LLM Tool-Calling Diagnosis
 
 ## Team Journal
 
@@ -292,4 +347,8 @@ Preserved from the original repository README.
 - Aryan: minor research about the project, setup the github repo.
 - Stephen
 - Molly
-- Armin
+- Amir
+
+### M0 environment verification
+
+- Amir Latifi: completed the M0 reproducible environment bootstrap and real-server verification. Ubuntu 24.04.4 LTS; Mininet and Open vSwitch installed via the repository setup/verification scripts; basic Mininet connectivity test (`mn --switch ovsbr --test pingall`) succeeded with 0% dropped (2/2 received); verification summary 10 PASS / 0 FAIL / 0 WARNING.

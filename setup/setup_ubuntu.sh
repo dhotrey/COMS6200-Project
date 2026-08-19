@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# COMS6200 M0 environment setup.
+#
+# Ubuntu 24.04 is the primary tested / verified reference target.
+# apt-based Debian-family distributions (for example Debian or Kali) may
+# also be able to use this script, but package names and availability can
+# differ. This is not universal Linux installation support.
+#
+# Always run ./setup/verify_environment.sh after this script. Capability
+# checks, not distribution name, determine whether the environment is usable.
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> COMS6200 Ubuntu environment setup"
+echo "==> COMS6200 environment setup"
 echo "==> Repository root: ${ROOT}"
+echo "==> Verified reference: Ubuntu 24.04.4 LTS"
+echo "==> Automatic installation currently supports apt-based systems only"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "ERROR: This setup script must be run on Linux."
@@ -28,8 +40,23 @@ else
 fi
 
 if ! command -v apt >/dev/null 2>&1; then
-  echo "ERROR: apt is not available. This script targets Ubuntu/Debian."
+  echo "ERROR: apt is not available."
+  echo "Automatic installation currently supports apt-based systems only."
+  echo "You may install equivalent dependencies manually, then run:"
+  echo "  ./setup/verify_environment.sh"
   exit 1
+fi
+
+echo "==> Package manager: apt"
+
+if [[ "${ID:-}" == "ubuntu" ]]; then
+  echo "==> Ubuntu detected; this matches the project's installation reference family"
+elif [[ "${ID:-}" == "debian" || "${ID:-}" == "kali" ]]; then
+  echo "==> Debian-family distribution detected (${PRETTY_NAME:-${ID}})."
+  echo "==> The script will continue, but package availability can differ from Ubuntu 24.04."
+elif [[ -n "${ID:-}" ]]; then
+  echo "==> WARNING: detected distribution is ${PRETTY_NAME:-${ID}}, not the Ubuntu 24.04 reference."
+  echo "==> Continuing because apt is available. Run verify_environment.sh afterwards."
 fi
 
 if [[ "${EUID}" -eq 0 ]]; then
@@ -59,11 +86,17 @@ $SUDO apt install -y \
   jq \
   curl
 
-echo "==> Enabling Open vSwitch service"
-$SUDO systemctl enable openvswitch-switch
-
-echo "==> Starting Open vSwitch service"
-$SUDO systemctl start openvswitch-switch
+if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files --type=service 2>/dev/null | grep -q '^openvswitch-switch\.service'; then
+  echo "==> Enabling Open vSwitch service"
+  $SUDO systemctl enable openvswitch-switch
+  echo "==> Starting Open vSwitch service"
+  $SUDO systemctl start openvswitch-switch
+else
+  echo "WARNING: systemd unit openvswitch-switch was not found."
+  echo "The Open vSwitch package may still have been installed."
+  echo "Start Open vSwitch using this distribution's service name if needed,"
+  echo "then run ./setup/verify_environment.sh"
+fi
 
 if [[ -d "${ROOT}/.venv" ]]; then
   echo "==> Python virtual environment .venv already exists; skipping creation"
