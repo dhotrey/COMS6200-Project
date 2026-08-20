@@ -338,6 +338,14 @@ Milestone plan:
 - M5 — First Automated Fault + Reset
 - M6 — First LLM Tool-Calling Diagnosis
 
+## Project Reports
+
+The current Part A proposal/progress report, generated Word/PDF outputs, and reproducible build instructions are available under:
+
+`docs/reports/part-a/`
+
+Future report edits should be made in `docs/reports/part-a/part-a-source.md`, then regenerated. The Part A snapshot is not automatically updated when later implementation milestones are completed.
+
 ## Team Journal
 
 Preserved from the original repository README.
@@ -352,3 +360,7 @@ Preserved from the original repository README.
 ### M0 environment verification
 
 - Amir Latifi: completed the M0 reproducible environment bootstrap and real-server verification. Ubuntu 24.04.4 LTS; Mininet and Open vSwitch installed via the repository setup/verification scripts; basic Mininet connectivity test (`mn --switch ovsbr --test pingall`) succeeded with 0% dropped (2/2 received); verification summary 10 PASS / 0 FAIL / 0 WARNING.
+
+### Amir Latifi — Part A report reproducibility and validation
+
+Imported the Part A report into the repository as a canonical Markdown source, preserved the original report figures, and established reproducible DOCX/PDF generation and automated report validation. Citations now use stable BibTeX-style keys in `part-a-source.md` with `references.bib` as the bibliographic source of truth; IEEE numbers are generated automatically from first appearance. The builder programmatically validates citation keys, sequential numbering, unused-library warnings, and clickable citation-to-bibliography links in both PDF and DOCX. Dedicated title-page layout/validation and generated DOCX/PDF checks remain in place. Numeric citation rewriting is obsolete.
