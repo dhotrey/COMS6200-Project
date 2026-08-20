@@ -4,6 +4,11 @@ COMS6200 university project.
 
 This project evaluates whether a tool-using LLM can diagnose and localise controlled faults in an OpenFlow-based Mininet environment, and how that compares with a deterministic scripted troubleshooting baseline.
 
+## Documentation
+
+- **[User Manual](docs/user-guide.md)** — comprehensive setup, operation, fault scenarios, troubleshooting workflow, expected behaviour, reset procedures and experimental usage.
+- **[Part A report](docs/reports/part-a/)** — proposal/progress report (Markdown source, generated Word/PDF).
+
 ## 1. Project Overview
 
 The research question is:
@@ -39,7 +44,7 @@ Not implemented:
 - telemetry / tool gateway
 - automated fault injection
 - OpenAI LLM agent
-- deterministic baseline
+- scripted troubleshooting baseline
 - repeated experiments
 
 ## 3. Architecture
@@ -109,7 +114,7 @@ Dual-core layout: s1 (Core A) and s2 (Core B); access switches s3–s6 each atta
 
 No Linux bonding, LACP, MLAG, VRRP, or automatic host failover is implemented.
 
-When M3 installs baseline forwarding, the normal tree will use s1 as the active core. The following links stay physically present but remain outside normal baseline forwarding:
+Baseline forwarding uses s1 as the active core. The following links stay physically present but remain outside normal baseline forwarding:
 
 - s2 redundant access uplinks
 - s1–s2 inter-core link

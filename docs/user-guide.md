@@ -1,0 +1,949 @@
+# COMS6200 LLM-Based Network Troubleshooting Agent
+
+## User Manual
+
+Canonical operational guide for setup, testbed operation, healthy-state checks, planned diagnosis workflows, reset, and troubleshooting.
+
+The [root README](../README.md) is the concise landing page. This file is the detailed operator/developer manual.
+
+Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](reports/part-a/figures/figure2.png). Topology diagram (Part A Figure 1): [reports/part-a/figures/figure1.png](reports/part-a/figures/figure1.png).
+
+---
+
+## Status legend
+
+| Mark | Meaning |
+| --- | --- |
+| ✅ | Implemented and runtime verified |
+| 🟡 | Planned / under development |
+| 🔬 | Optional extension |
+
+## Current implementation status
+
+| Item | Status |
+| --- | --- |
+| M0 Reproducible Environment Bootstrap | ✅ |
+| M1 Enhanced Main Mininet Topology | ✅ |
+| M2 ONOS + OpenFlow 1.3 Integration | ✅ |
+| M3 Deterministic Loop-Free Forwarding | ✅ |
+| M4 Structured Telemetry Gateway | 🟡 current / next |
+| Automated fault injection | 🟡 |
+| Deterministic scripted troubleshooting baseline | 🟡 |
+| LLM tool-calling integration | 🟡 |
+| Repeated evaluation experiments | 🟡 |
+| h6 multihoming / failover experiment | 🔬 |
+| Constrained automatic link-failure repair | 🔬 |
+
+Do not treat a 🟡 or 🔬 item as working. Planned sections below describe intended workflow only. They do **not** provide fictional CLIs.
+
+**Two different “baseline” terms**
+
+- **Baseline forwarding** ✅ — ONOS application `org.coms6200.baseline`. Network datapath for healthy host connectivity.
+- **Scripted troubleshooting baseline** 🟡 — future diagnostic comparator that will use the same telemetry as the LLM. Not implemented.
+
+---
+
+## Contents
+
+1. [Audience and purpose](#audience-and-purpose)
+2. [Architecture overview](#architecture-overview)
+3. [Reference environment](#reference-environment)
+4. [System requirements](#system-requirements)
+5. [Installation and environment setup](#installation-and-environment-setup)
+6. [ONOS controller](#onos-controller)
+7. [Main experimental topology](#main-experimental-topology)
+8. [Host addressing](#host-addressing)
+9. [Starting the network](#starting-the-network)
+10. [Verifying controller integration](#verifying-controller-integration)
+11. [ONOS host discovery](#onos-host-discovery)
+12. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
+13. [Healthy network checklist](#healthy-network-checklist)
+14. [Structured telemetry gateway](#structured-telemetry-gateway)
+15. [Fault injection](#fault-injection)
+16. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
+17. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis)
+18. [Expected diagnostic output](#expected-diagnostic-output)
+19. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
+20. [Resetting the testbed](#resetting-the-testbed)
+21. [Troubleshooting the testbed](#troubleshooting-the-testbed)
+22. [Safety and experimental controls](#safety-and-experimental-controls)
+23. [Optional extensions](#optional-extensions)
+24. [End-to-end workflow](#end-to-end-workflow)
+25. [Repository layout](#repository-layout)
+26. [Development and Git workflow](#development-and-git-workflow)
+27. [Keeping this manual current](#keeping-this-manual-current)
+
+---
+
+## Audience and purpose
+
+This manual is for:
+
+- project developers maintaining the testbed
+- course markers / demonstrators reproducing verified behaviour
+- users setting up the Linux experiment host
+- experiment operators running later diagnosis episodes
+- users who will later ask the LLM to diagnose a **symptom**
+
+The project is a **controlled experimental/research testbed**, not a production network-management platform.
+
+Primary purpose: compare a tool-using LLM troubleshooting agent with a deterministic **scripted troubleshooting baseline**, using the **same observable evidence**, in an OpenFlow-controlled Mininet network.
+
+Research question: *How accurately and efficiently can a tool-using LLM agent diagnose and localise common faults in an OpenFlow-controlled Mininet network compared with a deterministic scripted troubleshooting baseline?*
+
+---
+
+## Architecture overview
+
+Implemented through M3:
+
+```
+Mininet hosts
+    ↓
+Open vSwitch
+    ↓ OpenFlow 1.3
+ONOS 2.7.0
+```
+
+Planned from M4 onward:
+
+```
+ONOS 2.7.0
+    ↓ read-only REST / controller state
+Structured Telemetry / Tool Gateway
+    ↓
+    ├── OpenAI LLM Agent                    🟡
+    └── Deterministic Scripted Troubleshooting Baseline  🟡
+            ↓
+    Structured Diagnosis
+            ↓
+    Evaluator / Logger
+```
+
+Ground truth path (planned injector; evaluator-only):
+
+```
+Fault Injector ── inject faults ──→ Mininet / OVS
+Fault Injector ── ground truth only ──→ Evaluator / Logger
+```
+
+See [Part A Figure 2](reports/part-a/figures/figure2.png).
+
+Experimental fairness (planned, but already a project constraint):
+
+- neither diagnostic method receives hidden fault labels
+- neither receives injector configuration
+- the LLM does not receive unrestricted shell access
+- the LLM does not receive ONOS credentials
+- controller access for diagnosis is mediated by the telemetry gateway
+- both methods receive equivalent evidence from that gateway
+
+Raw ONOS REST used by the forwarding installer is **not** the telemetry gateway.
+
+---
+
+## Reference environment
+
+Verified on the team Ubuntu Mininet server (20 August 2026). Other versions may work if capability checks pass; they are **not** the verified baseline.
+
+| Component | Verified value | Evidence / source |
+| --- | --- | --- |
+| OS | Ubuntu 24.04.4 LTS, kernel 6.8.0-137-generic, x86_64 | `evidence/progress/onos/environment-2026-08-20.txt` |
+| Python | 3.12.3 | same |
+| Git | 2.43.0 | same |
+| Mininet | 2.3.0 | same |
+| Open vSwitch | 3.3.9 | same |
+| iperf3 | 3.16 | same (`iperf 3.16`) |
+| curl | 8.5.0 | same |
+| Docker (host) | 29.1.3 | same |
+| ONOS | 2.7.0 | `evidence/progress/onos/onos-startup-2026-08-20.txt` |
+| ONOS image | `onosproject/onos:2.7.0` | same |
+| ONOS Java | Zulu OpenJDK 11.0.8 **inside the container** (`JAVA_HOME=/usr/lib/jvm/zulu11-ca-amd64`) | same |
+| Host Java | not installed, **not required** | same |
+| OpenFlow | 1.3 (`OF_13`) | M2/M3 evidence |
+| ONOS bindings | `127.0.0.1` only | setup scripts |
+
+The reference server used during ONOS testing had 1 vCPU and about 955 MiB RAM. **No formal minimum hardware specification has been benchmarked**; use the reference server configuration when reproducibility matters.
+
+---
+
+## System requirements
+
+Supported by current setup scripts:
+
+- Linux (Ubuntu 24.04.4 is the verified reference)
+- Python 3
+- Git
+- Mininet
+- Open vSwitch (`openvswitch-switch`)
+- iperf3
+- curl, jq
+- python3-pip, python3-venv
+- Docker (required for ONOS; **not** installed by `setup/setup_ubuntu.sh`)
+
+`setup/setup_ubuntu.sh` installs the Mininet/OVS packages via apt. `setup/setup_onos.sh` requires Docker already usable on the host.
+
+Do not store secrets in this repository. ONOS REST credentials are environment variables. OpenAI keys will later use `.env` (see `.env.example`); never commit `.env`.
+
+---
+
+## Installation and environment setup
+
+Repository: `https://github.com/dhotrey/COMS6200-Project.git`
+
+| Branch | Role |
+| --- | --- |
+| `develop` | Integration (normal working branch) |
+| `master` | Stable / submission-ready |
+| `feature/*` | Individual work |
+
+Base Mininet/OVS and ONOS are **separate**. `setup_ubuntu.sh` does not install ONOS. `setup_onos.sh` does not install Mininet.
+
+```bash
+git clone https://github.com/dhotrey/COMS6200-Project.git
+cd COMS6200-Project
+git switch develop
+chmod +x setup/*.sh scripts/*.sh
+./setup/setup_ubuntu.sh
+./setup/verify_environment.sh
+```
+
+After `setup_ubuntu.sh`:
+
+```bash
+source .venv/bin/activate
+```
+
+Then ONOS:
+
+```bash
+./setup/setup_onos.sh
+./scripts/verify_onos.sh
+```
+
+`verify_environment.sh` is capability-based (Linux, Python 3, Git, Mininet, OVS tools, iperf3, OVS runtime, basic `mn --switch ovsbr --test pingall`). A pass is **not** evidence that ONOS, OpenFlow 1.3 on `main6s8h`, telemetry, faults, or the LLM work.
+
+Cursor, Git, and documentation editing may be done on macOS or Windows. Mininet, OVS, and ONOS must run on Linux.
+
+---
+
+## ONOS controller
+
+✅ Version-pinned Docker image `onosproject/onos:2.7.0`. Container name: `onos`.
+
+### Ports (loopback only)
+
+| Host binding | Role |
+| --- | --- |
+| `127.0.0.1:6653` | OpenFlow |
+| `127.0.0.1:8181` | REST API and GUI |
+| `127.0.0.1:8101` | Karaf CLI (SSH) |
+
+ONOS also listens on 6633 **inside** the container. That port is not published. Use 6653 only.
+
+### Start / stop
+
+First run, or after the container was removed:
+
+```bash
+./setup/setup_onos.sh
+```
+
+If the container already exists:
+
+```bash
+docker start onos
+```
+
+Prefix `docker` with `sudo` if your account cannot talk to the Docker daemon. `setup_onos.sh` already uses `sudo` when not running as root.
+
+Wait until OpenFlow is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server).
+
+Stop (container kept):
+
+```bash
+docker stop onos
+```
+
+Remove container (image kept):
+
+```bash
+docker stop onos && docker rm onos
+```
+
+`RestartPolicy=no`: the container does not restart after reboot. Start it explicitly.
+
+### Verify
+
+```bash
+./scripts/verify_onos.sh
+```
+
+REST checks run only if `ONOS_PASSWORD` is set:
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+./scripts/verify_onos.sh
+```
+
+Never commit the password. The installer and verifier read credentials from the environment only.
+
+Karaf CLI (password not stored in this repository):
+
+```bash
+ssh -p 8101 karaf@127.0.0.1
+```
+
+### Applications
+
+Started via `ONOS_APPS=drivers,openflow,gui2`. Observed **ACTIVE** apps:
+
+- `org.onosproject.drivers`
+- `org.onosproject.optical-model` (drivers dependency)
+- `org.onosproject.hostprovider`
+- `org.onosproject.lldpprovider`
+- `org.onosproject.openflow-base`
+- `org.onosproject.openflow`
+- `org.onosproject.gui2`
+
+`org.onosproject.openflow` pulls in `openflow-base`, `hostprovider`, and `lldpprovider`.
+
+**`org.onosproject.fwd` must remain NOT ACTIVE.** The project uses explicit `org.coms6200.baseline` forwarding. Reactive forwarding would flood/learn across physical cycles.
+
+---
+
+## Main experimental topology
+
+✅ File: `topologies/main_topology.py`  
+Mininet name: `main6s8h`  
+Layer 2, `10.0.0.0/24`, OpenFlow 1.3, `failMode=secure`. STP is not enabled.
+
+| Role | Switch | Hosts |
+| --- | --- | --- |
+| Core A (active baseline core) | s1 | — |
+| Core B (redundant / test) | s2 | — |
+| User Access A | s3 | h1, h2 |
+| User Access B | s4 | h3, h4 |
+| Server Access | s5 | h5, h6 primary |
+| Admin / Test Access | s6 | h7, h8, h6 secondary |
+
+| Class | Count |
+| --- | ---: |
+| Switches | 6 |
+| Hosts | 8 |
+| Inter-switch physical links | 10 |
+| Host-switch physical links | 9 |
+| Total physical links | 19 |
+
+Physically present but **excluded from baseline forwarding**:
+
+- s1–s2 inter-core link
+- s2 access uplinks (s2–s3, s2–s4, s2–s5, s2–s6)
+- s3–s4 access-edge test link (controlled F4 / core-bypass)
+- h6–s6 secondary attachment (optional later multihoming)
+
+These remain available for later experiments. They must not carry normal host traffic.
+
+### Verified port map
+
+From `topologies/main_topology.py` / `topologies/README.md`:
+
+| Switch | Port | Peer |
+| --- | --- | --- |
+| s1 | 1 | s2 p1 |
+| s1 | 2 | s3 p1 |
+| s1 | 3 | s4 p1 |
+| s1 | 4 | s5 p1 |
+| s1 | 5 | s6 p1 |
+| s2 | 1 | s1 p1 |
+| s2 | 2 | s3 p2 |
+| s2 | 3 | s4 p2 |
+| s2 | 4 | s5 p2 |
+| s2 | 5 | s6 p2 |
+| s3 | 1 | s1 p2 |
+| s3 | 2 | s2 p2 |
+| s3 | 3 | h1 |
+| s3 | 4 | h2 |
+| s3 | 5 | s4 p5 |
+| s4 | 1 | s1 p3 |
+| s4 | 2 | s2 p3 |
+| s4 | 3 | h3 |
+| s4 | 4 | h4 |
+| s4 | 5 | s3 p5 |
+| s5 | 1 | s1 p4 |
+| s5 | 2 | s2 p4 |
+| s5 | 3 | h5 |
+| s5 | 4 | h6 primary |
+| s6 | 1 | s1 p5 |
+| s6 | 2 | s2 p5 |
+| s6 | 3 | h7 |
+| s6 | 4 | h8 |
+| s6 | 5 | h6 secondary |
+
+ONOS DPIDs: `of:0000000000000001` … `of:0000000000000006` for s1–s6.
+
+---
+
+## Host addressing
+
+| Host | IPv4 | MAC | Attachment |
+| --- | --- | --- | --- |
+| h1 | 10.0.0.1/24 | 00:00:00:00:00:01 | s3:3 |
+| h2 | 10.0.0.2/24 | 00:00:00:00:00:02 | s3:4 |
+| h3 | 10.0.0.3/24 | 00:00:00:00:00:03 | s4:3 |
+| h4 | 10.0.0.4/24 | 00:00:00:00:00:04 | s4:4 |
+| h5 | 10.0.0.5/24 | 00:00:00:00:00:05 | s5:3 |
+| h6 primary | 10.0.0.6/24 | 00:00:00:00:00:06 | s5:4 (`h6-eth0`) |
+| h7 | 10.0.0.7/24 | 00:00:00:00:00:07 | s6:3 |
+| h8 | 10.0.0.8/24 | 00:00:00:00:00:08 | s6:4 |
+| h6 secondary | **no baseline IPv4** | 00:00:00:00:06:02 | s6:5 (`h6-eth1`) |
+
+h6 secondary is unused by baseline forwarding. No bonding, LACP, MLAG, VRRP, or automatic failover is implemented.
+
+---
+
+## Starting the network
+
+ONOS must be up first. Switches request OpenFlow 1.3 and secure fail mode in the topology. Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`.
+
+```bash
+./setup/setup_onos.sh          # or: docker start onos
+./scripts/verify_onos.sh
+
+sudo mn -c
+sudo mn --custom topologies/main_topology.py \
+  --topo main6s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+Inside Mininet, initial inspection:
+
+```
+nodes
+net
+links
+```
+
+Expected: 6 switches, 8 hosts, 19 links OK. `pingall` **fails** until baseline forwarding is installed.
+
+From another shell while Mininet is running:
+
+```bash
+sudo ./scripts/verify_main_openflow.sh
+```
+
+Static topology checks (no Mininet required):
+
+```bash
+python3 tests/test_main_static.py
+```
+
+Cleanup after exiting Mininet:
+
+```bash
+sudo mn -c
+```
+
+---
+
+## Verifying controller integration
+
+✅ With `main6s8h` running against ONOS 2.7.0 (20 August 2026):
+
+| Check | Expected |
+| --- | --- |
+| Devices | 6/6 available, `protocol=OF_13` |
+| Directed ONOS links | 20 (= 10 physical inter-switch links) |
+| s3:5 ↔ s4:5 | ACTIVE both ways |
+| Fail mode | secure |
+| REST | HTTP 200 for `/devices`, `/links`, `/hosts`, `/flows`, `/topology` |
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+./scripts/verify_onos.sh
+sudo ./scripts/verify_main_openflow.sh
+```
+
+`verify_onos.sh` reports device discovery, directed links, `host_count`, flow counts, and active applications. `verify_main_openflow.sh` reports OVS protocols, fail-mode, controller attachment, and OpenFlow 1.3 flow dumps.
+
+ONOS topology links are **switch–switch only**. Host-facing attachments are not ONOS topology links. Do not compare Mininet’s 19 physical links with ONOS’s 20 directed inter-switch links as if they counted the same objects.
+
+---
+
+## ONOS host discovery
+
+After healthy `pingall` (56/56), ONOS REST `/hosts` still returned HTTP 200 with **`host_count` 0**.
+
+This is **expected**, not a forwarding failure.
+
+Cause: baseline ARP is forwarded in the data plane (priority 42000/41000), so `hostprovider` does not necessarily receive Packet_In ARP and does not learn endpoint locations.
+
+Do **not** activate `org.onosproject.fwd` to populate `/hosts`.
+
+Planned `get_topology()` (M4) will combine:
+
+- ONOS: devices, inter-switch links, ports/status
+- Mininet topology specification: configured host attachments and host-to-switch mappings (including h6 primary and secondary)
+
+---
+
+## Deterministic baseline forwarding
+
+✅ This is the **network forwarding baseline**. It is **not** the scripted troubleshooting baseline.
+
+Provisioner: `forwarding/baseline_forwarding.py`  
+Application: `org.coms6200.baseline`  
+Numeric ONOS application ID (runtime, 20 Aug 2026): **176**
+
+| Role | Priority |
+| --- | ---: |
+| ONOS system / control (LLDP/BDDP/ARP punt) | 40000 |
+| Baseline unicast (dest-MAC) | 41000 |
+| Baseline ARP tree | 42000 |
+| Future injected faults (reserved, not installed) | 50000 |
+
+| Count | Expected |
+| --- | ---: |
+| Baseline flows | 56 (all **ADDED**) |
+| Controller/system flows | 18 (3 per switch) |
+| Total ONOS flows | 74 |
+| s1 | 12 |
+| s2 | 0 |
+| s3 / s4 / s5 / s6 | 11 each |
+
+### Commands
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+# optional: export ONOS_URL=http://127.0.0.1:8181/onos/v1
+
+python3 forwarding/baseline_forwarding.py install
+python3 forwarding/baseline_forwarding.py status
+python3 forwarding/baseline_forwarding.py verify
+python3 forwarding/baseline_forwarding.py remove
+```
+
+`install` is idempotent: it removes stale `org.coms6200.baseline` flows, installs the canonical set, then verifies `ADDED`. `remove` deletes **only** this application’s flows.
+
+Static tests (no ONOS):
+
+```bash
+python3 tests/test_baseline_forwarding.py
+```
+
+### Normal forwarding behaviour
+
+Active core: **s1**. Remote paths: s3/s4/s5/s6 → s1.
+
+Unicast: match destination MAC of the eight primary hosts. Access switches send remote destinations toward s1; s1 sends toward the correct access switch; local hosts use the access host port.
+
+ARP requests: ingress-specific broadcast-tree rules on **active-tree ports only** (s1: 2,3,4,5; s3–s6: 1,3,4; s2: none). ARP replies use dest-MAC unicast.
+
+Excluded from baseline OUTPUT:
+
+- s1–s2
+- s2–s3, s2–s4, s2–s5, s2–s6
+- s3–s4
+- h6–s6 secondary
+
+Those links stay discovered for later faults, redundancy, and optional failover.
+
+Do not enable OVS `NORMAL`, STP, `OFPP_FLOOD`, or `org.onosproject.fwd` to make ping succeed.
+
+---
+
+## Healthy network checklist
+
+| Check | Expected | How |
+| --- | --- | --- |
+| ONOS running | container `Up`, ports 6653/8181/8101 on loopback | `./scripts/verify_onos.sh` |
+| Six switches | 6/6 `OF_13`, available | same + `sudo ./scripts/verify_main_openflow.sh` |
+| Directed inter-switch links | 20 | `verify_onos.sh` |
+| Baseline flows | 56 ADDED, s1=12 s2=0 s3–s6=11 | `python3 forwarding/baseline_forwarding.py verify` |
+| System flows | 18 | `verify_onos.sh` / status |
+| `org.onosproject.fwd` | **not ACTIVE** | `verify_onos.sh` applications |
+| NORMAL / STP / FLOOD | not used for baseline | OVS dump-flows |
+| `pingall` | **0% dropped (56/56 received)** | Mininet CLI |
+
+Inside Mininet after `install`:
+
+```
+pingall
+```
+
+Verified result (20 August 2026): `0% dropped (56/56 received)` on primary h1–h8 addresses. Evidence: `evidence/progress/forwarding/deterministic-baseline-2026-08-20.txt`.
+
+`host_count` 0 after that `pingall` is expected ([ONOS host discovery](#onos-host-discovery)).
+
+---
+
+## Structured telemetry gateway
+
+🟡 **CURRENT / UNDER DEVELOPMENT — M4**
+
+No agent-facing telemetry CLI or HTTP API exists yet. Do not treat ONOS REST as the completed gateway.
+
+Planned role: normalise controller and testbed state into bounded tools used by **both** the LLM and the scripted troubleshooting baseline.
+
+| Tool | Purpose | Expected input | Compact output (planned) | Status |
+| --- | --- | --- | --- | --- |
+| `get_topology()` | Combined ONOS device/link/port state + configured Mininet host map | none | switches, links, ports/status, configured host attachments | 🟡 |
+| `ping(src, dst)` | Reachability, loss, RTT | host names | sent/received, loss %, min/avg/max RTT | 🟡 |
+| `get_port_status(sw)` | Admin/operational port state | switch id | port, peer, up/down | 🟡 |
+| `get_port_stats(sw)` | Counters and derived rates | switch id | packet/byte deltas, drops/errors, utilisation | 🟡 |
+| `get_flow_table(sw)` | OpenFlow matches, priorities, actions, counters | switch id | normalised flow entries | 🟡 |
+| `iperf(src, dst)` | Short TCP throughput | host names | duration, transfer, Mbit/s | 🟡 |
+
+**Planned interface (not runnable):** `get_topology()` will **not** depend on ONOS `/hosts`. See [ONOS host discovery](#onos-host-discovery).
+
+When M4 lands, replace this section with the real commands/schema and verified sample output.
+
+---
+
+## Fault injection
+
+🟡 **NOT YET IMPLEMENTED / EVIDENCED**
+
+There is **no** fault-injector command in this repository. The table is **designed expectation**, not a runtime-verified result.
+
+| ID | Injected concept | Expected symptom | Useful evidence | Expected diagnosis |
+| --- | --- | --- | --- | --- |
+| F1 Link failure | Disable one primary access-to-core link (e.g. s3–s1) | Affected normal path fails; port/link down | topology, port state, ping, flows | Identify the failed link |
+| F2 Congestion | Background traffic on a constrained link | Ports stay up; utilisation up; throughput/latency degrade | port counters/rates, ping, iperf | Identify congested link and competing load |
+| F3 ACL / policy error | High-priority selective drop rule | Selective traffic failure; links healthy | flow table, reachability, port state | Identify the conflicting drop rule |
+| F4 Forwarding loop | Narrow test flow around the s3–s4 cycle | No delivery; abnormal counters on the cycle | flow actions, topology, counters | Identify cyclic rules/path |
+| F5 Missing / incorrect OpenFlow rule | Delete or override a required flow | Topology healthy; target traffic blackholes or misroutes | flow table, topology, ping | Identify missing/wrong rule |
+
+F4 safety (planned): narrow match, low-rate traffic, short hard timeout, watchdog/reset. Use s3–s4; do not destabilise all traffic.
+
+h6 dual-home is **not** a sixth mandatory fault ([Optional extensions](#optional-extensions)).
+
+When M5 implements injection, replace this section with actual commands.
+
+---
+
+## Operator vs diagnostic-agent view
+
+The **experiment operator** may know which fault was injected and the hidden ground truth.
+
+The **diagnostic method** (LLM or scripted troubleshooter) must **not**.
+
+Give a **symptom**, not the answer.
+
+Good:
+
+- “Investigate why h1 can no longer reach h5.”
+- “Diagnose the degraded throughput between h1 and h8.”
+- “h3 can communicate with most hosts, but traffic to h6 is failing. Investigate the cause and localise it.”
+
+Bad (leaks ground truth):
+
+- “I injected a link failure on s3–s1. Diagnose the problem.”
+- “I installed a high-priority drop rule on s4. Find it.”
+
+Those prompts invalidate a fair comparison.
+
+---
+
+## Asking the LLM for a diagnosis
+
+🟡 Planned until **M6**. There is no LLM runner in this repository.
+
+Recommended symptom-only prompts (planned usage):
+
+- “Diagnose why h1 cannot communicate with h5. Use the available diagnostic tools, identify the most likely root cause and localise the fault.”
+- “Investigate why TCP throughput between h1 and h8 has degraded. Determine whether the issue is physical, congestion-related or forwarding-related.”
+- “Investigate the connectivity failure affecting h3 to h6. Use only the available diagnostic tools and return evidence for your conclusion.”
+- “Determine why traffic between h1 and h3 is failing even though the switches appear connected.”
+
+Describe observable symptoms. Do not name the injector.
+
+---
+
+## Expected diagnostic output
+
+🟡 **Planned diagnosis contract — exact schema will be updated when M6 is implemented.**
+
+Intended fields:
+
+- Fault category
+- Fault location
+- Evidence used
+- Root-cause explanation
+- Recommended corrective action
+- Confidence
+
+Possibly also: tools called, diagnosis duration.
+
+Both the LLM and the scripted troubleshooting baseline should return a **compatible** structured diagnosis so the evaluator can score them against hidden ground truth.
+
+---
+
+## Scripted troubleshooting baseline
+
+🟡 Planned. **This is not `org.coms6200.baseline`.**
+
+| Term | What it is | Status |
+| --- | --- | --- |
+| Baseline forwarding | Datapath flows installed by `forwarding/baseline_forwarding.py` | ✅ |
+| Scripted troubleshooting baseline | Deterministic diagnostic comparator | 🟡 |
+
+Intended order (planned):
+
+1. Test endpoint reachability
+2. Inspect link/port state
+3. Inspect traffic performance / counters
+4. Inspect flow rules
+5. Classify and localise the fault
+6. Return the same diagnosis format as the LLM
+
+Both methods will call the same telemetry/tool gateway.
+
+---
+
+## Resetting the testbed
+
+### Available today ✅
+
+Remove baseline flows (ONOS stays up; `pingall` will fail until `install` again):
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+python3 forwarding/baseline_forwarding.py remove
+```
+
+Stop Mininet and clear OVS/Mininet state:
+
+```bash
+sudo mn -c
+```
+
+Reinstall a clean datapath after a fresh topology:
+
+```bash
+python3 forwarding/baseline_forwarding.py install
+python3 forwarding/baseline_forwarding.py verify
+```
+
+Stop ONOS if needed:
+
+```bash
+docker stop onos
+```
+
+### After a future injected fault 🟡
+
+Planned sequence (no injector CLI yet):
+
+1. Stop background traffic
+2. Remove injected fault rules/settings
+3. Restore deterministic forwarding (`install`)
+4. Clear transient experimental state where required
+5. Verify controller/switch connectivity
+6. Verify baseline flows
+7. Run a healthy connectivity check (`pingall` 56/56)
+8. Start the next episode only when the baseline is clean
+
+When M5 implements reset tooling, replace this planned list with exact commands.
+
+---
+
+## Troubleshooting the testbed
+
+### ONOS container not running
+
+**Symptoms:** no listener on 6653/8181; Mininet switches fail to connect.
+
+**Checks:** `./scripts/verify_onos.sh`, `docker ps --filter name=onos`.
+
+**Action:** `./setup/setup_onos.sh` or `docker start onos`. Wait for the OpenFlow listener.
+
+### ONOS REST unavailable
+
+**Check:** `127.0.0.1:8181`. Set `ONOS_USER` / `ONOS_PASSWORD` then re-run `./scripts/verify_onos.sh`. Do not commit credentials.
+
+### OpenFlow switch not connected
+
+**Checks:** ONOS up; `127.0.0.1:6653`; `sudo ./scripts/verify_main_openflow.sh` (controller `tcp:127.0.0.1:6653`, `is_connected`, `OF_13`, fail-mode `secure`). Confirm Mininet used `--controller=remote,ip=127.0.0.1,port=6653 --switch=ovsk`.
+
+### Fewer than 6 devices
+
+Confirm `main6s8h` is still running. Re-run `verify_onos.sh` and `verify_main_openflow.sh`. Restart Mininet with `sudo mn -c` then the launch command if OVS is stale.
+
+### Wrong link count
+
+Healthy controller topology: **20 directed links / 10 physical inter-switch links**, including s3:5 ↔ s4:5. Do not expect ONOS to count host-facing links.
+
+### `pingall` fails
+
+Confirm baseline `install` / `verify` (56 ADDED, s2=0). Confirm `fwd` inactive. Confirm no leftover NORMAL/STP/FLOOD. Confirm Mininet was not started with `ovsbr` or `--controller=none`. After `mn -c`, reinstall baseline. `host_count` 0 is **not** the explanation for ping failure.
+
+### Unexpected ONOS `host_count` 0
+
+Currently **expected** after data-plane ARP. See [ONOS host discovery](#onos-host-discovery).
+
+### `org.onosproject.fwd` active
+
+Disable it for baseline experiments. The project must not use reactive forwarding on this cyclic topology.
+
+### Unexpected NORMAL / STP / FLOOD
+
+Violates deterministic loop-free design. Do not enable them to “fix” ping. Use `org.coms6200.baseline` instead.
+
+### Stale Mininet / OVS state
+
+```bash
+sudo mn -c
+```
+
+Then relaunch `main6s8h` and `python3 forwarding/baseline_forwarding.py install`.
+
+### Docker / container resource issue
+
+The reference container is capped (`--memory=640m`, JVM `-Xmx256m`) for a small host. Inspect `docker logs onos` and `./scripts/verify_onos.sh`. Do not invent unrelated Docker “fixes”. Host Java is not required.
+
+---
+
+## Safety and experimental controls
+
+- OVS **secure** fail mode (no uncontrolled bridge fallback when the controller is gone)
+- No NORMAL forwarding for the project datapath
+- No STP baseline
+- No uncontrolled FLOOD baseline
+- `org.onosproject.fwd` inactive
+- Planned F4: narrow match, timeout/watchdog, low-rate loop traffic
+- Reset between experiments
+- No credentials or unrestricted shell to the LLM
+- No injector ground truth to diagnostic methods
+- No secrets committed to Git (`.env`, `ONOS_PASSWORD`)
+
+These are both **dataplane safety** and **experiment integrity** controls.
+
+---
+
+## Optional extensions
+
+🔬 Not mandatory. Not implemented.
+
+### h6 multihoming
+
+- `h6-eth0` → s5, `10.0.0.6/24` (primary, used by baseline)
+- `h6-eth1` → s6, no baseline IPv4 (test/secondary)
+
+Not one of the five required faults.
+
+### Constrained automatic repair
+
+Optional one-case link-failure reroute **after** the core diagnosis experiment is complete. Not implemented.
+
+---
+
+## End-to-end workflow
+
+### A. Workflow available today ✅
+
+1. `./setup/setup_ubuntu.sh` then `./setup/verify_environment.sh`
+2. `./setup/setup_onos.sh` then `./scripts/verify_onos.sh`
+3. Launch `main6s8h` (see [Starting the network](#starting-the-network))
+4. `sudo ./scripts/verify_main_openflow.sh` and `./scripts/verify_onos.sh`
+5. `python3 forwarding/baseline_forwarding.py install` then `verify`
+6. Mininet `pingall` → 56/56, 0% dropped
+7. Inspect flows with `status` / `verify` / `verify_main_openflow.sh`
+8. `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
+
+### B. Full planned experiment workflow 🟡
+
+Unfinished steps are marked.
+
+1. Setup environment ✅
+2. Start ONOS ✅
+3. Start topology ✅
+4. Install baseline forwarding ✅
+5. Verify healthy baseline ✅
+6. Inject one fault 🟡
+7. Present **only a symptom** to the diagnostic method 🟡
+8. Collect structured telemetry 🟡
+9. Obtain LLM or scripted diagnosis 🟡
+10. Log result 🟡
+11. Compare diagnosis to hidden ground truth 🟡
+12. Reset network 🟡 (partial reset exists today: `remove` / `mn -c` / re-`install`)
+13. Verify healthy state ✅ commands already exist
+14. Repeat 🟡
+
+---
+
+## Repository layout
+
+| Path | Role |
+| --- | --- |
+| `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
+| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh` |
+| `topologies/` | `main_topology.py` plus progress-only Mininet tests |
+| `forwarding/` | ONOS baseline provisioner |
+| `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
+| `tests/` | Static topology and forwarding tests |
+| `evidence/progress/` | Runtime evidence (ONOS, forwarding, TCLink) |
+| `docs/` | This manual, ONOS setup, decisions, Part A report |
+| `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
+| `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
+
+**Planned, not present:** `telemetry/`, `faults/`, `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
+
+Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
+
+Progress topologies (`progress5s2h`, `progressbw10`, `progressimpaired`) are early Mininet capability tests, not the project datapath.
+
+---
+
+## Development and Git workflow
+
+| Branch | Purpose |
+| --- | --- |
+| `master` | Stable / submission-ready |
+| `develop` | Integration |
+| `feature/*` | Individual work |
+
+```bash
+git switch develop
+git pull origin develop
+git switch -c feature/<short-name>
+```
+
+No force pushes. Do not commit `.env`, credentials, `incoming/`, or Word lock files. Commit runtime evidence only when it was actually observed.
+
+See `CONTRIBUTING.md` for collaboration details. This manual is an operator guide, not a full developer handbook.
+
+---
+
+## Keeping this manual current
+
+This is a **living** document (`docs/user-guide.md`).
+
+Update it in the **same task** when behaviour changes, including:
+
+- install/setup scripts, dependencies, verification
+- Docker/ONOS version, ports, endpoints, applications
+- topology, addresses, MACs, port map
+- forwarding rules, priorities, flow counts
+- telemetry tools/schemas
+- fault injection and reset commands
+- LLM invocation, model, diagnosis schema
+- scripted troubleshooter behaviour
+- evaluation workflow and expected outputs
+- troubleshooting steps and milestone status
+
+When a feature moves from planned → implemented:
+
+1. Change its status mark
+2. Replace conceptual text with **actual** commands/API
+3. Include only runtime-verified expected output
+4. Update troubleshooting/reset if affected
+
+Do not rewrite historical evidence to claim unobserved results.
+
+Cursor must inspect this file on every relevant code/config change. See `.cursor/rules/coms6200-project.mdc`.
