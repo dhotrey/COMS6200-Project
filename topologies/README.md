@@ -61,28 +61,32 @@ All switches request OpenFlow 1.3 and `failMode=secure`. STP is not enabled.
 
 Total: 6 switches, 8 hosts, 17 links.
 
-### Two-terminal workflow
+### Launch workflow
 
-Run both terminals from the repository root on the Ubuntu Mininet server.
+The controller is **ONOS 2.7.0**, running in a Docker container. It was verified
+against this topology on the team server on 20 August 2026. See
+`docs/setup/onos-setup.md` for installation and verification, and
+`docs/decisions/onos-controller-decision.md` for why ONOS replaced the earlier
+Ryu plan.
 
-**TERMINAL 1 — Controller prerequisite check**
+Run these commands from the repository root on the Ubuntu Mininet server.
 
-```bash
-source .venv/bin/activate
-ryu-manager --version
-```
-
-If `ryu-manager --version` fails or the command does not exist: **STOP**.
-Do not install or downgrade packages from this workflow. Ryu/Python
-compatibility is handled separately on the real server.
-
-If `ryu-manager` works:
+**STEP 1 — Ensure ONOS is running**
 
 ```bash
-ryu-manager controllers/main_controller.py
+./setup/setup_onos.sh          # first run, or after the container was removed
+docker start onos              # if the container already exists
+./scripts/verify_onos.sh       # read-only health and topology check
 ```
 
-**TERMINAL 2 — Mininet**
+Wait until ONOS is listening on `127.0.0.1:6653` before starting Mininet. On a
+small server this takes roughly 60–90 seconds.
+
+The earlier Ryu workflow (`ryu-manager controllers/main_controller.py`) no longer
+applies. Ryu is not installed, and `controllers/main_controller.py` is retained
+only as a design reference.
+
+**STEP 2 — Mininet**
 
 ```bash
 sudo mn \
@@ -92,7 +96,8 @@ sudo mn \
   --switch=ovsk
 ```
 
-The topology itself requests OpenFlow 1.3 and secure fail mode.
+The topology itself requests OpenFlow 1.3 and secure fail mode, so no extra
+switch options are needed.
 
 Inside Mininet, the initial verification commands are:
 
@@ -100,7 +105,6 @@ Inside Mininet, the initial verification commands are:
 nodes
 net
 links
-pingall
 ```
 
 Also:
@@ -113,10 +117,23 @@ From another shell while Mininet is running:
 
 ```bash
 sudo ./scripts/verify_main_openflow.sh
+sudo ./scripts/verify_onos.sh
 ```
 
-That script is read-only. It prints bridge protocols, fail-mode, controller
-attachment and OpenFlow 1.3 flows. It does not change switch configuration.
+Both scripts are read-only. `verify_main_openflow.sh` prints bridge protocols,
+fail-mode, controller attachment and OpenFlow 1.3 flow tables.
+`verify_onos.sh` prints controller-side device, link, host and flow state.
+
+**`pingall` does not succeed yet, and that is expected.** No forwarding
+application is active, so the switches only carry ONOS's LLDP/BDDP/ARP
+punt-to-controller rules. Deterministic loop-free forwarding across the
+redundant links is the next milestone. Do not work around this by enabling OVS
+NORMAL mode, standalone bridge mode, STP, or ONOS reactive forwarding.
+
+Verified against ONOS on 20 August 2026: all six switches connected over
+OpenFlow 1.3, and ONOS discovered 6 devices (`of:0000000000000001` through
+`of:0000000000000006`) and the 9 physical switch-switch links, reported as 18
+directed links.
 
 ### Cleanup after exiting Mininet
 
