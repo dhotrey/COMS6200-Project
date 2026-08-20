@@ -53,7 +53,12 @@ from reportlab.platypus import (
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE / "part-a-source.md"
 BIB_PATH = HERE / "references.bib"
-ASSETS = HERE / "assets"
+FIGURES = HERE / "figures"
+FIGURE_FILES = (
+    FIGURES / "figure1.png",
+    FIGURES / "figure2.png",
+    FIGURES / "figure3.png",
+)
 DOCX_PATH = HERE / "COMS6200_LLM_Network_Troubleshooting_PartA.docx"
 PDF_PATH = HERE / "COMS6200_LLM_Network_Troubleshooting_PartA.pdf"
 
@@ -1710,20 +1715,16 @@ def validate_source(source_text: str) -> list[str]:
         failures.append("canonical Markdown missing or empty")
     if "Generated automatically from references.bib" not in source_text:
         failures.append("References section is missing the generated-bibliography marker")
-    figures = [
-        ASSETS / "figure1_topology.png",
-        ASSETS / "figure2_architecture.png",
-        ASSETS / "figure3_schedule.png",
-    ]
+    figures = list(FIGURE_FILES)
     for figure in figures:
         if not figure.exists() or figure.stat().st_size == 0:
             failures.append(f"figure missing or empty: {figure.name}")
         else:
             png_size(figure)
     for rel in (
-        "assets/figure1_topology.png",
-        "assets/figure2_architecture.png",
-        "assets/figure3_schedule.png",
+        "figures/figure1.png",
+        "figures/figure2.png",
+        "figures/figure3.png",
     ):
         if rel not in source_text:
             failures.append(f"Markdown does not reference {rel}")
@@ -1862,11 +1863,7 @@ def print_document_validation(
     print("-------------------")
     print(f"  Markdown: {SOURCE} ({SOURCE.stat().st_size} bytes)")
     print(f"  Bibliography: {BIB_PATH} ({BIB_PATH.stat().st_size} bytes)")
-    for figure in (
-        ASSETS / "figure1_topology.png",
-        ASSETS / "figure2_architecture.png",
-        ASSETS / "figure3_schedule.png",
-    ):
+    for figure in FIGURE_FILES:
         if figure.exists():
             print(f"  Figure: {figure.name} ({figure.stat().st_size} bytes, {png_size(figure)[0]}x{png_size(figure)[1]})")
     if stats and stats.get("docx_stats"):
@@ -1898,16 +1895,7 @@ def print_document_validation(
     print("Validation: PASS")
 
 
-def regenerate_figures() -> None:
-    """Rebuild PNG figures from generate_figures.py so DOCX/PDF cannot drift."""
-    import generate_figures
-
-    generate_figures.main()
-
-
 def build_outputs(source_text: str, report: CitationReport, entries: dict[str, dict[str, str]]) -> int:
-    print("Regenerating figures")
-    regenerate_figures()
     print(f"Reading {SOURCE}")
     blocks = parse_markdown(source_text, report.numbers, entries, report.order)
     if not blocks:

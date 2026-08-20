@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate Part A figures from code (not hand-drawn screenshots)."""
+"""Legacy programmatic Part A figures.
+
+The canonical report figures are the user-supplied PNGs in ``figures/``.
+``build_report.py`` does not call this module and must not overwrite those
+assets. This generator is retained only as historical source.
+"""
 
 from __future__ import annotations
 
@@ -299,11 +304,10 @@ def draw_figure3(path: Path) -> None:
 
 
 def main() -> None:
-    ASSETS.mkdir(parents=True, exist_ok=True)
-    draw_figure1(ASSETS / "figure1_topology.png")
-    draw_figure2(ASSETS / "figure2_architecture.png")
-    draw_figure3(ASSETS / "figure3_schedule.png")
-    print(f"Wrote figures under {ASSETS}")
+    print(
+        "generate_figures.py is unused by the Part A build. "
+        "Canonical figures are docs/reports/part-a/figures/figure{1,2,3}.png"
+    )
 
 
 if __name__ == "__main__":

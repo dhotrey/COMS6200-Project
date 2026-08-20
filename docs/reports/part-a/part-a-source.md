@@ -99,7 +99,7 @@ Out of scope are multi-topology scaling experiments, compound faults, controller
 
 The primary testbed contains six OpenFlow switches, eight hosts, 10 physical inter-switch links and 9 physical host-switch attachments (19 links in total). Switches s1 and s2 form redundant cores. Access switches s3-s6 each connect to both cores. The s1-s2 inter-core link is retained as an alternate/experimental path and does not carry normal traffic. An additional s3-s4 access-edge test link is included so a narrow selected flow can be steered through a short edge/core cycle or an unexpected core-bypass path without enlarging the node set. Hosts attach as h1-h2 to s3, h3-h4 to s4, h5 and the primary h6 interface to s5, and h7-h8 to s6. Host h6 also has a secondary physical attachment to s6, reserved for an optional later multihoming/failover experiment; it is not used in baseline forwarding and is not one of the five mandatory faults. These extra paths increase diagnostic diversity rather than topology size for its own sake. The design is smaller than a Clos or fat-tree but still supports redundancy, alternate paths, cycles and multiple fault locations, while keeping flow tables and diagnosis traces interpretable.
 
-![Enhanced six-switch/eight-host dual-core Mininet topology with an access-edge test link and one optional multihomed host](assets/figure1_topology.png)
+![Enhanced six-switch/eight-host dual-core Mininet topology with an access-edge test link and one optional multihomed host](figures/figure1.png)
 
 Figure 1. Enhanced six-switch/eight-host dual-core Mininet topology with an access-edge test link and one optional multihomed host.
 
@@ -109,7 +109,7 @@ All hosts share a single IPv4 subnet (10.0.0.0/24) to minimise routing implement
 
 The architecture separates fault injection, network execution, telemetry, diagnosis and evaluation. The injector owns the hidden ground truth; the LLM and baseline receive only an external symptom and data returned by allowed tools. This prevents direct leakage such as showing the LLM a tc configuration that literally states "loss 10%". The evaluator records both the ground truth and the diagnostic trajectory after each run.
 
-![Proposed troubleshooting architecture with hidden ground truth isolated from the LLM agent](assets/figure2_architecture.png)
+![Proposed troubleshooting architecture with hidden ground truth isolated from the LLM agent](figures/figure2.png)
 
 Figure 2. Proposed troubleshooting architecture. Ground truth is isolated from the diagnostic agent; the LLM reaches ONOS only through a read-only telemetry gateway.
 
@@ -176,7 +176,7 @@ Results will be reported as raw counts, percentages and simple descriptive stati
 
 The schedule is constrained by the Part A deadline of 4 September 2026 and the final report deadline of 16 October 2026. The first objective is a working vertical slice before Part A: main topology, ONOS/OpenFlow connectivity, structured telemetry, one automated fault and one LLM tool-calling diagnosis. Environment setup, ONOS 2.7.0 installation, OpenFlow 1.3 switch discovery and deterministic loop-free baseline forwarding are already complete. The remaining work is telemetry normalisation, one automated fault and one LLM episode, then the remaining scenarios, baseline and repeated experiments after Part A. This ordering prioritises the 30% "Progress So Far" component of the Part A rubric and reduces the risk of discovering integration problems late in the semester.
 
-![Calendar-based implementation and evaluation plan, 18 August-16 October 2026](assets/figure3_schedule.png)
+![Calendar-based implementation and evaluation plan, 18 August-16 October 2026](figures/figure3.png)
 
 Figure 3. Calendar-based implementation and evaluation plan, 18 August-16 October 2026.
 

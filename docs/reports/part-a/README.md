@@ -8,13 +8,15 @@ Canonical bibliographic database:
 
 `references.bib`
 
-Original/static report figures are produced by `generate_figures.py` into:
+Canonical report figures (user-supplied, not regenerated at build time):
 
-`assets/`
+`figures/`
 
-- `assets/figure1_topology.png`
-- `assets/figure2_architecture.png`
-- `assets/figure3_schedule.png`
+- `figures/figure1.png`
+- `figures/figure2.png`
+- `figures/figure3.png`
+
+`generate_figures.py` is unused historical source and must not overwrite those files.
 
 Generated Word output:
 
