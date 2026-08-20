@@ -1729,7 +1729,7 @@ def validate_source(source_text: str) -> list[str]:
         if rel not in source_text:
             failures.append(f"Markdown does not reference {rel}")
     tables = [block for block in parse_markdown(source_text) if block.kind == "table"]
-    expected_rows = {1: 7, 2: 6, 3: 8, 4: 11, 5: 12, 6: 7}
+    expected_rows = {1: 7, 2: 6, 3: 8, 4: 12, 5: 12, 6: 7}
     if len(tables) != 6:
         failures.append(f"parsed table count is {len(tables)}, expected 6")
     else:
