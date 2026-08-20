@@ -9,7 +9,9 @@ File: `main_topology.py`
 
 Registered Mininet topo name: `main6s8h`
 
-Controller: `controllers/main_controller.py`
+Controller: ONOS 2.7.0 (`docs/setup/onos-setup.md`). The earlier Ryu file
+`controllers/main_controller.py` is retained only as a forwarding-design
+reference and is not used to launch this topology.
 
 This topology contains redundant physical links and **MUST** be run with the
 project controller. It is not intended for `ovsbr` standalone bridge mode.
@@ -19,10 +21,11 @@ project controller. It is not intended for `ovsbr` standalone bridge mode.
                    /|\\          /|\\
                   / | \\        / | \\
                  /  |  \\      /  |  \\
-               s3   s4   s5   s6
+               s3---s4   s5   s6
                |\\   |\\   |\\   |\\
                h1   h3   h5   h7
-               h2   h4   h6   h8
+               h2   h4    \\   h8
+                          h6 (eth0->s5, eth1->s6)
 ```
 
 Roles:
@@ -31,43 +34,78 @@ Roles:
 - s2 = Core B (physically present; excluded from baseline host forwarding)
 - s3 = User Access A (h1, h2)
 - s4 = User Access B (h3, h4)
-- s5 = Server Access (h5, h6)
-- s6 = Admin/Test Access (h7, h8)
+- s5 = Server Access (h5, h6 primary)
+- s6 = Admin/Test Access (h7, h8; optional h6 secondary)
+
+The extra links increase diagnostic diversity, not topology size for its own
+sake:
+
+- `s3-s4` is a dedicated **access-edge test link** for controlled
+  forwarding-loop and unexpected/core-bypass experiments.
+- `h6-s6` is an **optional** secondary physical attachment for a later
+  multihomed-host/failover experiment. It is not one of the five mandatory
+  fault scenarios.
 
 All hosts are in `10.0.0.0/24` with deterministic MACs `00:00:00:00:00:0N`.
 All switches request OpenFlow 1.3 and `failMode=secure`. STP is not enabled.
 
+### Counts
+
+| Class | Count |
+|-------|------:|
+| Switches | 6 |
+| Hosts | 8 |
+| Inter-switch physical links | 10 |
+| Host-switch physical links | 9 |
+| Total physical links | 19 |
+
 ### Port map
 
-| Link | Port A | Port B |
-|------|--------|--------|
-| s1-s2 | s1:1 | s2:1 |
-| s1-s3 | s1:2 | s3:1 |
-| s1-s4 | s1:3 | s4:1 |
-| s1-s5 | s1:4 | s5:1 |
-| s1-s6 | s1:5 | s6:1 |
-| s2-s3 | s2:2 | s3:2 |
-| s2-s4 | s2:3 | s4:2 |
-| s2-s5 | s2:4 | s5:2 |
-| s2-s6 | s2:5 | s6:2 |
-| s3-h1 | s3:3 | h1 |
-| s3-h2 | s3:4 | h2 |
-| s4-h3 | s4:3 | h3 |
-| s4-h4 | s4:4 | h4 |
-| s5-h5 | s5:3 | h5 |
-| s5-h6 | s5:4 | h6 |
-| s6-h7 | s6:3 | h7 |
-| s6-h8 | s6:4 | h8 |
+| Link | Port A | Port B | Baseline use |
+|------|--------|--------|--------------|
+| s1-s2 | s1:1 | s2:1 | unused (inter-core) |
+| s1-s3 | s1:2 | s3:1 | used (active core) |
+| s1-s4 | s1:3 | s4:1 | used (active core) |
+| s1-s5 | s1:4 | s5:1 | used (active core) |
+| s1-s6 | s1:5 | s6:1 | used (active core) |
+| s2-s3 | s2:2 | s3:2 | unused (redundant core) |
+| s2-s4 | s2:3 | s4:2 | unused (redundant core) |
+| s2-s5 | s2:4 | s5:2 | unused (redundant core) |
+| s2-s6 | s2:5 | s6:2 | unused (redundant core) |
+| s3-s4 | s3:5 | s4:5 | unused (access-edge test) |
+| s3-h1 | s3:3 | h1-eth0 | used |
+| s3-h2 | s3:4 | h2-eth0 | used |
+| s4-h3 | s4:3 | h3-eth0 | used |
+| s4-h4 | s4:4 | h4-eth0 | used |
+| s5-h5 | s5:3 | h5-eth0 | used |
+| s5-h6 | s5:4 | h6-eth0 | used (h6 primary) |
+| s6-h7 | s6:3 | h7-eth0 | used |
+| s6-h8 | s6:4 | h8-eth0 | used |
+| s6-h6 | s6:5 | h6-eth1 | unused (h6 secondary) |
 
-Total: 6 switches, 8 hosts, 17 links.
+Baseline forwarding, when implemented, still uses s1 as the active core.
+Remote access-switch traffic is s3/s4/s5/s6 → s1. The s2 uplinks, s1-s2,
+s3-s4 and h6-s6 links stay physically present but are reserved for
+controlled experiments.
+
+### h6 dual attachment
+
+- Primary: `h6-eth0` ↔ `s5:4`, IPv4 `10.0.0.6/24`, MAC `00:00:00:00:00:06`.
+- Secondary: `h6-eth1` ↔ `s6:5`, MAC `00:00:00:00:06:02`, **no baseline IPv4**.
+
+Mininet applies the host IPv4 address only to the default interface
+(`h6-eth0`). The secondary interface is created without an IPv4 address so
+normal behaviour stays deterministic. No bonding, LACP, MLAG, VRRP or
+automatic host failover is implemented. The secondary path is activated only
+by a later optional experiment.
 
 ### Launch workflow
 
-The controller is **ONOS 2.7.0**, running in a Docker container. It was verified
-against this topology on the team server on 20 August 2026. See
+The controller is **ONOS 2.7.0**, running in a Docker container. See
 `docs/setup/onos-setup.md` for installation and verification, and
 `docs/decisions/onos-controller-decision.md` for why ONOS replaced the earlier
-Ryu plan.
+Ryu plan. The enhanced 19-link topology must be re-verified after pulling this
+change; earlier ONOS evidence covered the previous 17-link fabric only.
 
 Run these commands from the repository root on the Ubuntu Mininet server.
 
@@ -130,10 +168,10 @@ punt-to-controller rules. Deterministic loop-free forwarding across the
 redundant links is the next milestone. Do not work around this by enabling OVS
 NORMAL mode, standalone bridge mode, STP, or ONOS reactive forwarding.
 
-Verified against ONOS on 20 August 2026: all six switches connected over
-OpenFlow 1.3, and ONOS discovered 6 devices (`of:0000000000000001` through
-`of:0000000000000006`) and the 9 physical switch-switch links, reported as 18
-directed links.
+The previous ONOS evidence from 20 August 2026 was collected against the older
+17-link topology (9 inter-switch links). It does **not** prove this enhanced
+19-link topology. Re-run the commands above after pulling this change and
+record a new evidence file under `evidence/progress/onos/`.
 
 ### Cleanup after exiting Mininet
 
@@ -144,7 +182,7 @@ sudo mn -c
 ## Custom progress topology
 
 This topology reproduces the early five-switch/two-host Mininet progress
-evidence and is **not** the final six-switch/eight-host Ryu/OpenFlow topology.
+evidence and is **not** the final six-switch/eight-host OpenFlow topology.
 
 Topology:
 
@@ -168,7 +206,7 @@ Registered Mininet topo name: `progress5s2h`
 sudo mn --custom topologies/progress_custom_topology.py --topo progress5s2h --controller=none --switch ovsbr
 ```
 
-This starts the Mininet CLI. It does not start Ryu or configure OpenFlow 1.3.
+This starts the Mininet CLI. It does not start ONOS or configure OpenFlow 1.3.
 
 ### Useful Mininet commands
 
