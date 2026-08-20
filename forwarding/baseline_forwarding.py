@@ -351,7 +351,7 @@ def install_flows(client: OnosClient, timeout_s: float = 20.0) -> list[dict[str,
     existing = list_baseline_flows(client)
     if existing:
         print(f"Removing {len(existing)} stale {APP_NAME} flow(s) before install")
-        remove_flows(client)
+        remove_flows(client, timeout_s=timeout_s)
     specs = expected_flow_specs()
     body = {"flows": [spec_to_onos_json(spec) for spec in specs]}
     print(f"Installing {len(specs)} {APP_NAME} flow rules")
@@ -375,7 +375,7 @@ def install_flows(client: OnosClient, timeout_s: float = 20.0) -> list[dict[str,
         time.sleep(0.4)
 
 
-def remove_flows(client: OnosClient) -> int:
+def remove_flows(client: OnosClient, timeout_s: float = 20.0) -> int:
     flows = list_baseline_flows(client)
     if not flows:
         print(f"No {APP_NAME} flows to remove")
@@ -388,11 +388,18 @@ def remove_flows(client: OnosClient) -> int:
         ]
     }
     client.delete("flows", body=body)
-    remaining = list_baseline_flows(client)
-    if remaining:
-        raise RuntimeError(f"{len(remaining)} {APP_NAME} flow(s) remain after remove")
-    print(f"Removed {len(flows)} {APP_NAME} flow(s)")
-    return len(flows)
+    deadline = time.time() + timeout_s
+    while True:
+        remaining = list_baseline_flows(client)
+        if not remaining:
+            print(f"Removed {len(flows)} {APP_NAME} flow(s)")
+            return len(flows)
+        if time.time() >= deadline:
+            raise RuntimeError(
+                f"{len(remaining)} {APP_NAME} flow(s) remain after remove "
+                f"waited {timeout_s:.0f}s"
+            )
+        time.sleep(0.4)
 
 
 def _count_by_device(flows: Iterable[dict[str, Any]]) -> dict[str, int]:
@@ -519,7 +526,7 @@ def main(argv: list[str] | None = None) -> int:
         status_report(client, verbose=args.verbose)
         return 0
     if args.command == "remove":
-        remove_flows(client)
+        remove_flows(client, timeout_s=args.timeout)
         return 0
     return verify_flows(client)
 
