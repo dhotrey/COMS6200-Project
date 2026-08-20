@@ -8,7 +8,7 @@ Canonical bibliographic database:
 
 `references.bib`
 
-Original/static report figures:
+Original/static report figures are produced by `generate_figures.py` into:
 
 `assets/`
 

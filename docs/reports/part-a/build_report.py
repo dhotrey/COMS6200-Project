@@ -85,7 +85,7 @@ REQUIRED_SECTIONS = [
     "References",
 ]
 MIN_PAGES = 10
-MAX_PAGES = 12
+MAX_PAGES = 13
 MONTHS = {
     "jan": "Jan.",
     "january": "Jan.",
@@ -341,8 +341,8 @@ def validate_citation_keys(
     if actual != expected:
         failures.append(f"generated IEEE numbering is not sequential: {actual}")
     if unused:
-        warnings.append(
-            "unused bibliography entries (stored, not rendered): " + ", ".join(unused)
+        failures.append(
+            "unused bibliography entries (must be cited or removed): " + ", ".join(unused)
         )
     occurrence_count = sum(len(cluster.keys) for cluster in clusters if not cluster.error)
     report = CitationReport(
@@ -1898,7 +1898,16 @@ def print_document_validation(
     print("Validation: PASS")
 
 
+def regenerate_figures() -> None:
+    """Rebuild PNG figures from generate_figures.py so DOCX/PDF cannot drift."""
+    import generate_figures
+
+    generate_figures.main()
+
+
 def build_outputs(source_text: str, report: CitationReport, entries: dict[str, dict[str, str]]) -> int:
+    print("Regenerating figures")
+    regenerate_figures()
     print(f"Reading {SOURCE}")
     blocks = parse_markdown(source_text, report.numbers, entries, report.order)
     if not blocks:

@@ -53,10 +53,11 @@ The decision is based on runtime tests performed on the team server on
 - A simple `h1 -- s1 -- h2` Mininet network connected: OVS reported
   `is_connected: true`, `protocols: [OpenFlow13]`, `fail-mode: secure`, and ONOS
   discovered `of:0000000000000001` with `protocol=OF_13`.
-- The project topology `main6s8h` connected all six switches. ONOS discovered
-  6 devices with the expected deterministic DPIDs `of:0000000000000001` through
-  `of:0000000000000006`, and 18 directed links corresponding to the 9 physical
-  switch-to-switch links.
+- The project topology `main6s8h` connected all six switches. The later enhanced
+  19-link topology was re-tested on 20 August 2026: ONOS discovered 6 devices
+  with deterministic DPIDs `of:0000000000000001` through `of:0000000000000006`,
+  and 20 directed links corresponding to 10 physical switch-to-switch links,
+  including the new s3-s4 access-edge pair.
 - REST read-only queries for `/devices`, `/links`, `/hosts`, `/flows` and
   `/topology` all returned HTTP 200.
 - The existing Mininet/OVS/Python environment was unaffected: a post-install
@@ -87,10 +88,9 @@ is `docs/setup/onos-setup.md` and `setup/setup_onos.sh`.
   reports `hosts=0`. This is expected at this milestone.
 - Ryu and os-ken were not installed and are no longer on the critical path.
 
-## Report implications (not yet applied)
+## Report implications
 
-The Part A report still names Ryu and still records
-"Ryu + OpenFlow 1.3 main topology — Not yet evidenced". That has deliberately
-**not** been changed in this commit. Switching the documented controller is an
-architectural change to the report and must be handled as a separate, reviewed
-report-update step now that ONOS is proven.
+The Part A report was updated in a separate reviewed step after the enhanced
+topology passed runtime verification. ONOS 2.7.0 is documented as the selected
+controller. Deterministic forwarding, fault injection and LLM integration remain
+later milestones.

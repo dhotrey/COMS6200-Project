@@ -104,8 +104,8 @@ by a later optional experiment.
 The controller is **ONOS 2.7.0**, running in a Docker container. See
 `docs/setup/onos-setup.md` for installation and verification, and
 `docs/decisions/onos-controller-decision.md` for why ONOS replaced the earlier
-Ryu plan. The enhanced 19-link topology must be re-verified after pulling this
-change; earlier ONOS evidence covered the previous 17-link fabric only.
+Ryu plan. The enhanced 19-link topology was runtime-verified against ONOS on
+20 August 2026.
 
 Run these commands from the repository root on the Ubuntu Mininet server.
 
@@ -168,10 +168,12 @@ punt-to-controller rules. Deterministic loop-free forwarding across the
 redundant links is the next milestone. Do not work around this by enabling OVS
 NORMAL mode, standalone bridge mode, STP, or ONOS reactive forwarding.
 
-The previous ONOS evidence from 20 August 2026 was collected against the older
-17-link topology (9 inter-switch links). It does **not** prove this enhanced
-19-link topology. Re-run the commands above after pulling this change and
-record a new evidence file under `evidence/progress/onos/`.
+Verified against ONOS on 20 August 2026 for this enhanced 19-link topology:
+all six switches connected over OpenFlow 1.3 with secure fail mode; ONOS
+discovered 6 devices (`of:0000000000000001` through `of:0000000000000006`) and
+20 directed links representing the 10 physical switch-switch links, including
+`s3:5 ↔ s4:5`. Host `h6` had `h6-eth0` on `s5:4` and `h6-eth1` on `s6:5`. See
+`evidence/progress/onos/main6s8h-enhanced-2026-08-20.txt`.
 
 ### Cleanup after exiting Mininet
 
