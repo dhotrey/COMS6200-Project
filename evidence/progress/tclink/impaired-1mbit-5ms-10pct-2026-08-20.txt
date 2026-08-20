@@ -1,0 +1,49 @@
+Date: 20 Aug 2026
+Topology: progressimpaired
+File: topologies/progress_tc_topology.py
+
+Launch:
+sudo mn --custom topologies/progress_tc_topology.py \
+  --topo progressimpaired \
+  --link tc \
+  --controller=none \
+  --switch ovsbr
+
+Mininet startup confirmed:
+  1.00 Mbit/s
+  5 ms delay
+  10% loss
+on the impaired h1-s1 TCLink.
+
+Verified nodes: h1 h2 s1
+Verified links:
+  h1-eth0 <-> s1-eth1 (OK OK)
+  s1-eth2 <-> h2-eth0 (OK OK)
+
+Configuration:
+  configured bandwidth = 1 Mbit/s
+  configured delay = 5 ms
+  configured loss = 10% per affected direction
+
+Ping test:
+  h1 ping -c 100 -i 0.2 h2
+  100 packets transmitted
+  81 packets received
+  19% packet loss
+  RTT min/avg/max/mdev = 10.115/10.171/10.690/0.063 ms
+
+iperf3 test:
+  h2 iperf3 -s -D
+  h1 iperf3 -c 10.0.0.2 -t 10
+  Sender: 1.25 MBytes, 1.05 Mbits/sec, 77 retransmissions
+  Receiver: 1.00 MBytes, 832 Kbits/sec over 10.08 sec
+
+Interpretation:
+  Average RTT 10.171 ms is consistent with about 5 ms each way plus
+  small processing overhead; it is not expected to be exactly 10.000 ms.
+  Configured loss remains 10% per affected direction. Observed end-to-end
+  ICMP loss was 19% (81/100), consistent with independent 10% loss on
+  request and reply (0.9 x 0.9 = 0.81 success). Delivered TCP throughput
+  is the receiver result: 832 Kbit/s, with 77 retransmissions showing
+  the effect of loss on TCP. Early TCLink capability evidence only; not
+  a final congestion, diagnosis or LLM experiment result.

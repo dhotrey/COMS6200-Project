@@ -1,0 +1,33 @@
+Date: 20 Aug 2026
+Topology: progressbw10
+File: topologies/progress_tc_topology.py
+
+Launch:
+sudo mn --custom topologies/progress_tc_topology.py \
+  --topo progressbw10 \
+  --link tc \
+  --controller=none \
+  --switch ovsbr
+
+Verified nodes: h1 h2 s1
+Verified links:
+  h1-eth0 <-> s1-eth1 (OK OK)
+  s1-eth2 <-> h2-eth0 (OK OK)
+
+Configuration:
+  h1-s1 TCLink bandwidth = 10 Mbit/s
+  s1-h2 unconstrained
+
+Test:
+  h2 iperf3 -s -D
+  h1 iperf3 -c 10.0.0.2 -t 5
+
+Result:
+  Sender: 0.00-5.00 sec, 7.25 MBytes, 12.2 Mbits/sec, 0 retransmissions
+  Receiver: 0.00-5.03 sec, 5.62 MBytes, 9.38 Mbits/sec
+
+Interpretation:
+  Delivered bottleneck throughput is the receiver result: 9.38 Mbit/s
+  over 5.03 s. Do not treat 12.2 Mbit/s as delivered throughput.
+  This is early Mininet/TCLink capability evidence, not a final
+  congestion or LLM experiment result.

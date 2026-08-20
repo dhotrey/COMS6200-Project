@@ -202,15 +202,17 @@ The team has completed practical Mininet work that directly supports the propose
 | Mininet parameterised topologies        | Completed         | Linear and tree topologies created; host/switch interfaces inspected with net.                                                                                                |
 | Custom Python topology                  | Completed         | Repository topology progress5s2h reproduced the five-switch/two-host layout; nodes, net and links confirmed all seven nodes and six intended links, with all links reporting OK. |
 | Connectivity validation                 | Completed         | Fresh h1-h2 test: 10/10 ping replies, 0% loss; RTT min/avg/max 0.103/0.193/0.873 ms.                                                                                          |
-| Bandwidth control                       | Completed         | Earlier 10 Mbit/s TCLink testing measured about 9.60 Mbit/s with iperf. A repository-backed progressbw10 topology now provides a repeatable bandwidth-only test; fresh runtime verification is pending on the Mininet server. A separate earlier 1 Mbit/s impaired-link run measured 768 Kbit/s with 10% configured loss. |
-| Delay control                           | Completed         | Configured per-link delays produced expected round-trip behaviour; in the final custom test, 5 ms impairment yielded stable ping RTT around 10.3 ms across the affected link. |
-| Packet-loss control                     | Completed         | Configured loss=10% on the impaired link; a 20-packet ping observed 19 replies (5% realised loss), consistent with probabilistic loss over a small sample.                    |
+| Bandwidth control                       | Completed         | Fresh progressbw10 test: a 10 Mbit/s TCLink delivered 9.38 Mbit/s receiver throughput over a 5 s iperf3 run. An impaired 1 Mbit/s variant later delivered 832 Kbit/s under added delay/loss. |
+| Delay control                           | Completed         | Fresh progressimpaired test: 5 ms configured delay per direction produced 10.171 ms average RTT over a 100-packet h1-h2 ping (min/max 10.115/10.690 ms). |
+| Packet-loss control                     | Completed         | Fresh progressimpaired test: 10% loss configured on each direction of the affected TCLink produced 81/100 ping replies (19% round-trip loss), consistent with the bidirectional impairment. |
 | Ryu + OpenFlow 1.3 main topology        | Not yet evidenced | \[TEAM TO INSERT ACTUAL RESULT/SCREENSHOT HERE BEFORE SUBMISSION\]                                                                                                            |
 | Structured topology/flow/port telemetry | Not yet evidenced | \[TEAM TO INSERT ACTUAL JSON/SCREENSHOT HERE BEFORE SUBMISSION\]                                                                                                              |
 | Automated project fault injector        | Not yet evidenced | \[TEAM TO INSERT FIRST LINK-FAILURE OR ACL INJECTOR RESULT HERE\]                                                                                                             |
 | OpenAI function-calling diagnosis       | Not yet evidenced | \[TEAM TO INSERT FIRST TOOL-CALL TRACE AND TOKEN USAGE HERE\]                                                                                                                 |
 
 Table 5. Confirmed progress and evidence gaps as of 20 August 2026.
+
+The 100-packet impaired-link run observed 19% end-to-end ICMP loss, consistent with independent 10% loss affecting both request and reply directions, while the same configuration reduced TCP receiver throughput to 832 Kbit/s with 77 retransmissions.
 
 The performance measurements above are not final project results and should not be presented as evidence that the LLM agent already works. Their value is methodological: they confirm that the team can create topologies, inspect interfaces, measure throughput/latency and apply controlled TCLink impairments, which are required for the planned congestion and link-quality experiments. The most valuable remaining evidence for Part A is an end-to-end controller-based vertical slice.
 

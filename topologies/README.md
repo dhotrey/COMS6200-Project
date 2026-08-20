@@ -83,9 +83,14 @@ Cleanup after exit:
 sudo mn -c
 ```
 
-Runtime results for this repository-backed TCLink test must be collected on
-the Mininet server. Creating the topology file does not mean the bandwidth
-test has already been run.
+Observed result on the Mininet server (20 Aug 2026):
+
+- configured: 10 Mbit/s on `h1-s1`
+- iperf3 receiver: 9.38 Mbit/s over 5.03 s (`h1 iperf3 -c 10.0.0.2 -t 5`)
+- sender rate 12.2 Mbit/s is not the delivered bottleneck measurement
+
+This is an early Mininet/TCLink capability test, not a final LLM troubleshooting
+experiment result.
 
 ## Impaired progress test
 
@@ -105,6 +110,16 @@ sudo mn --custom topologies/progress_tc_topology.py \
   --switch ovsbr
 ```
 
-This topology is for later reproduction of delay and packet-loss evidence.
-Fresh runtime results for `progressimpaired` must also be collected on the
-Mininet server; they have not been recorded yet.
+Observed result on the Mininet server (20 Aug 2026):
+
+- configured: 1 Mbit/s, 5 ms delay, 10% loss per affected direction
+- 100-packet ping (`h1 ping -c 100 -i 0.2 h2`): 81/100 replies, 19% round-trip loss
+- RTT min/avg/max/mdev = 10.115/10.171/10.690/0.063 ms
+- iperf3 receiver: 832 Kbit/s over 10.08 s (`h1 iperf3 -c 10.0.0.2 -t 10`)
+- 77 TCP retransmissions
+
+Configured per-direction loss remains 10%. The 19% figure is observed
+end-to-end ICMP round-trip loss, not a claim that the configured loss was 19%.
+
+This is an early Mininet/TCLink capability test, not a final LLM troubleshooting
+experiment result.
