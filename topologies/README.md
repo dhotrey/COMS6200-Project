@@ -1,5 +1,129 @@
 # Topologies
 
+## Final six-switch/eight-host project topology
+
+This is the actual COMS6200 physical topology. It is not a progress-capability
+test.
+
+File: `main_topology.py`
+
+Registered Mininet topo name: `main6s8h`
+
+Controller: `controllers/main_controller.py`
+
+This topology contains redundant physical links and **MUST** be run with the
+project controller. It is not intended for `ovsbr` standalone bridge mode.
+
+```
+                    s1 -------- s2
+                   /|\\          /|\\
+                  / | \\        / | \\
+                 /  |  \\      /  |  \\
+               s3   s4   s5   s6
+               |\\   |\\   |\\   |\\
+               h1   h3   h5   h7
+               h2   h4   h6   h8
+```
+
+Roles:
+
+- s1 = Core A (initial active core)
+- s2 = Core B (physically present; excluded from baseline host forwarding)
+- s3 = User Access A (h1, h2)
+- s4 = User Access B (h3, h4)
+- s5 = Server Access (h5, h6)
+- s6 = Admin/Test Access (h7, h8)
+
+All hosts are in `10.0.0.0/24` with deterministic MACs `00:00:00:00:00:0N`.
+All switches request OpenFlow 1.3 and `failMode=secure`. STP is not enabled.
+
+### Port map
+
+| Link | Port A | Port B |
+|------|--------|--------|
+| s1-s2 | s1:1 | s2:1 |
+| s1-s3 | s1:2 | s3:1 |
+| s1-s4 | s1:3 | s4:1 |
+| s1-s5 | s1:4 | s5:1 |
+| s1-s6 | s1:5 | s6:1 |
+| s2-s3 | s2:2 | s3:2 |
+| s2-s4 | s2:3 | s4:2 |
+| s2-s5 | s2:4 | s5:2 |
+| s2-s6 | s2:5 | s6:2 |
+| s3-h1 | s3:3 | h1 |
+| s3-h2 | s3:4 | h2 |
+| s4-h3 | s4:3 | h3 |
+| s4-h4 | s4:4 | h4 |
+| s5-h5 | s5:3 | h5 |
+| s5-h6 | s5:4 | h6 |
+| s6-h7 | s6:3 | h7 |
+| s6-h8 | s6:4 | h8 |
+
+Total: 6 switches, 8 hosts, 17 links.
+
+### Two-terminal workflow
+
+Run both terminals from the repository root on the Ubuntu Mininet server.
+
+**TERMINAL 1 — Controller prerequisite check**
+
+```bash
+source .venv/bin/activate
+ryu-manager --version
+```
+
+If `ryu-manager --version` fails or the command does not exist: **STOP**.
+Do not install or downgrade packages from this workflow. Ryu/Python
+compatibility is handled separately on the real server.
+
+If `ryu-manager` works:
+
+```bash
+ryu-manager controllers/main_controller.py
+```
+
+**TERMINAL 2 — Mininet**
+
+```bash
+sudo mn \
+  --custom topologies/main_topology.py \
+  --topo main6s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+The topology itself requests OpenFlow 1.3 and secure fail mode.
+
+Inside Mininet, the initial verification commands are:
+
+```
+nodes
+net
+links
+pingall
+```
+
+Also:
+
+```
+sh ovs-vsctl show
+```
+
+From another shell while Mininet is running:
+
+```bash
+sudo ./scripts/verify_main_openflow.sh
+```
+
+That script is read-only. It prints bridge protocols, fail-mode, controller
+attachment and OpenFlow 1.3 flows. It does not change switch configuration.
+
+### Cleanup after exiting Mininet
+
+```bash
+sudo mn -c
+```
+
 ## Custom progress topology
 
 This topology reproduces the early five-switch/two-host Mininet progress
