@@ -2,7 +2,7 @@
 
 COMS6200 university project.
 
-This project will evaluate whether a tool-using LLM can diagnose and localise controlled faults in an OpenFlow-based Mininet environment, and how that compares with a deterministic scripted troubleshooting baseline.
+This project evaluates whether a tool-using LLM can diagnose and localise controlled faults in an OpenFlow-based Mininet environment, and how that compares with a deterministic scripted troubleshooting baseline.
 
 ## 1. Project Overview
 
@@ -10,73 +10,73 @@ The research question is:
 
 > How accurately and efficiently can a tool-using LLM agent diagnose and localise common faults in an OpenFlow-controlled Mininet network compared with a deterministic scripted troubleshooting baseline?
 
-The intended study is deliberately small: one Layer-2 topology, five controlled fault types, one OpenAI tool-using agent, one scripted baseline, and repeatable experiments with structured logging.
+The study is deliberately small: one Layer-2 topology, five controlled fault types, one OpenAI tool-using agent, one scripted baseline, and repeatable experiments with structured logging.
 
 ## 2. Project Status
 
-**M0 — Reproducible Environment Bootstrap: Completed**
+| Milestone | Description | Status |
+| --- | --- | --- |
+| M0 | Reproducible Environment Bootstrap | Completed |
+| M1 | Enhanced Main Mininet Topology | Completed |
+| M2 | ONOS + OpenFlow 1.3 Integration | Completed |
+| M3 | Deterministic Loop-Free Forwarding | **Next** |
+| M4 | Structured Telemetry Gateway | Planned |
+| M5 | First Automated Fault + Reset | Planned |
+| M6 | First LLM Tool-Calling Diagnosis | Planned |
 
-The project's **base Mininet/Open vSwitch environment** has been installed and verified on the team Ubuntu server.
+The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M3–M6).
 
-M0 verifies only that base environment. It does **not** verify later controller, OpenFlow, or project components.
+Completed so far:
 
-What exists now:
+- verified base Mininet / Open vSwitch environment on the team Ubuntu server
+- implemented enhanced six-switch / eight-host Layer-2 topology
+- ONOS 2.7.0 installed as a version-pinned Docker container
+- OpenFlow 1.3 controller integration against the enhanced topology
 
-- repository documentation
-- Ubuntu setup and verification scripts
-- a verified base Mininet/Open vSwitch environment on the team Ubuntu server
-- Git workflow notes
-- secret-handling placeholders
-- Cursor project rules
-- a directory for the Part A report
+Not implemented:
 
-The following have **not** been installed or verified:
-
-- Ryu
-- OS-Ken
-- OpenFlow 1.3 controller operation
-- the final 6-switch / 8-host topology
-- telemetry
-- fault injection
+- deterministic loop-free forwarding
+- telemetry / tool gateway
+- automated fault injection
 - OpenAI LLM agent
-- the deterministic baseline
-- experiments
+- deterministic baseline
+- repeated experiments
 
-## 3. Planned Architecture
+## 3. Architecture
 
-These components are **planned**, not all implemented.
+Implemented through M2:
 
 ```
 Mininet / Open vSwitch
         ↓
 OpenFlow 1.3
         ↓
-Ryu controller
-        ↓
-structured telemetry gateway
-        ↓
-LLM agent OR deterministic baseline
-        ↓
-structured diagnosis
-        ↓
-evaluation/logger
-        ↓
-optional constrained repair
+ONOS 2.7.0
 ```
 
-**Primary intended controller: Ryu.**
+Planned from M4 onward:
 
-Because compatibility with the selected Python/Ubuntu environment still needs to be validated, OS-Ken is retained as a fallback only if Ryu becomes a genuine implementation blocker. OS-Ken will not be installed or selected automatically.
+```
+ONOS 2.7.0
+        ↓
+read-only REST / controller state
+        ↓
+Telemetry / Tool Gateway
+       ↙              ↘
+OpenAI LLM        deterministic baseline
+       ↘              ↙
+          diagnosis
+             ↓
+      evaluator / logger
+             ↓
+ optional constrained repair
+```
 
-**Planned main topology** (not implemented in this milestone):
+The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway will expose a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
 
-- 6 switches
-- 8 hosts
-- Layer 2
-- two redundant core switches
-- four dual-homed access switches
+The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
-**Planned faults** (not implemented in this milestone):
+**Faults** (planned; not yet injected):
 
 | ID | Fault |
 | --- | --- |
@@ -88,15 +88,57 @@ Because compatibility with the selected Python/Ubuntu environment still needs to
 
 The project may later include **one optional constrained link-failure reroute demonstration**. Automated remediation is not the current priority. Do not add extra mandatory faults.
 
-## 4. Verified Base Environment
+## 4. Implemented Topology
 
-### Verified reference environment
+The main topology is implemented in `topologies/main_topology.py` (`--topo main6s8h`). It is Layer 2, IPv4 `10.0.0.0/24`, OpenFlow 1.3, and `failMode=secure`.
 
-The following **base Mininet/Open vSwitch environment** has been verified on the team Ubuntu server by running `./setup/verify_environment.sh`.
+| Class | Count |
+| --- | ---: |
+| Switches | 6 |
+| Hosts | 8 |
+| Inter-switch physical links | 10 |
+| Host-switch physical links | 9 |
+| Total physical links | 19 |
 
-This is the team's currently verified **reference** result. Do not treat it as a result from Kali or any other distribution.
+Dual-core layout: s1 (Core A) and s2 (Core B); access switches s3–s6 each attach to both cores. Extra paths increase diagnostic diversity, not node count:
 
-This is **not** a verification of Ryu, OS-Ken, OpenFlow 1.3 controller operation, the planned topology, telemetry, fault injection, the LLM agent, the baseline, or experiments.
+- `s3-s4` is a dedicated **access-edge test link** for controlled forwarding-loop / core-bypass experiments.
+- Host **h6** is dual-attached:
+  - primary `h6-eth0` → s5 (`10.0.0.6/24`)
+  - secondary `h6-eth1` → s6 (no baseline IPv4 address)
+
+No Linux bonding, LACP, MLAG, VRRP, or automatic host failover is implemented.
+
+When M3 installs baseline forwarding, the normal tree will use s1 as the active core. The following links stay physically present but remain outside normal baseline forwarding:
+
+- s2 redundant access uplinks
+- s1–s2 inter-core link
+- s3–s4 access-edge test link
+- h6–s6 secondary attachment
+
+Details and the exact port map: `topologies/README.md`.
+
+## 5. Verified ONOS Controller
+
+Verified on the team Ubuntu server on 20 August 2026 against the **enhanced 19-link** topology. Evidence: `evidence/progress/onos/main6s8h-enhanced-2026-08-20.txt`. Setup procedure: `docs/setup/onos-setup.md`.
+
+| Item | Observed |
+| --- | --- |
+| Controller | ONOS 2.7.0 (`onosproject/onos:2.7.0` Docker image) |
+| OpenFlow | 1.3 on all six OVS switches |
+| Fail mode | secure |
+| Devices | 6/6 (`of:0000000000000001` … `of:0000000000000006`) |
+| Directed ONOS links | 20 (= 10 physical switch–switch links, including s3:5 ↔ s4:5) |
+| REST | HTTP 200 for `/devices`, `/links`, `/hosts`, `/flows`, `/topology` |
+| Reactive forwarding | `org.onosproject.fwd` installed, **not** active |
+| OVS NORMAL | not used |
+| STP | not enabled |
+
+Host `pingall` on `main6s8h` was **not** tested and is **not** expected to work yet. Deterministic forwarding has not been installed.
+
+## 6. Verified Base Environment
+
+The following **base Mininet / Open vSwitch environment** (M0) was verified on the team Ubuntu server by running `./setup/verify_environment.sh`. That check is independent of ONOS.
 
 Observed versions and results:
 
@@ -111,47 +153,70 @@ Observed versions and results:
 - Result: 0% dropped, 2/2 received
 - M0 verification summary: PASS: 10, FAIL: 0, WARNING: 0
 
-Ryu and OS-Ken were not installed during M0 and have not been verified.
+That ovsbr `pingall` result is a **simple two-host bridge test**. It is not evidence that the six-switch project topology forwards packets.
 
 ### Compatibility policy
 
-The project is intended to run on Linux.
+The project is intended to run on Linux. Ubuntu 24.04.4 LTS is the team's currently verified reference environment.
 
-Ubuntu 24.04.4 LTS is the team's currently verified reference environment.
+Other Linux distributions such as Debian or Kali may also be used if they satisfy the project's environment verification checks. Passing `./setup/verify_environment.sh` means the environment has passed the current M0 Mininet / Open vSwitch **capability** checks. It does **not** mean ONOS is installed, and it does **not** mean every Linux distribution is officially supported.
 
-Other Linux distributions such as Debian or Kali may also be used if they satisfy the project's environment verification checks. Passing `./setup/verify_environment.sh` means the environment has passed the current M0 Mininet/Open vSwitch **capability** checks. It does **not** mean controller compatibility has been verified, and it does **not** mean every Linux distribution is officially supported.
+## 7. Quick Start
 
-## 5. Quick Start
-
-These commands assume you have permission to access the team repository.
+These commands assume you have permission to access the team repository. Run setup and Mininet on Linux, not on macOS or Windows.
 
 ```bash
 git clone https://github.com/dhotrey/COMS6200-Project.git
 cd COMS6200-Project
 git switch develop
-chmod +x setup/*.sh
+chmod +x setup/*.sh scripts/*.sh
 ./setup/setup_ubuntu.sh
 ./setup/verify_environment.sh
 ```
 
-Run the setup and verification scripts on Linux, not on macOS or Windows. Ubuntu 24.04.4 is the verified reference; other Linux systems may be used only if verification passes.
-
-## 6. Ubuntu Environment Setup
-
-`setup/setup_ubuntu.sh` remains the M0 installer. Ubuntu 24.04 is the primary tested target. apt-based Debian-family systems such as Debian or Kali may be able to use it, but package availability can differ. It does not provide universal Linux installation support.
-
-On an apt-based Linux host:
+ONOS is a **separate** step. Do not expect `setup_ubuntu.sh` to install it:
 
 ```bash
-chmod +x setup/*.sh
-./setup/setup_ubuntu.sh
+./setup/setup_onos.sh
+./scripts/verify_onos.sh
 ```
 
-The script updates apt, installs Git, Mininet, Open vSwitch, iperf3, Python 3, pip, venv, jq, and curl, attempts to enable/start Open vSwitch when the Ubuntu-style service unit exists, and creates a `.venv` virtual environment if it does not already exist.
+Wait until ONOS is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server). Then launch the main topology:
 
-If `apt` is not available, the script stops and asks you to install equivalent dependencies manually.
+```bash
+sudo mn -c
+sudo mn --custom topologies/main_topology.py \
+  --topo main6s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
 
-It does **not** install Ryu, OS-Ken, the OpenAI SDK, or other LLM libraries.
+`topologies/main_topology.py` already requests OpenFlow 1.3 and secure fail mode. Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`.
+
+While Mininet is running:
+
+```bash
+sudo ./scripts/verify_main_openflow.sh
+./scripts/verify_onos.sh
+```
+
+Do not run `pingall` expecting success until M3. Full procedure: `docs/setup/onos-setup.md` and `topologies/README.md`.
+
+## 8. Setup Scripts
+
+ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environments separate.
+
+| Script | Role |
+| --- | --- |
+| `setup/setup_ubuntu.sh` | Base Mininet / OVS environment (M0) |
+| `setup/setup_onos.sh` | ONOS 2.7.0 controller environment (M2) |
+| `setup/verify_environment.sh` | Base Mininet / OVS capability verification |
+| `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
+| `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
+
+A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
+
+`setup_ubuntu.sh` updates apt, installs Git, Mininet, Open vSwitch, iperf3, Python 3, pip, venv, jq, and curl, attempts to enable/start Open vSwitch when the Ubuntu-style service unit exists, and creates a `.venv` if it does not already exist. It does **not** install ONOS, the OpenAI SDK, or other LLM libraries.
 
 The script cannot activate `.venv` in your current shell. After it finishes, run:
 
@@ -159,13 +224,7 @@ The script cannot activate `.venv` in your current shell. After it finishes, run
 source .venv/bin/activate
 ```
 
-Always follow setup with:
-
-```bash
-./setup/verify_environment.sh
-```
-
-## 7. Environment Verification
+## 9. Environment Verification
 
 ```bash
 ./setup/verify_environment.sh
@@ -173,7 +232,7 @@ Always follow setup with:
 
 Verification is **capability-based**, not Ubuntu-name-based. It reports PASS / FAIL / WARNING for required project capabilities: Linux, Python 3, Git, Mininet, Open vSwitch tools, iperf3, Open vSwitch runtime, and a basic Mininet connectivity test (`mn --switch ovsbr --test pingall`, using `sudo` only when the caller is not root).
 
-Distribution name is informational. A Debian or Kali host can receive Overall: SUCCESS if the required capabilities work. A passing result means only that the current M0 Mininet/Open vSwitch checks succeeded. It is **not** evidence that Ryu, OS-Ken, or OpenFlow 1.3 controller integration is working.
+A passing result means only that the current M0 Mininet / Open vSwitch checks succeeded. Verify ONOS separately with `./scripts/verify_onos.sh`.
 
 **Observed M0 result on the team Ubuntu server:**
 
@@ -181,11 +240,11 @@ Distribution name is informational. A Debian or Kali host can receive Overall: S
 - Result: 0% dropped, 2/2 received
 - Summary: PASS: 10, FAIL: 0, WARNING: 0
 
-## 8. macOS / Windows Development
+## 10. macOS / Windows Development
 
 Cursor, Git, documentation, and Python code editing may be done from macOS or Windows.
 
-Mininet and Open vSwitch experiments must be executed in a Linux environment such as:
+Mininet, Open vSwitch, and ONOS experiments must be executed in a Linux environment such as:
 
 - Ubuntu server (verified reference: Ubuntu 24.04.4 LTS)
 - Ubuntu VM
@@ -194,7 +253,7 @@ Mininet and Open vSwitch experiments must be executed in a Linux environment suc
 
 Do not redesign the project to run Mininet natively on macOS. Do not treat every Linux distribution as officially supported.
 
-## 9. Git Workflow
+## 11. Git Workflow
 
 | Branch | Purpose |
 | --- | --- |
@@ -224,7 +283,7 @@ Feature branches should normally be reviewed and merged into `develop`. Do not p
 
 Git operations (commit, push, merge, rebase) are controlled by the human team, not by automated agents.
 
-## 10. Secrets and OpenAI API
+## 12. Secrets and OpenAI API
 
 OpenAI credentials will eventually be loaded through `OPENAI_API_KEY` from a local `.env` file or an environment variable.
 
@@ -232,9 +291,9 @@ OpenAI credentials will eventually be loaded through `OPENAI_API_KEY` from a loc
 - Never commit `.env` or real API keys.
 - Do not put secrets in `README.md`, scripts, or source files.
 
-## 11. Planned Repository Structure
+ONOS REST/CLI credentials are likewise environment-only (`ONOS_USER` / `ONOS_PASSWORD`). They are not stored in this repository.
 
-This is the expected **future** layout. Implementation directories are not all created yet.
+## 13. Current Repository Structure
 
 ```
 COMS6200-Project/
@@ -243,7 +302,6 @@ COMS6200-Project/
 ├── CONTRIBUTING.md
 ├── .gitignore
 ├── .env.example
-├── requirements.txt
 │
 ├── .cursor/
 │   └── rules/
@@ -251,94 +309,66 @@ COMS6200-Project/
 │
 ├── setup/
 │   ├── setup_ubuntu.sh
+│   ├── setup_onos.sh
 │   └── verify_environment.sh
 │
-├── topology/
-│   └── main_topology.py
+├── scripts/
+│   ├── verify_onos.sh
+│   └── verify_main_openflow.sh
 │
-├── controller/
-│   ├── main_controller.py
-│   ├── forwarding.py
-│   └── arp_handler.py
+├── topologies/
+│   ├── main_topology.py
+│   ├── progress_custom_topology.py
+│   └── progress_tc_topology.py
 │
-├── telemetry/
-│   ├── topology.py
-│   ├── reachability.py
-│   ├── ports.py
-│   ├── flows.py
-│   └── performance.py
-│
-├── faults/
-│   ├── injector.py
-│   ├── reset.py
-│   └── scenarios/
-│
-├── agent/
-│   ├── tools.py
-│   ├── schemas.py
-│   ├── prompts.py
-│   └── runner.py
-│
-├── baseline/
-│   └── troubleshooter.py
-│
-├── experiments/
-│   ├── runner.py
-│   ├── evaluator.py
-│   └── config.yaml
+├── controllers/
+│   └── main_controller.py          # superseded Ryu-era design reference; not used
 │
 ├── tests/
+│   └── test_main_static.py
 │
-├── logs/
+├── evidence/
+│   └── progress/
 │
-├── results/
+├── docs/
+│   ├── setup/
+│   ├── decisions/
+│   └── reports/
+│       └── part-a/
 │
-└── docs/
-    ├── architecture/
-    ├── evidence/
-    └── reports/
-        ├── part-a/
-        └── final/
+└── (planned)
+    ├── telemetry/
+    ├── faults/
+    ├── agent/
+    ├── baseline/
+    └── experiments/
 ```
 
-## 12. Current Milestone
+`controllers/main_controller.py` is retained as a forwarding-design reference only. It is not the runtime controller.
 
-**M0 — Reproducible Environment Bootstrap: Completed**
+## 14. Current Milestone
 
-M0 success criteria were met:
+**M3 — Deterministic Loop-Free Forwarding**
 
-- repository setup documentation exists
-- Ubuntu setup script exists
-- verification script exists
-- Git workflow is documented
-- secrets are protected
-- Cursor project rules exist
-- the setup and verification scripts were executed successfully on the real Ubuntu server
-- the base Mininet/OVS checks returned 10 PASS / 0 FAIL / 0 WARNING
+Install explicit deterministic baseline forwarding for the eight hosts while keeping these physical links out of normal baseline forwarding:
 
-M0 does **not** mean the SDN project itself is implemented. It does **not** verify Ryu, OS-Ken, OpenFlow 1.3 controller operation, the planned topology, telemetry, fault injection, the LLM agent, the baseline, or experiments.
+- s2 alternate uplinks
+- s1–s2
+- s3–s4
+- h6–s6 secondary
 
-## 13. Next Milestone
+Later success criteria (not yet demonstrated):
 
-**M1 — Main Mininet Topology**
+- all intended host pairs reachable
+- `pingall` 0% loss
+- no OVS NORMAL
+- no STP
+- `org.onosproject.fwd` inactive
+- expected OpenFlow flow rules visible
 
-Implement and validate the agreed 6-switch, 8-host, dual-core Layer-2 Mininet topology with deterministic host addressing and link structure.
+Do not enable reactive forwarding, NORMAL, or STP to make `pingall` succeed.
 
-Controller integration, OpenFlow 1.3 forwarding, telemetry, fault injection, and LLM integration remain later milestones.
-
-M1 has not been started.
-
-Milestone plan:
-
-- M0 — Reproducible Environment Bootstrap — Completed
-- M1 — Main Mininet Topology
-- M2 — Controller + OpenFlow 1.3 Integration
-- M3 — Deterministic Normal Forwarding
-- M4 — Structured Telemetry
-- M5 — First Automated Fault + Reset
-- M6 — First LLM Tool-Calling Diagnosis
-
-## Project Reports
+## 15. Project Reports
 
 The current Part A proposal/progress report, generated Word/PDF outputs, and reproducible build instructions are available under:
 
@@ -364,3 +394,11 @@ Preserved from the original repository README.
 ### Amir Latifi — Part A report reproducibility and validation
 
 Imported the Part A report into the repository as a canonical Markdown source, preserved the original report figures, and established reproducible DOCX/PDF generation and automated report validation. Citations now use stable BibTeX-style keys in `part-a-source.md` with `references.bib` as the bibliographic source of truth; IEEE numbers are generated automatically from first appearance. The builder programmatically validates citation keys, sequential numbering, unused-library warnings, and clickable citation-to-bibliography links in both PDF and DOCX. Dedicated title-page layout/validation and generated DOCX/PDF checks remain in place. Numeric citation rewriting is obsolete.
+
+### M2 ONOS setup and verification
+
+The team installed ONOS 2.7.0 from the official `onosproject/onos:2.7.0` Docker image and verified OpenFlow 1.3 controller integration on the Ubuntu server. All six OVS switches connected with secure fail mode; ONOS discovered the six deterministic DPIDs. Reactive forwarding remained inactive. Host `pingall` on the project topology was not tested.
+
+### M1 enhanced topology verification
+
+The main topology was enhanced with an s3–s4 access-edge test link and an optional h6–s6 secondary attachment (19 physical links). Runtime verification against ONOS on 20 August 2026 reported 6/6 devices and 20 directed inter-switch links, including s3:5 ↔ s4:5. Evidence: `evidence/progress/onos/main6s8h-enhanced-2026-08-20.txt`.
