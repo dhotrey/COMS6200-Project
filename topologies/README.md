@@ -162,11 +162,15 @@ Both scripts are read-only. `verify_main_openflow.sh` prints bridge protocols,
 fail-mode, controller attachment and OpenFlow 1.3 flow tables.
 `verify_onos.sh` prints controller-side device, link, host and flow state.
 
-**`pingall` does not succeed yet, and that is expected.** No forwarding
-application is active, so the switches only carry ONOS's LLDP/BDDP/ARP
-punt-to-controller rules. Deterministic loop-free forwarding across the
-redundant links is the next milestone. Do not work around this by enabling OVS
-NORMAL mode, standalone bridge mode, STP, or ONOS reactive forwarding.
+**`pingall` succeeds only after M3 baseline flows are installed.** From another shell:
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+python3 forwarding/baseline_forwarding.py install
+```
+
+Do not work around missing flows by enabling OVS NORMAL mode, standalone bridge mode, STP, or ONOS reactive forwarding. See `forwarding/README.md`.
 
 Verified against ONOS on 20 August 2026 for this enhanced 19-link topology:
 all six switches connected over OpenFlow 1.3 with secure fail mode; ONOS

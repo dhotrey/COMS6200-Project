@@ -19,12 +19,12 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M0 | Reproducible Environment Bootstrap | Completed |
 | M1 | Enhanced Main Mininet Topology | Completed |
 | M2 | ONOS + OpenFlow 1.3 Integration | Completed |
-| M3 | Deterministic Loop-Free Forwarding | **Next** |
-| M4 | Structured Telemetry Gateway | Planned |
+| M3 | Deterministic Loop-Free Forwarding | Completed |
+| M4 | Structured Telemetry Gateway | **Next** |
 | M5 | First Automated Fault + Reset | Planned |
 | M6 | First LLM Tool-Calling Diagnosis | Planned |
 
-The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M3–M6).
+The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
 
 Completed so far:
 
@@ -32,10 +32,10 @@ Completed so far:
 - implemented enhanced six-switch / eight-host Layer-2 topology
 - ONOS 2.7.0 installed as a version-pinned Docker container
 - OpenFlow 1.3 controller integration against the enhanced topology
+- deterministic loop-free baseline forwarding (`pingall` 0% dropped, 56/56)
 
 Not implemented:
 
-- deterministic loop-free forwarding
 - telemetry / tool gateway
 - automated fault injection
 - OpenAI LLM agent
@@ -44,7 +44,7 @@ Not implemented:
 
 ## 3. Architecture
 
-Implemented through M2:
+Implemented through M3:
 
 ```
 Mininet / Open vSwitch
@@ -133,8 +133,12 @@ Verified on the team Ubuntu server on 20 August 2026 against the **enhanced 19-l
 | Reactive forwarding | `org.onosproject.fwd` installed, **not** active |
 | OVS NORMAL | not used |
 | STP | not enabled |
+| Baseline forwarding | `org.coms6200.baseline`, 56 ADDED flows (unicast prio 41000, ARP-tree prio 42000) |
+| `pingall` | 0% dropped (56/56 received) on primary h1–h8 |
 
-Host `pingall` on `main6s8h` was **not** tested and is **not** expected to work yet. Deterministic forwarding has not been installed.
+s2, s1–s2, s3–s4 and h6–s6 remain discovered but unused by baseline forwarding. Evidence: `evidence/progress/forwarding/deterministic-baseline-2026-08-20.txt`.
+
+Do not enable `org.onosproject.fwd`, NORMAL, STP or FLOOD. Reinstall baseline after `mn -c` with `python3 forwarding/baseline_forwarding.py install`.
 
 ## 6. Verified Base Environment
 
@@ -191,16 +195,18 @@ sudo mn --custom topologies/main_topology.py \
   --switch=ovsk
 ```
 
-`topologies/main_topology.py` already requests OpenFlow 1.3 and secure fail mode. Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`.
-
-While Mininet is running:
+While Mininet is running, from another shell:
 
 ```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD='<your ONOS REST password>'
+python3 forwarding/baseline_forwarding.py install
+python3 forwarding/baseline_forwarding.py verify
 sudo ./scripts/verify_main_openflow.sh
 ./scripts/verify_onos.sh
 ```
 
-Do not run `pingall` expecting success until M3. Full procedure: `docs/setup/onos-setup.md` and `topologies/README.md`.
+Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`. Full procedure: `docs/setup/onos-setup.md`, `topologies/README.md` and `forwarding/README.md`.
 
 ## 8. Setup Scripts
 
@@ -213,6 +219,7 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `setup/verify_environment.sh` | Base Mininet / OVS capability verification |
 | `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
 | `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
+| `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
 
@@ -321,11 +328,15 @@ COMS6200-Project/
 │   ├── progress_custom_topology.py
 │   └── progress_tc_topology.py
 │
+├── forwarding/
+│   └── baseline_forwarding.py      # ONOS REST baseline provisioner
+│
 ├── controllers/
-│   └── main_controller.py          # superseded Ryu-era design reference; not used
+│   └── main_controller.py          # superseded design reference; not used
 │
 ├── tests/
-│   └── test_main_static.py
+│   ├── test_main_static.py
+│   └── test_baseline_forwarding.py
 │
 ├── evidence/
 │   └── progress/
@@ -348,25 +359,11 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M3 — Deterministic Loop-Free Forwarding**
+**M4 — Structured Telemetry Gateway**
 
-Install explicit deterministic baseline forwarding for the eight hosts while keeping these physical links out of normal baseline forwarding:
+Normalise ONOS REST device/link/flow/port state into the bounded agent-facing tools (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Raw REST access used by the forwarding installer does **not** complete this milestone.
 
-- s2 alternate uplinks
-- s1–s2
-- s3–s4
-- h6–s6 secondary
-
-Later success criteria (not yet demonstrated):
-
-- all intended host pairs reachable
-- `pingall` 0% loss
-- no OVS NORMAL
-- no STP
-- `org.onosproject.fwd` inactive
-- expected OpenFlow flow rules visible
-
-Do not enable reactive forwarding, NORMAL, or STP to make `pingall` succeed.
+M3 is complete: explicit `org.coms6200.baseline` flows forward the eight primary hosts through s1. Do not enable reactive forwarding, NORMAL, or STP.
 
 ## 15. Project Reports
 
@@ -402,3 +399,7 @@ The team installed ONOS 2.7.0 from the official `onosproject/onos:2.7.0` Docker 
 ### M1 enhanced topology verification
 
 The main topology was enhanced with an s3–s4 access-edge test link and an optional h6–s6 secondary attachment (19 physical links). Runtime verification against ONOS on 20 August 2026 reported 6/6 devices and 20 directed inter-switch links, including s3:5 ↔ s4:5. Evidence: `evidence/progress/onos/main6s8h-enhanced-2026-08-20.txt`.
+
+### M3 deterministic baseline forwarding
+
+The team installed explicit ONOS flow rules owned by `org.coms6200.baseline` (numeric id 176) for dest-MAC unicast and loop-free ARP on the s1 active tree. 56 flows reached ADDED; s2 had none. Mininet `pingall` recorded 0% dropped (56/56 received). `org.onosproject.fwd` stayed inactive. Remove/reinstall restored the same connectivity. Evidence: `evidence/progress/forwarding/deterministic-baseline-2026-08-20.txt`.

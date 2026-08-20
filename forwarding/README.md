@@ -113,7 +113,12 @@ python3 forwarding/baseline_forwarding.py remove
 ```
 
 `install` is idempotent: it drops stale `org.coms6200.baseline` flows, then
-installs the canonical set and checks they reach `ADDED`.
+installs the canonical set and checks they reach `ADDED`. `remove` waits until
+ONOS finishes `PENDING_REMOVE` so a follow-up `status` sees zero app flows.
+
+ONOS `/hosts` may remain empty while ping works: ARP is forwarded in the data
+plane, so `hostprovider` does not see PACKET_IN ARP. That is not a forwarding
+failure.
 
 Credentials are read from the environment only. They are never stored in this
 repository and are never printed.

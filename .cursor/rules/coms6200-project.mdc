@@ -28,21 +28,23 @@ The LLM must not receive: unrestricted shell; ONOS credentials; unrestricted ONO
 
 ## Verified state (do not regress)
 
-M0 environment, M1 enhanced topology, and M2 ONOS/OpenFlow 1.3 integration are **completed**.
+M0 environment, M1 enhanced topology, M2 ONOS/OpenFlow 1.3 integration, and M3 deterministic loop-free forwarding are **completed**.
 
 Main topology `main6s8h` (`topologies/main_topology.py`): 6 switches, 8 hosts, 10 inter-switch links, 9 host-switch attachments, 19 physical links. Enhancements: s3–s4 access-edge test link; h6 primary `h6-eth0`→s5 with `10.0.0.6/24`; h6 secondary `h6-eth1`→s6 with **no baseline IPv4**.
 
 ONOS facts (enhanced topology, 20 Aug 2026): 6/6 OVS devices connected; OpenFlow 1.3; secure fail mode; 20 directed ONOS links (= 10 physical switch–switch, including s3:5↔s4:5 both ways); REST verified for devices, links, hosts, flows, topology, applications, cluster, device ports, port statistics, and delta port statistics; 18 controller flows (3 per switch: LLDP/BDDP/ARP); `org.onosproject.fwd` **not** active.
 
-Do **not** claim deterministic host forwarding or `pingall` on `main6s8h`. Raw ONOS REST does **not** mean the telemetry gateway is complete.
+M3 forwarding facts: application `org.coms6200.baseline` (numeric id 176); 56 ADDED flows (s1:12, s2:0, s3–s6:11); unicast priority 41000; ARP-tree priority 42000; `pingall` 0% dropped (56/56); no NORMAL/STP/FLOOD; reserved links unused by baseline actions. Provisioner: `forwarding/baseline_forwarding.py`.
+
+Raw ONOS REST does **not** mean the telemetry gateway is complete.
 
 ## Milestones
 
 - M0 Reproducible Environment Bootstrap — completed
 - M1 Enhanced Main Mininet Topology — completed
 - M2 ONOS + OpenFlow 1.3 Integration — completed
-- **M3 Deterministic Loop-Free Forwarding — current / next**
-- M4 Structured Telemetry Gateway — planned
+- M3 Deterministic Loop-Free Forwarding — completed
+- **M4 Structured Telemetry Gateway — current / next**
 - M5 First Automated Fault + Reset — planned
 - M6 First LLM Tool-Calling Diagnosis — planned
 
@@ -69,12 +71,13 @@ Planned agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `
 - `setup/verify_environment.sh` — base environment checks
 - `scripts/verify_onos.sh` — ONOS checks
 - `scripts/verify_main_openflow.sh` — running `main6s8h` OpenFlow checks
+- `forwarding/baseline_forwarding.py` — M3 ONOS baseline provisioner
 
-Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
+Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
 
 Canonical Part A source: `docs/reports/part-a/part-a-source.md`. Bibliography: `docs/reports/part-a/references.bib`. Builder: `docs/reports/part-a/build_report.py`. Use `[@key]` citations; never hard-code IEEE numbers. DOCX/PDF are generated artifacts.
 
-Part A truth: ONOS/OpenFlow main topology completed; structured telemetry partially evidenced; fault injector not yet evidenced; OpenAI diagnosis not yet evidenced; deterministic forwarding not completed.
+Part A truth: ONOS/OpenFlow main topology completed; deterministic forwarding completed; structured telemetry partially evidenced; fault injector not yet evidenced; OpenAI diagnosis not yet evidenced.
 
 ## Hard constraints
 
