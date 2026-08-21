@@ -282,14 +282,28 @@ docker stop onos && docker rm onos
 REST checks run only if `ONOS_PASSWORD` is set:
 
 ```bash
+# Reference ONOS 2.7.0 lab credentials
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 ./scripts/verify_onos.sh
 ```
 
-Never commit the password. The installer and verifier read credentials from the environment only.
+`onos` / `rocks` are the credentials used by the project's verified local ONOS 2.7.0 reference deployment. ONOS REST/GUI is bound to localhost at `127.0.0.1:8181`. If a user changes the ONOS credentials, they should override `ONOS_USER` / `ONOS_PASSWORD` in their shell. Custom or replacement credentials must not be committed to Git.
 
-Karaf CLI (password not stored in this repository):
+`onos` / `rocks` are the documented credentials for the local reference lab deployment. If these defaults are replaced, keep the new credentials outside Git and pass them through `ONOS_USER` and `ONOS_PASSWORD`. The installer and verifier read REST credentials from the environment only.
+
+Simple REST authentication test (port 8181 only):
+
+```bash
+curl -u "$ONOS_USER:$ONOS_PASSWORD" \
+  http://127.0.0.1:8181/onos/v1/devices
+```
+
+HTTP 200 plus device JSON means REST authentication succeeded. HTTP 401 means the REST credentials are incorrect.
+
+These environment variables apply to the ONOS REST/GUI API on port 8181. They are not a documented Karaf CLI password.
+
+Karaf CLI authentication is separate from REST. This manual does not document a verified CLI password:
 
 ```bash
 ssh -p 8101 karaf@127.0.0.1
@@ -462,7 +476,7 @@ sudo mn -c
 
 ```bash
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 ./scripts/verify_onos.sh
 sudo ./scripts/verify_main_openflow.sh
 ```
@@ -518,7 +532,7 @@ Numeric ONOS application ID (runtime, 20 Aug 2026): **176**
 
 ```bash
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 # optional: export ONOS_URL=http://127.0.0.1:8181/onos/v1
 
 python3 forwarding/baseline_forwarding.py install
@@ -713,7 +727,7 @@ Remove baseline flows (ONOS stays up; `pingall` will fail until `install` again)
 
 ```bash
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 python3 forwarding/baseline_forwarding.py remove
 ```
 
@@ -765,7 +779,7 @@ When M5 implements reset tooling, replace this planned list with exact commands.
 
 ### ONOS REST unavailable
 
-**Check:** `127.0.0.1:8181`. Set `ONOS_USER` / `ONOS_PASSWORD` then re-run `./scripts/verify_onos.sh`. Do not commit credentials.
+**Check:** `127.0.0.1:8181`. For the reference lab, `export ONOS_USER=onos` and `export ONOS_PASSWORD=rocks`, then re-run `./scripts/verify_onos.sh`. HTTP 401 means incorrect REST credentials. If these defaults are replaced, keep the new credentials outside Git and pass them through `ONOS_USER` and `ONOS_PASSWORD`.
 
 ### OpenFlow switch not connected
 
@@ -820,7 +834,7 @@ The reference container is capped (`--memory=640m`, JVM `-Xmx256m`) for a small 
 - Reset between experiments
 - No credentials or unrestricted shell to the LLM
 - No injector ground truth to diagnostic methods
-- No secrets committed to Git (`.env`, `ONOS_PASSWORD`)
+- No secrets committed to Git (`.env`; custom ONOS REST credentials if the reference `onos` / `rocks` pair is replaced)
 
 These are both **dataplane safety** and **experiment integrity** controls.
 
