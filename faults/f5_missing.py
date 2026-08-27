@@ -22,7 +22,7 @@ from topologies.spec import DEVICE_IDS
 
 
 def _client() -> OnosClient:
-    url, user, password = credentials_from_env()
+    user, password, url = credentials_from_env()
     return OnosClient(url, user, password)
 
 
