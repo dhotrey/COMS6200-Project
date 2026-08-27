@@ -31,9 +31,11 @@ The LLM must not receive: unrestricted shell; ONOS credentials; unrestricted ONO
 
 ## Verified state (do not regress)
 
-M0 environment, M1 enhanced topology, M2 ONOS/OpenFlow 1.3 integration, M3 deterministic loop-free forwarding, and **M4 structured telemetry** are **completed**.
+M0 environment, M1 enhanced topology, M2 ONOS/OpenFlow 1.3 integration, M3 deterministic loop-free forwarding, **M4 structured telemetry**, and **M5 F1 fault inject/reset** are **completed**.
 
 M4 facts (Ubuntu `Aus`, 27 August 2026): six bounded tools (`get_topology`, `ping`, `get_port_status`, `get_port_stats`, `get_flow_table`, `iperf`); hybrid topology (ONOS devices/links + configured host map; **not** `/hosts`); ping/iperf via `mininet:<host>` + `mnexec` with fixed argv; no `shell=True`; no unrestricted REST; `utilization_pct` null; `verify_telemetry.sh` ALL CHECKS PASSED; pingall 56/56 after telemetry; 56 baseline ADDED unchanged; `org.onosproject.fwd` not ACTIVE. Evidence: `evidence/progress/telemetry/structured-telemetry-2026-08-27.txt`. `mn --custom` must locate `spec.py` without `__file__`.
+
+M5 facts (Ubuntu `Aus`, 27 August 2026): F1 disables primary s3–s1 (`s3-eth1`/`s1-eth2`) via fixed `ip link set … down`; operator CLI only (`python3 -m faults.cli`); evaluator ground truth in `/run/coms6200/fault-state.json` (0600); M4 never receives fault metadata; ONOS directed links 20→18 then restore to 20; h1→h5 fails, h1→h2 and h3→h5 succeed; 56 baseline ADDED unchanged; final pingall 56/56; `verify_fault_f1.sh` ALL CHECKS PASSED. Evidence: `evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt`. F2–F5 not implemented.
 
 Raw ONOS REST is not a substitute for the gateway; the gateway is now the agent-facing interface.
 
@@ -50,8 +52,8 @@ M3 forwarding facts: application `org.coms6200.baseline` (numeric id 176); 56 AD
 - M2 ONOS + OpenFlow 1.3 Integration — completed
 - M3 Deterministic Loop-Free Forwarding — completed
 - **M4 Structured Telemetry Gateway — completed**
-- **M5 First Automated Fault + Reset — current / next**
-- M6 First LLM Tool-Calling Diagnosis — planned
+- **M5 First Automated Fault + Reset — completed (F1 only)**
+- **M6 First LLM Tool-Calling Diagnosis — current / next**
 
 Deterministic baseline and repeated experiments come after this vertical slice.
 
@@ -65,9 +67,9 @@ Baseline must remain deterministic and loop-free. Do **not** enable OVS NORMAL, 
 
 ## Faults and tools
 
-Mandatory faults only: F1 link failure; F2 congestion; F3 ACL/policy error; F4 forwarding loop; F5 missing/incorrect OpenFlow rule. Use s3–s4 for controlled F4. h6 dual-home is optional advanced work, not a sixth required scenario. Do not silently expand scope.
+Mandatory faults only: F1 link failure; F2 congestion; F3 ACL/policy error; F4 forwarding loop; F5 missing/incorrect OpenFlow rule. Use s3–s4 for controlled F4. h6 dual-home is optional advanced work, not a sixth required scenario. Do not silently expand scope. **Only F1 is implemented** (operator `faults/` CLI; not an LLM tool).
 
-Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `get_port_stats(sw)`, `get_flow_table(sw)`, `iperf(src,dst)` via `telemetry/`. Do not expose arbitrary shell or REST.
+Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `get_port_stats(sw)`, `get_flow_table(sw)`, `iperf(src,dst)` via `telemetry/`. Do not expose arbitrary shell or REST. Do not expose fault CLI/status/ground truth to the LLM.
 
 ## Setup and paths
 
@@ -77,14 +79,16 @@ Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)
 - `scripts/verify_onos.sh` — ONOS checks
 - `scripts/verify_main_openflow.sh` — running `main6s8h` OpenFlow checks
 - `scripts/verify_telemetry.sh` — live M4 tools (completed on Ubuntu 27 August 2026)
+- `scripts/verify_fault_f1.sh` — live M5 F1 inject/observe/reset (completed on Ubuntu 27 August 2026)
 - `forwarding/baseline_forwarding.py` — M3 ONOS baseline provisioner
 - `telemetry/` — bounded agent-facing diagnostic gateway (M4 completed on Ubuntu 27 August 2026)
+- `faults/` — operator F1 injector/reset (M5 completed on Ubuntu 27 August 2026; not an LLM tool)
 
-Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
+Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `telemetry/`, `faults/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
 
 Canonical Part A source: `docs/reports/part-a/part-a-source.md`. Bibliography: `docs/reports/part-a/references.bib`. Builder: `docs/reports/part-a/build_report.py`. Use `[@key]` citations; never hard-code IEEE numbers. DOCX/PDF are generated artifacts.
 
-Part A truth: ONOS/OpenFlow main topology completed; deterministic forwarding completed; structured telemetry completed (Ubuntu 27 August 2026); fault injector not yet evidenced; OpenAI diagnosis not yet evidenced.
+Part A truth: ONOS/OpenFlow main topology completed; deterministic forwarding completed; structured telemetry completed (Ubuntu 27 August 2026); F1 fault inject/reset completed (Ubuntu 27 August 2026); F2–F5 and OpenAI diagnosis not yet evidenced.
 
 ## Hard constraints
 

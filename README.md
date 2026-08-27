@@ -26,8 +26,8 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M2 | ONOS + OpenFlow 1.3 Integration | Completed |
 | M3 | Deterministic Loop-Free Forwarding | Completed |
 | M4 | Structured Telemetry Gateway | **Completed** |
-| M5 | First Automated Fault + Reset | **Next** |
-| M6 | First LLM Tool-Calling Diagnosis | Planned |
+| M5 | First Automated Fault + Reset | **Completed** (F1 only) |
+| M6 | First LLM Tool-Calling Diagnosis | **Next** |
 
 The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
 
@@ -39,17 +39,18 @@ Completed so far:
 - OpenFlow 1.3 controller integration against the enhanced topology
 - deterministic loop-free baseline forwarding (`pingall` 0% dropped, 56/56)
 - structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
+- F1 automated primary link failure + clean reset (`scripts/verify_fault_f1.sh` ALL CHECKS PASSED, 27 August 2026)
 
 Not implemented:
 
-- automated fault injection
+- F2–F5 fault injectors (only F1 is verified)
 - OpenAI LLM agent
 - scripted troubleshooting baseline
 - repeated experiments
 
 ## 3. Architecture
 
-Implemented through M4:
+Implemented through M5 (F1 injector is operator-only; diagnosis still planned):
 
 ```
 Mininet / Open vSwitch
@@ -59,6 +60,13 @@ OpenFlow 1.3
 ONOS 2.7.0
         ↓
 Telemetry / Tool Gateway
+```
+
+Operator/evaluator only (not an LLM tool):
+
+```
+Fault injector (F1) → Mininet/OVS link state
+Fault injector → evaluator ground truth (/run/coms6200/fault-state.json)
 ```
 
 Still planned:
@@ -79,15 +87,15 @@ The LLM will **not** receive unrestricted ONOS REST access or controller credent
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
-**Faults** (planned; not yet injected):
+**Faults** (catalogue; only F1 implemented):
 
-| ID | Fault |
-| --- | --- |
-| F1 | Link failure |
-| F2 | Congestion |
-| F3 | ACL / policy error |
-| F4 | Forwarding loop |
-| F5 | Missing / incorrect OpenFlow rule |
+| ID | Fault | Status |
+| --- | --- | --- |
+| F1 | Link failure (primary s3–s1) | **Completed** (27 August 2026) |
+| F2 | Congestion | Planned |
+| F3 | ACL / policy error | Planned |
+| F4 | Forwarding loop | Planned |
+| F5 | Missing / incorrect OpenFlow rule | Planned |
 
 The project may later include **one optional constrained link-failure reroute demonstration**. Automated remediation is not the current priority. Do not add extra mandatory faults.
 
@@ -230,7 +238,9 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
 | `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
+| `scripts/verify_fault_f1.sh` | Live M5 F1 inject → observe → reset |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
+| `faults/` | Operator F1 injector/reset (not an LLM tool) |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
 
@@ -333,7 +343,8 @@ COMS6200-Project/
 ├── scripts/
 │   ├── verify_onos.sh
 │   ├── verify_main_openflow.sh
-│   └── verify_telemetry.sh
+│   ├── verify_telemetry.sh
+│   └── verify_fault_f1.sh
 │
 ├── topologies/
 │   ├── main_topology.py
@@ -346,13 +357,16 @@ COMS6200-Project/
 │
 ├── telemetry/                      # M4 bounded diagnostic gateway
 │
+├── faults/                         # M5 operator F1 injector/reset
+│
 ├── controllers/
 │   └── main_controller.py          # superseded design reference; not used
 │
 ├── tests/
 │   ├── test_main_static.py
 │   ├── test_baseline_forwarding.py
-│   └── test_telemetry.py
+│   ├── test_telemetry.py
+│   └── test_faults.py
 │
 ├── evidence/
 │   └── progress/
@@ -364,7 +378,6 @@ COMS6200-Project/
 │       └── part-a/
 │
 └── (planned)
-    ├── faults/
     ├── agent/
     ├── baseline/
     └── experiments/
@@ -374,9 +387,9 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M5 — First Automated Fault + Reset** (next)
+**M6 — First LLM Tool-Calling Diagnosis** (next)
 
-M4 is complete on the Ubuntu reference server (27 August 2026): six bounded tools, hybrid `get_topology()` (no `/hosts`), `mnexec` ping/iperf, `verify_telemetry.sh` ALL CHECKS PASSED. Evidence: `evidence/progress/telemetry/structured-telemetry-2026-08-27.txt`. Do not enable reactive forwarding, NORMAL, or STP.
+M5 is complete for **F1 only** on the Ubuntu reference server (27 August 2026): primary s3–s1 link failure via `ip link set … down` on `s3-eth1`/`s1-eth2`, ONOS 20→18 directed links, targeted connectivity symptoms, clean reset to 20 links and pingall 56/56. Evidence: `evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt`. F2–F5 remain planned. Do not expose the fault CLI to the LLM.
 
 ## 15. Project Reports
 

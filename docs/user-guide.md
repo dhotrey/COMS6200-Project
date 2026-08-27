@@ -27,7 +27,8 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M2 ONOS + OpenFlow 1.3 Integration | ✅ |
 | M3 Deterministic Loop-Free Forwarding | ✅ |
 | M4 Structured Telemetry Gateway | ✅ |
-| Automated fault injection | 🟡 |
+| M5 First Automated Fault + Reset | ✅ |
+| Automated fault injection | 🟡 Partial — F1 verified; F2–F5 planned |
 | Deterministic scripted troubleshooting baseline | 🟡 |
 | LLM tool-calling integration | 🟡 |
 | Repeated evaluation experiments | 🟡 |
@@ -96,7 +97,7 @@ Research question: *How accurately and efficiently can a tool-using LLM agent di
 
 ## Architecture overview
 
-Implemented through M4 (Ubuntu live evidence 27 August 2026):
+Implemented through M5 (Ubuntu live evidence 27 August 2026; F1 operator injector only):
 
 ```
 Mininet hosts
@@ -796,23 +797,86 @@ Developer notes: `telemetry/README.md`.
 
 ## Fault injection
 
-🟡 **NOT YET IMPLEMENTED / EVIDENCED**
+🟡 **Partial** — F1 ✅ runtime verified (Ubuntu `Aus`, 27 August 2026). F2–F5 🟡 planned.
 
-There is **no** fault-injector command in this repository. The table is **designed expectation**, not a runtime-verified result.
+Evidence: `evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt`.
 
-| ID | Injected concept | Expected symptom | Useful evidence | Expected diagnosis |
-| --- | --- | --- | --- | --- |
-| F1 Link failure | Disable one primary access-to-core link (e.g. s3–s1) | Affected normal path fails; port/link down | topology, port state, ping, flows | Identify the failed link |
-| F2 Congestion | Background traffic on a constrained link | Ports stay up; utilisation up; throughput/latency degrade | port counters/rates, ping, iperf | Identify congested link and competing load |
-| F3 ACL / policy error | High-priority selective drop rule | Selective traffic failure; links healthy | flow table, reachability, port state | Identify the conflicting drop rule |
-| F4 Forwarding loop | Narrow test flow around the s3–s4 cycle | No delivery; abnormal counters on the cycle | flow actions, topology, counters | Identify cyclic rules/path |
-| F5 Missing / incorrect OpenFlow rule | Delete or override a required flow | Topology healthy; target traffic blackholes or misroutes | flow table, topology, ping | Identify missing/wrong rule |
+| ID | Status | Injected concept | Useful evidence |
+| --- | --- | --- | --- |
+| F1 Link failure | ✅ | Disable primary s3–s1 uplink (`s3-eth1` + `s1-eth2`) | topology, port state, ping, flows |
+| F2 Congestion | 🟡 | Background traffic on a constrained link | port counters/rates, ping, iperf |
+| F3 ACL / policy error | 🟡 | High-priority selective drop rule | flow table, reachability, port state |
+| F4 Forwarding loop | 🟡 | Narrow test flow around the s3–s4 cycle | flow actions, topology, counters |
+| F5 Missing / incorrect OpenFlow rule | 🟡 | Delete or override a required flow | flow table, topology, ping |
 
 F4 safety (planned): narrow match, low-rate traffic, short hard timeout, watchdog/reset. Use s3–s4; do not destabilise all traffic.
 
 h6 dual-home is **not** a sixth mandatory fault ([Optional extensions](#optional-extensions)).
 
-When M5 implements injection, replace this section with actual commands.
+### Operator CLI (F1 only) ✅
+
+The package `faults/` is an **operator/evaluator** injector. It is **not** an LLM
+tool. Do not expose fault CLI output, status, scenario IDs, or ground truth to
+the diagnostic agent. Telemetry must never import fault state.
+
+Requires **root** for link-state mutation. The injector does **not** call `sudo`
+internally. On a non-root session:
+
+```bash
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH,PYTHONPATH \
+  python3 -m faults.cli inject --scenario F1
+```
+
+On the reference server (already root):
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD=rocks
+export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
+
+python3 -m faults.cli status
+python3 -m faults.cli inject --scenario F1
+python3 -m faults.cli status
+python3 -m faults.cli reset
+```
+
+Only `--scenario F1` is accepted for inject. There is no `--interface`, `--cmd`,
+`--link`, or `--pid`.
+
+Runtime state (outside the repo): `/run/coms6200/fault-state.json`
+(directory mode `0700`, file mode `0600`). Evaluator-only ground truth lives
+here; M4 never reads it.
+
+### F1 expected symptoms (verified)
+
+After inject and ONOS convergence (~1–2 s observed):
+
+- directed ONOS links **20 → 18**
+- `get_topology()`: configured inter-switch links remain **10**; observed physical
+  inter-switch links **9**
+- `get_port_status(s3)` port 1 and `get_port_status(s1)` port 2: `enabled=false`
+- M3 baseline remains **56 ADDED** (F1 does not mutate flows)
+- `ping(h1,h5)` fails (100% loss); `ping(h1,h2)` succeeds; `ping(h3,h5)` succeeds
+
+After reset: interfaces UP; directed links **20**; pingall **56/56**.
+
+### Live verification
+
+```bash
+./scripts/verify_fault_f1.sh
+```
+
+Requires root, healthy ONOS + `main6s8h` + M3, and `ONOS_USER` / `ONOS_PASSWORD`.
+Uses a trap to reset F1 on abort. Manual recovery if cleanup fails:
+
+```bash
+python3 -m faults.cli reset --force-f1
+# or:
+ip link set dev s3-eth1 up
+ip link set dev s1-eth2 up
+```
+
+Developer notes: `faults/README.md`.
 
 ---
 
@@ -926,20 +990,18 @@ Stop ONOS if needed:
 docker stop onos
 ```
 
-### After a future injected fault 🟡
+### After an injected F1 fault ✅
 
-Planned sequence (no injector CLI yet):
+```bash
+python3 -m faults.cli reset
+# crash recovery when state file is missing but F1 ifaces are down:
+python3 -m faults.cli reset --force-f1
+python3 forwarding/baseline_forwarding.py verify
+# confirm directed links = 20 and pingall 56/56 (see verify_fault_f1.sh)
+```
 
-1. Stop background traffic
-2. Remove injected fault rules/settings
-3. Restore deterministic forwarding (`install`)
-4. Clear transient experimental state where required
-5. Verify controller/switch connectivity
-6. Verify baseline flows
-7. Run a healthy connectivity check (`pingall` 56/56)
-8. Start the next episode only when the baseline is clean
-
-When M5 implements reset tooling, replace this planned list with exact commands.
+F1 does not modify M3 flows, so `install` is not required after a clean F1 reset.
+For future F2–F5 (🟡), additional cleanup may be required.
 
 ---
 
@@ -1074,7 +1136,11 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 5. `python3 forwarding/baseline_forwarding.py install` then `verify`
 6. Mininet `pingall` → 56/56, 0% dropped
 7. Collect structured telemetry ✅ (`python3 -m telemetry.cli get-topology`; `./scripts/verify_telemetry.sh`)
-8. `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
+8. Inject F1 ✅ (`python3 -m faults.cli inject --scenario F1`)
+9. Observe with telemetry ✅ (targeted pings / topology / ports)
+10. Reset F1 ✅ (`python3 -m faults.cli reset`; or `./scripts/verify_fault_f1.sh`)
+11. Verify healthy baseline again ✅ (20 directed links; pingall 56/56)
+12. `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
 
 ### B. Full planned experiment workflow 🟡
 
@@ -1085,14 +1151,14 @@ Unfinished steps are marked.
 3. Start topology ✅
 4. Install baseline forwarding ✅
 5. Verify healthy baseline ✅
-6. Inject one fault 🟡
+6. Inject one fault ✅ (F1 only; F2–F5 🟡)
 7. Present **only a symptom** to the diagnostic method 🟡
 8. Collect structured telemetry ✅
 9. Obtain LLM or scripted diagnosis 🟡
 10. Log result 🟡
 11. Compare diagnosis to hidden ground truth 🟡
-12. Reset network 🟡 (partial reset exists today: `remove` / `mn -c` / re-`install`)
-13. Verify healthy state ✅ commands already exist
+12. Reset network ✅ for F1 (`python3 -m faults.cli reset`); other faults 🟡
+13. Verify healthy state ✅
 14. Repeat 🟡
 
 ---
@@ -1102,18 +1168,19 @@ Unfinished steps are marked.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh` |
+| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` |
 | `topologies/` | `main_topology.py`, canonical `spec.py`, plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
 | `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |
+| `faults/` | Operator F1 injector/reset (M5; Ubuntu live evidence 27 August 2026) — not an LLM tool |
 | `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
-| `tests/` | Static topology, forwarding, and telemetry tests |
-| `evidence/progress/` | Runtime evidence (ONOS, forwarding, TCLink) |
+| `tests/` | Static topology, forwarding, telemetry, and fault tests |
+| `evidence/progress/` | Runtime evidence (ONOS, forwarding, telemetry, faults) |
 | `docs/` | This manual, ONOS setup, decisions, Part A report |
 | `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
 | `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
 
-**Planned, not present:** `faults/`, `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
+**Planned, not present:** `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
 
 Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
 
