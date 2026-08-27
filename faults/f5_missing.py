@@ -106,7 +106,12 @@ def inject_f5() -> dict[str, Any]:
             )
     except Exception:
         try:
-            install_flows(client)
+            import contextlib
+            import io
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                install_flows(client, timeout_s=45.0)
         except Exception:
             pass
         clear_state()
@@ -129,19 +134,70 @@ def inject_f5() -> dict[str, Any]:
 def reset_f5(*, force: bool = False, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     require_root()
     client = _client()
-    install_flows(client)
+    spec = _target_spec()
+    ours = list_baseline_flows(client)
+    matches = [flow for flow in ours if flow_matches_spec(flow, spec)]
+
+    if len(matches) == 1 and len(ours) == 56:
+        clear_state()
+        return {
+            "status": "IDLE",
+            "scenario_id": "F5",
+            "baseline_count": 56,
+            "message": "baseline already complete; cleared fault state",
+        }
+
+    if len(matches) == 0:
+        # Prefer restoring only the missing rule (avoids disrupting the other 55).
+        from forwarding.baseline_forwarding import spec_to_onos_json
+
+        client.post(
+            "flows",
+            {"flows": [spec_to_onos_json(spec)]},
+            query={"appId": APP_NAME},
+        )
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            ours = list_baseline_flows(client)
+            matches = [flow for flow in ours if flow_matches_spec(flow, spec)]
+            added = sum(1 for f in ours if str(f.get("state")) == "ADDED")
+            if len(matches) == 1 and added == 56:
+                break
+            time.sleep(0.4)
+        else:
+            # Fallback: full deterministic reinstall with quiet stdout.
+            import contextlib
+            import io
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                install_flows(client, timeout_s=45.0)
+            ours = list_baseline_flows(client)
+            if len(ours) != 56:
+                raise FaultError(
+                    "RESET_INCOMPLETE",
+                    f"expected 56 baseline flows after F5 reset, found {len(ours)}",
+                )
+            resolve_unique_baseline_flow(client)
+            clear_state()
+            return {
+                "status": "IDLE",
+                "scenario_id": "F5",
+                "baseline_count": 56,
+                "message": "restored via full baseline install_flows fallback",
+            }
+
     ours = list_baseline_flows(client)
     if len(ours) != 56:
         raise FaultError(
             "RESET_INCOMPLETE",
             f"expected 56 baseline flows after F5 reset, found {len(ours)}",
         )
-    # Ensure the h5 rule is back.
     resolve_unique_baseline_flow(client)
     clear_state()
     return {
         "status": "IDLE",
         "scenario_id": "F5",
         "baseline_count": 56,
-        "message": "restored baseline flows via install_flows",
+        "message": "restored missing s3→h5 baseline unicast rule",
     }
