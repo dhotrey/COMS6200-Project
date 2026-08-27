@@ -29,7 +29,7 @@ HEALTHY_MBPS="$(python3 - <<PY
 import json
 doc=json.load(open("${WORKDIR}/iperf_before.json"))
 assert doc.get("ok") is True, doc
-mbps=float(doc["data"]["mbps"])
+mbps=float(doc["data"]["mbit_per_sec"])
 print(mbps)
 assert mbps > 5.0
 PY
@@ -98,11 +98,12 @@ python3 - <<PY
 import json
 doc=json.load(open("${WORKDIR}/iperf_during.json"))
 assert doc.get("ok") is True, doc
-fault=float(doc["data"]["mbps"])
+fault=float(doc["data"]["mbit_per_sec"])
 healthy=float("${HEALTHY_MBPS}")
 ratio=fault/healthy if healthy>0 else 999
-print(f"fault_mbps={fault} healthy_mbps={healthy} ratio={ratio:.4f} max={${DEGRADE_MAX_RATIO}}")
-assert ratio <= float("${DEGRADE_MAX_RATIO}"), (fault, healthy, ratio)
+limit=float("${DEGRADE_MAX_RATIO}")
+print(f"fault_mbps={fault} healthy_mbps={healthy} ratio={ratio:.4f} max={limit}")
+assert ratio <= limit, (fault, healthy, ratio)
 PY
 if [[ $? -eq 0 ]]; then pass "throughput degraded <= ${DEGRADE_MAX_RATIO} of healthy"; else fail "throughput not sufficiently degraded"; fi
 
