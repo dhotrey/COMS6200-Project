@@ -1320,7 +1320,17 @@ def pdf_table(rows: list[list[str]], styles: dict[str, ParagraphStyle], content_
         data.append(rendered)
 
     if ncols == 3:
-        widths = [content_width * x for x in (0.28, 0.22, 0.50)]
+        header = [(cell or "").strip().lower() for cell in rows[0]] if rows else []
+        # Table 4 schedule: Dates (narrow) | Milestone (widest) | Status (narrow).
+        if (
+            len(header) >= 3
+            and "dates" in header[0]
+            and "milestone" in header[1]
+            and "status" in header[2]
+        ):
+            widths = [content_width * x for x in (0.16, 0.68, 0.16)]
+        else:
+            widths = [content_width * x for x in (0.28, 0.22, 0.50)]
     elif ncols == 2:
         widths = [content_width * x for x in (0.28, 0.72)]
     elif ncols == 5:

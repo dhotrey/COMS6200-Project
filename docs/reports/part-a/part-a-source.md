@@ -182,19 +182,19 @@ The schedule is constrained by the Part A deadline of 4 September 2026, 3:00 pm,
 
 Figure 3. Calendar-based implementation and evaluation plan, 18 August–16 October 2026.
 
-| **Dates**    | **Milestone / deliverable**                                                               |
-|--------------|-------------------------------------------------------------------------------------------|
-| 18-25 Aug    | Environment + main topology                                                                   |
-| 20 Aug-1 Sep | ONOS/OpenFlow 1.3 + deterministic forwarding                                                  |
-| 1-8 Sep      | Structured telemetry gateway (M4)                                                             |
-| 5-15 Sep     | Fault injection: link + ACL                                                                   |
-| 9-18 Sep     | First LLM tool-calling vertical slice                                                         |
-| 12-20 Sep    | Part A write-up                                                                               |
-| 16-27 Sep    | Remaining faults + scripted baseline                                                          |
-| 22 Sep-2 Oct | Pilot + freeze experiment protocol                                                            |
-| 27 Sep-6 Oct | Repeated experiments                                                                          |
-| 1-10 Oct     | Optional one-case repair demo                                                                 |
-| 6-16 Oct     | Analysis + final report/Demo prep; submit by 16 October 2026, 3:00 pm                         |
+| **Dates** | **Milestone / deliverable** | **Status** |
+|-----------|-----------------------------|------------|
+| 18–20 Aug | Environment bootstrap and initial Mininet capability validation | Completed |
+| 20–24 Aug | Enhanced `main6s8h` topology, ONOS 2.7.0 and OpenFlow 1.3 integration | Completed |
+| 20–27 Aug | Deterministic baseline forwarding and structured telemetry gateway | Completed |
+| 24–27 Aug | Fault Catalogue v1: F1–F5 automated injection, observation and clean reset | Completed |
+| 28 Aug–4 Sep | Part A refinement, team review, final validation and submission | In progress |
+| 5–11 Sep | M6: OpenAI + Cloudflare AI Gateway integration and first LLM tool-calling diagnosis | Planned |
+| 12–18 Sep | Deterministic scripted troubleshooting baseline and initial pilot | Planned |
+| 19–25 Sep | Pilot calibration and freeze final experimental protocol | Planned |
+| 26 Sep–7 Oct | Repeated paired LLM vs scripted-baseline experiments | Planned |
+| 8–12 Oct | Results analysis and optional one-case repair demonstration if core work is complete | Planned |
+| 13–16 Oct | Final report, demo preparation and submission | Planned |
 
 Table 4. Key milestones and deliverables.
 
