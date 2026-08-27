@@ -1,0 +1,203 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M4 Structured Telemetry Gateway — live runtime verification on the
+         Ubuntu 24.04.4 reference testbed with ONOS 2.7.0 + main6s8h + M3 baseline.
+
+Repository: develop @ 7cb510f
+  Implement bounded telemetry gateway and improve Docker privilege handling
+Local working-tree note: topologies/main_topology.py includes an uncommitted
+  locator for topologies/spec.py under ``mn --custom`` (no __file__). Required
+  for Mininet to import the shared topology specification.
+
+=====================================================================
+ENVIRONMENT
+=====================================================================
+OS: Ubuntu 24.04.4 LTS (Noble Numbat), kernel 6.8.0-137-generic, x86_64
+Python: 3.12.3
+Git: 2.43.0
+Mininet: 2.3.0
+Open vSwitch: 3.3.9
+iperf3: 3.16
+Docker: 29.1.3
+ONOS: 2.7.0 (image onosproject/onos:2.7.0), container Up
+OpenFlow: 1.3 (OF_13), fail-mode secure on s1-s6
+
+./setup/verify_environment.sh: Overall SUCCESS — PASS: 8, FAIL: 0, WARNING: 0
+
+=====================================================================
+DOCKER PRIVILEGE MODE
+=====================================================================
+docker info (WITHOUT sudo): SUCCESS (session is root; Docker daemon reachable)
+./setup/setup_onos.sh reported:
+  ==> Docker access: current user (no sudo)
+No sudo docker commands were executed during setup_onos.sh.
+Stop/start guidance printed as: docker stop/start onos (not sudo docker).
+
+=====================================================================
+ONOS BEFORE MININET RESTART
+=====================================================================
+REST credentials used from environment only (ONOS_USER / ONOS_PASSWORD).
+Values and Authorization headers are NOT recorded here.
+Reference lab pair for this deployment: onos / rocks (documented elsewhere).
+
+Ports listening on 127.0.0.1: 6653 (OF), 8181 (REST/GUI), 8101 (Karaf SSH)
+verify_onos.sh: REST HTTP 200 for topology/applications/devices/links/hosts/flows
+Active apps include openflow, openflow-base, lldpprovider, hostprovider, gui2, drivers
+org.onosproject.fwd state = INSTALLED (not ACTIVE)
+
+=====================================================================
+TOPOLOGY LAUNCH
+=====================================================================
+sudo mn -c
+tmux session coms6200-m4:
+  mn --custom topologies/main_topology.py --topo main6s8h \
+    --controller=remote,ip=127.0.0.1,port=6653 --switch=ovsk
+
+Mininet nodes: c0 h1-h8 s1-s6
+Physical links: 19 (10 inter-switch + 9 host-switch), all (OK OK)
+h6: h6-eth0:s5-eth4 and h6-eth1:s6-eth5
+Host namespaces present: mininet:h1 .. mininet:h8
+
+After reconnect: 6/6 devices available, OF_13
+
+=====================================================================
+M3 BASELINE BEFORE TELEMETRY
+=====================================================================
+python3 forwarding/baseline_forwarding.py install
+  All 56 baseline flows are ADDED
+  VERIFY PASS
+python3 forwarding/baseline_forwarding.py status:
+  actualAppFlowCount 56, states ADDED=56
+  perDeviceAppFlows: s1=12, s2=0, s3=11, s4=11, s5=11, s6=11
+  systemFlowCount 18, totalFlowCount 74
+  numericId 176, unicastPriority 41000, arpPriority 42000
+fail-mode secure on all bridges; controller tcp:127.0.0.1:6653
+No NORMAL / FLOOD / stp_enable in ovs-ofctl dumps
+org.onosproject.fwd = INSTALLED (not ACTIVE)
+Mininet pingall: *** Results: 0% dropped (56/56 received)
+
+=====================================================================
+UNIT / STATIC TESTS (ON THIS LINUX HOST)
+=====================================================================
+python3 tests/test_main_static.py          ALL PASS
+python3 tests/test_baseline_forwarding.py  ALL PASS
+python3 tests/test_telemetry.py            ALL PASS (20 checks)
+
+=====================================================================
+INDIVIDUAL TELEMETRY TOOLS (session EUID=0 / root)
+=====================================================================
+Privilege note: this operator session is already root. Commands were invoked
+WITHOUT an extra sudo prefix. mnexec / OVS access therefore succeeded without
+verify_telemetry.sh re-executing under sudo. Docker was not involved in
+telemetry tool execution.
+
+Namespace method: discover /proc/*/cmdline token mininet:<host>, re-validate,
+then mnexec -a <pid> -- <fixed argv>. No shell=True. No caller PIDs/commands.
+
+1) python3 -m telemetry.cli get-topology
+   ok=true
+   summary:
+     switches=6 observed_switches=6
+     physical_inter_switch_links=10
+     configured_inter_switch_links=10
+     configured_host_attachments=9
+     logical_hosts=8
+     total_physical_links=19
+     onos_host_discovery=not_used
+   h6 primary: s5:4 h6-eth0 10.0.0.6/24 source=configured
+   h6 secondary: s6:5 h6-eth1 ipv4=null source=configured
+   Host attachments come from topologies/spec.py, NOT ONOS /hosts.
+   ONOS /hosts host_count=0 remains expected and is not treated as an error.
+
+2) python3 -m telemetry.cli get-port-status --switch s3
+   ok=true; 6 ports (1-5 + local)
+   port 1 enabled s3-eth1 peer s1:2
+   port 3 enabled s3-eth3 peer h1 (primary)
+   port 5 enabled s3-eth5 peer s4:5
+   Fields reflect ONOS isEnabled / portName / type (no invented admin/oper pair)
+
+3) python3 -m telemetry.cli get-port-stats --switch s3
+   ok=true; rate_method=two_sample_byte_delta; sample_interval_sec=1.0
+   utilization_pct=null on all ports
+   utilization_note: no non-ground-truth link capacity is available
+   Example counters port 1: packets_rx=141 packets_tx=127 bytes_rx=14238 bytes_tx=13650
+
+4) python3 -m telemetry.cli get-flow-table --switch s3
+   ok=true; count=14 (11 baseline + 3 system)
+   Sorted priority descending; sample first priority=42000 app_id=org.coms6200.baseline state=ADDED
+   Also includes org.onosproject.core system flows
+   No fault labels / hidden evaluator metadata
+
+5) python3 -m telemetry.cli ping --src h1 --dst h5 --count 3
+   ok=true; sent=3 received=3 loss_pct=0.0
+   rtt_min_ms=0.081 rtt_avg_ms=0.244 rtt_max_ms=0.568
+   dst_ip=10.0.0.5 (configured primary)
+   Extra sudo: NOT required in this root session
+
+6) python3 -m telemetry.cli iperf --src h1 --dst h5 --duration 2
+   ok=true; duration_sec≈2.002; bytes_transferred=3634888704
+   mbit_per_sec≈14522.54; retransmissions=0
+   Extra sudo: NOT required in this root session
+   After test: pgrep iperf3 => none (no lingering processes)
+
+=====================================================================
+AGGREGATE LIVE VERIFICATION
+=====================================================================
+Command: ./scripts/verify_telemetry.sh
+  (no sudo prefix; already root; script did NOT re-exec under sudo)
+Result: M4 telemetry verification: ALL CHECKS PASSED
+
+Checks observed:
+  ONOS /devices reachable
+  bridges s1-s6 present
+  56 baseline ADDED before and after (unchanged)
+  get_topology counts + h6 primary/secondary
+  get_port_status / get_port_stats / get_flow_table s3
+  ping h1->h5 received>0
+  iperf h1->h5 throughput>0
+  no lingering iperf3
+  all-pairs ping 56/56 via gateway
+  baseline_forwarding.py verify PASS
+  org.onosproject.fwd not ACTIVE
+  no NORMAL/STP/FLOOD in OVS dumps
+
+=====================================================================
+FINAL REGRESSION AFTER TELEMETRY
+=====================================================================
+Lingering iperf3: none
+python3 forwarding/baseline_forwarding.py verify: PASS (56 ADDED)
+status: 56 ADDED, s1=12 s2=0 s3-s6=11, system=18, total=74
+Mininet pingall: 0% dropped (56/56 received)
+org.onosproject.fwd: INSTALLED (not ACTIVE)
+NORMAL/STP/FLOOD: none observed in dump-flows
+
+=====================================================================
+REPRESENTATIVE JSON (COMPACT; NO CREDENTIALS)
+=====================================================================
+get_topology summary:
+{"switches":6,"observed_switches":6,"physical_inter_switch_links":10,
+ "configured_host_attachments":9,"logical_hosts":8,"total_physical_links":19,
+ "onos_host_discovery":"not_used"}
+
+ping h1->h5:
+{"tool":"ping","ok":true,"data":{"sent":3,"received":3,"loss_pct":0.0,
+ "rtt_avg_ms":0.244,"src":"h1","dst":"h5","dst_ip":"10.0.0.5"}}
+
+iperf h1->h5:
+{"tool":"iperf","ok":true,"data":{"duration_sec":2.002343,
+ "bytes_transferred":3634888704,"mbit_per_sec":14522.541658447128,
+ "retransmissions":0,"src":"h1","dst":"h5"}}
+
+=====================================================================
+KNOWN LIMITATIONS
+=====================================================================
+- M4 verified on Ubuntu 24.04.4 reference server only in this evidence file.
+  UQ Kali remains a supported compatibility target, not milestone-verified here.
+- utilization_pct is intentionally null (no trustworthy non-ground-truth capacity).
+- Operator session was root; non-root operators may still need sudo for
+  mnexec/OVS (verify_telemetry.sh elevates only when ovs-vsctl is unusable).
+- get_topology does not use ONOS /hosts; host_count=0 is expected.
+- High localhost iperf rates are unconstrained Mininet/OVS measurements, not
+  a pass/fail threshold.
+
+M4 STATUS: COMPLETE (live Ubuntu evidence)

@@ -43,7 +43,27 @@ import sys
 
 from mininet.topo import Topo
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _topologies_dir() -> str:
+    """Directory containing spec.py.
+
+    ``mn --custom`` execs this file without defining ``__file__``, so the
+    locator also checks cwd and the custom-path argument.
+    """
+    candidates: list[str] = []
+    if "__file__" in globals():
+        candidates.append(os.path.dirname(os.path.abspath(__file__)))
+    candidates.append(os.path.join(os.getcwd(), "topologies"))
+    for arg in sys.argv:
+        if arg.endswith("main_topology.py") or arg.endswith("main_topology"):
+            candidates.append(os.path.dirname(os.path.abspath(arg)))
+    for path in candidates:
+        if os.path.isfile(os.path.join(path, "spec.py")):
+            return path
+    raise RuntimeError("cannot locate topologies/spec.py")
+
+
+_DIR = _topologies_dir()
 if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 

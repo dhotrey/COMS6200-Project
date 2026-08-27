@@ -25,8 +25,8 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M1 | Enhanced Main Mininet Topology | Completed |
 | M2 | ONOS + OpenFlow 1.3 Integration | Completed |
 | M3 | Deterministic Loop-Free Forwarding | Completed |
-| M4 | Structured Telemetry Gateway | **Current** (code in tree; live Ubuntu evidence pending) |
-| M5 | First Automated Fault + Reset | Planned |
+| M4 | Structured Telemetry Gateway | **Completed** |
+| M5 | First Automated Fault + Reset | **Next** |
 | M6 | First LLM Tool-Calling Diagnosis | Planned |
 
 The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
@@ -38,6 +38,7 @@ Completed so far:
 - ONOS 2.7.0 installed as a version-pinned Docker container
 - OpenFlow 1.3 controller integration against the enhanced topology
 - deterministic loop-free baseline forwarding (`pingall` 0% dropped, 56/56)
+- structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
 
 Not implemented:
 
@@ -46,13 +47,9 @@ Not implemented:
 - scripted troubleshooting baseline
 - repeated experiments
 
-M4 telemetry code lives in `telemetry/`. The milestone is complete only after
-`scripts/verify_telemetry.sh` is captured on the Ubuntu Mininet server. See
-`docs/user-guide.md`.
-
 ## 3. Architecture
 
-Implemented through M3, with the M4 gateway package present:
+Implemented through M4:
 
 ```
 Mininet / Open vSwitch
@@ -61,7 +58,7 @@ OpenFlow 1.3
         ↓
 ONOS 2.7.0
         ↓
-Telemetry / Tool Gateway   (live Ubuntu evidence still required for M4 ✅)
+Telemetry / Tool Gateway
 ```
 
 Still planned:
@@ -377,14 +374,9 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M4 — Structured Telemetry Gateway** (current)
+**M5 — First Automated Fault + Reset** (next)
 
-The `telemetry/` package implements the six bounded tools. M4 is **not**
-complete until live `scripts/verify_telemetry.sh` evidence exists on the Ubuntu
-testbed. Raw REST access used by the forwarding installer does **not** complete
-this milestone.
-
-M3 is complete: explicit `org.coms6200.baseline` flows forward the eight primary hosts through s1. Do not enable reactive forwarding, NORMAL, or STP.
+M4 is complete on the Ubuntu reference server (27 August 2026): six bounded tools, hybrid `get_topology()` (no `/hosts`), `mnexec` ping/iperf, `verify_telemetry.sh` ALL CHECKS PASSED. Evidence: `evidence/progress/telemetry/structured-telemetry-2026-08-27.txt`. Do not enable reactive forwarding, NORMAL, or STP.
 
 ## 15. Project Reports
 

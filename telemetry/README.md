@@ -96,3 +96,9 @@ export ONOS_USER=onos
 export ONOS_PASSWORD=rocks
 ./scripts/verify_telemetry.sh
 ```
+
+Ubuntu 24.04.4 host `Aus`, 27 August 2026: `verify_telemetry.sh` ALL CHECKS
+PASSED. Session was already root, so ping/iperf needed no extra sudo and the
+script did not re-exec. A non-root operator should still expect `mnexec`/OVS
+privilege. Kali was not tested in that run. Evidence:
+`evidence/progress/telemetry/structured-telemetry-2026-08-27.txt`.
