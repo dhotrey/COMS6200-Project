@@ -22,7 +22,10 @@ Mininet / OVS → OpenFlow 1.3 → ONOS 2.7.0
 - Python, Mininet, Open vSwitch, OpenFlow 1.3, Layer 2, `10.0.0.0/24`
 - Controller: ONOS 2.7.0 in the version-pinned Docker image `onosproject/onos:2.7.0`
 - One OpenAI tool-using agent and one deterministic scripted baseline (both planned)
-- Ubuntu 24.04.4 is the verified reference Linux environment
+- Ubuntu 24.04.4 is the **verified reference** Linux environment
+- The UQ-provided Kali VM is a **supported course compatibility target**, not a fully milestone-verified substitute
+
+Docker: prefer current-user `docker` when `docker info` works. `sudo docker` is a fallback only. Setup scripts must not add users to the docker group or change socket permissions. Mininet/`mnexec` typically still require root (`sudo mn ...`).
 
 The LLM must not receive: unrestricted shell; ONOS credentials; unrestricted ONOS REST; fault labels; injector configuration; hidden ground truth. The telemetry gateway is the only agent-facing interface.
 
@@ -66,12 +69,14 @@ Planned agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `
 
 ## Setup and paths
 
-- `setup/setup_ubuntu.sh` — base Mininet/OVS
-- `setup/setup_onos.sh` — ONOS 2.7.0
+- `setup/setup_ubuntu.sh` — base Mininet/OVS (historical name; apt/Debian-family, including UQ Kali)
+- `setup/setup_onos.sh` — ONOS 2.7.0 (capability-based Docker; sudo docker only as fallback)
 - `setup/verify_environment.sh` — base environment checks
 - `scripts/verify_onos.sh` — ONOS checks
 - `scripts/verify_main_openflow.sh` — running `main6s8h` OpenFlow checks
+- `scripts/verify_telemetry.sh` — live M4 tools (PARTIAL until Ubuntu/Kali evidence exists)
 - `forwarding/baseline_forwarding.py` — M3 ONOS baseline provisioner
+- `telemetry/` — bounded agent-facing diagnostic gateway (M4 code; live evidence pending)
 
 Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
 

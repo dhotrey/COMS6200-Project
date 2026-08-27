@@ -34,7 +34,11 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
 
-Do not treat a 🟡 or 🔬 item as working. Planned sections below describe intended workflow only. They do **not** provide fictional CLIs.
+Do not treat a 🟡 or 🔬 item as **runtime-verified complete**. Unimplemented
+sections must not invent CLIs. M4 documents the real `telemetry/` API/CLI, but
+it stays 🟡 until `scripts/verify_telemetry.sh` is captured on the Ubuntu
+testbed.
+
 
 **Two different “baseline” terms**
 
@@ -47,7 +51,7 @@ Do not treat a 🟡 or 🔬 item as working. Planned sections below describe int
 
 1. [Audience and purpose](#audience-and-purpose)
 2. [Architecture overview](#architecture-overview)
-3. [Reference environment](#reference-environment)
+3. [Reference environment](#reference-environment) (includes [supported environments](#supported-environments))
 4. [System requirements](#system-requirements)
 5. [Installation and environment setup](#installation-and-environment-setup)
 6. [ONOS controller](#onos-controller)
@@ -95,7 +99,8 @@ Research question: *How accurately and efficiently can a tool-using LLM agent di
 
 ## Architecture overview
 
-Implemented through M3:
+Implemented through M3 datapath plus the M4 telemetry package (live Ubuntu
+runtime evidence for M4 is still required before the milestone is marked ✅):
 
 ```
 Mininet hosts
@@ -103,13 +108,14 @@ Mininet hosts
 Open vSwitch
     ↓ OpenFlow 1.3
 ONOS 2.7.0
+    ↓ read-only REST (internal to the gateway only)
+    + configured Mininet host map (`topologies/spec.py`)
+Structured Telemetry / Tool Gateway
 ```
 
-Planned from M4 onward:
+Still planned:
 
 ```
-ONOS 2.7.0
-    ↓ read-only REST / controller state
 Structured Telemetry / Tool Gateway
     ↓
     ├── OpenAI LLM Agent                    🟡
@@ -167,11 +173,25 @@ The reference server used during ONOS testing had 1 vCPU and about 955 MiB RAM. 
 
 ---
 
+## Supported environments
+
+| Environment | Role | Status |
+| --- | --- | --- |
+| Ubuntu 24.04.4 | **Verified reference environment** | M0–M3 runtime-verified on the team Ubuntu server |
+| UQ-provided Kali VM | **Supported course compatibility target** | `setup/setup_ubuntu.sh` is apt/Debian-family and continues on Kali; individual milestones are **not** claimed fully verified on Kali until evidence exists |
+| Other apt-based Linux | Capability-based only | May work if `./setup/verify_environment.sh` passes; not officially verified |
+
+Do **not** treat Kali as the primary target instead of Ubuntu. Ubuntu remains the reference because it is what M0–M3 evidence was collected on. Kali is supported so the UQ VM is a valid course machine, not because every milestone has been re-run there.
+
+The historical filename `setup/setup_ubuntu.sh` installs Mininet/OVS via apt on both the Ubuntu reference and the Kali compatibility target. It is not Ubuntu-only.
+
+---
+
 ## System requirements
 
 Supported by current setup scripts:
 
-- Linux (Ubuntu 24.04.4 is the verified reference)
+- Linux (Ubuntu 24.04.4 is the verified reference; UQ Kali VM is a supported course compatibility target)
 - Python 3
 - Git
 - Mininet
@@ -255,7 +275,9 @@ If the container already exists:
 docker start onos
 ```
 
-Prefix `docker` with `sudo` if your account cannot talk to the Docker daemon. `setup_onos.sh` already uses `sudo` when not running as root.
+Try `docker info` **without** sudo first. If it succeeds, run all Docker commands as the current user. `setup/setup_onos.sh` does the same: it uses `docker` directly when `docker info` works, and falls back to `sudo docker` only when direct access fails. It does **not** add users to the `docker` group or change socket permissions.
+
+Mininet is separate: `sudo mn -c` and `sudo mn --custom ...` remain required on typical Linux hosts.
 
 Wait until OpenFlow is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server).
 
@@ -497,10 +519,12 @@ Cause: baseline ARP is forwarded in the data plane (priority 42000/41000), so `h
 
 Do **not** activate `org.onosproject.fwd` to populate `/hosts`.
 
-Planned `get_topology()` (M4) will combine:
+`get_topology()` combines:
 
 - ONOS: devices, inter-switch links, ports/status
-- Mininet topology specification: configured host attachments and host-to-switch mappings (including h6 primary and secondary)
+- Mininet topology specification (`topologies/spec.py`): configured host attachments and host-to-switch mappings (including h6 primary and secondary)
+
+It does **not** call ONOS `/hosts`. See [Structured telemetry gateway](#structured-telemetry-gateway).
 
 ---
 
@@ -597,24 +621,166 @@ Verified result (20 August 2026): `0% dropped (56/56 received)` on primary h1–
 
 ## Structured telemetry gateway
 
-🟡 **CURRENT / UNDER DEVELOPMENT — M4**
+🟡 **IMPLEMENTED IN TREE — live Ubuntu verification still required for M4 ✅**
 
-No agent-facing telemetry CLI or HTTP API exists yet. Do not treat ONOS REST as the completed gateway.
+The package `telemetry/` is the bounded agent-facing diagnostic interface. The
+OpenAI agent and the scripted troubleshooting baseline are **not** implemented;
+both are expected to call this same `TelemetryGateway` later.
 
-Planned role: normalise controller and testbed state into bounded tools used by **both** the LLM and the scripted troubleshooting baseline.
+It does **not** expose arbitrary shell, arbitrary subprocess arguments,
+unrestricted ONOS REST, ONOS credentials, fault labels, injector configuration,
+or evaluator ground truth.
 
-| Tool | Purpose | Expected input | Compact output (planned) | Status |
-| --- | --- | --- | --- | --- |
-| `get_topology()` | Combined ONOS device/link/port state + configured Mininet host map | none | switches, links, ports/status, configured host attachments | 🟡 |
-| `ping(src, dst)` | Reachability, loss, RTT | host names | sent/received, loss %, min/avg/max RTT | 🟡 |
-| `get_port_status(sw)` | Admin/operational port state | switch id | port, peer, up/down | 🟡 |
-| `get_port_stats(sw)` | Counters and derived rates | switch id | packet/byte deltas, drops/errors, utilisation | 🟡 |
-| `get_flow_table(sw)` | OpenFlow matches, priorities, actions, counters | switch id | normalised flow entries | 🟡 |
-| `iperf(src, dst)` | Short TCP throughput | host names | duration, transfer, Mbit/s | 🟡 |
+### Prerequisites
 
-**Planned interface (not runnable):** `get_topology()` will **not** depend on ONOS `/hosts`. See [ONOS host discovery](#onos-host-discovery).
+- ONOS 2.7.0 reachable at `127.0.0.1:8181`
+- `main6s8h` running
+- M3 baseline installed (`python3 forwarding/baseline_forwarding.py verify`)
+- `ONOS_USER` / `ONOS_PASSWORD` in the environment (reference lab: `onos` / `rocks`)
+- `ping` / `iperf` typically need root so `mnexec` can enter Mininet host namespaces
+- ONOS-only tools (`get-topology`, `get-port-status`, `get-port-stats`, `get-flow-table`) do **not** need root
 
-When M4 lands, replace this section with the real commands/schema and verified sample output.
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD=rocks
+cd /path/to/COMS6200-Project
+
+# No sudo: controller-state tools
+python3 -m telemetry.cli get-topology
+
+# Typically needs sudo: host-namespace ping/iperf
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH python3 -m telemetry.cli ping --src h1 --dst h5
+```
+
+Do not use plain `sudo python3 ...` if that drops `ONOS_*`. Passwords must not
+appear in telemetry JSON. CLI writes JSON to stdout; diagnostics may go to
+stderr. Docker access is unrelated: do not prefix these commands with
+`sudo docker`.
+
+### Python API
+
+```python
+from telemetry import TelemetryGateway
+
+gw = TelemetryGateway()
+gw.get_topology()
+gw.get_port_status("s3")
+gw.get_port_stats("s3")
+gw.get_flow_table("s3")
+gw.ping("h1", "h5")                 # count 1–10, default 3
+gw.iperf("h1", "h5")                # duration 1–5 s, default 2
+```
+
+### CLI
+
+| Command | Tool |
+| --- | --- |
+| `python3 -m telemetry.cli get-topology` | `get_topology()` |
+| `python3 -m telemetry.cli get-port-status --switch s3` | `get_port_status(s3)` |
+| `python3 -m telemetry.cli get-port-stats --switch s3` | `get_port_stats(s3)` |
+| `python3 -m telemetry.cli get-flow-table --switch s3` | `get_flow_table(s3)` |
+| `python3 -m telemetry.cli ping --src h1 --dst h5` | `ping(h1, h5)` |
+| `python3 -m telemetry.cli ping --src h1 --dst h5 --count 3` | bounded extra count |
+| `python3 -m telemetry.cli iperf --src h1 --dst h5` | `iperf(h1, h5)` |
+| `python3 -m telemetry.cli iperf --src h1 --dst h5 --duration 2` | bounded extra duration |
+| `python3 -m telemetry.cli schemas` | provider-neutral input schemas |
+
+Allow-lists: hosts `h1`–`h8`; switches `s1`–`s6`. IPs, REST paths, PIDs, and
+command strings are rejected.
+
+### JSON envelope
+
+Success:
+
+```json
+{"tool": "get_topology", "ok": true, "timestamp": "2026-08-27T00:00:00Z", "data": {}, "error": null}
+```
+
+Failure (tool/runtime problem, not “host unreachable”):
+
+```json
+{"tool": "ping", "ok": false, "timestamp": "2026-08-27T00:00:00Z", "data": null,
+ "error": {"code": "INVALID_HOST", "message": "host must be one of [...]", "details": {}}}
+```
+
+A completed ping with `received=0` / `loss_pct=100` is `ok: true` (the diagnostic
+ran). `ok: false` is reserved for invalid input, missing namespace, ONOS down,
+timeout, or parse failure.
+
+### Tools
+
+| Tool | Sources | Compact `data` | Status |
+| --- | --- | --- | --- |
+| `get_topology()` | ONOS devices/links; configured host map | switches, physical inter-switch links, 9 host attachments, summary | 🟡 pending live evidence |
+| `ping(src, dst)` | `mnexec` + `ping` in src namespace | sent/received, loss %, RTT min/avg/max | 🟡 pending live evidence |
+| `get_port_status(sw)` | ONOS `/devices/{id}/ports` | port, name, `isEnabled`, type, speed, configured peer | 🟡 pending live evidence |
+| `get_port_stats(sw)` | two `/statistics/ports` samples (~1 s); optional delta | packets/bytes, drops/errors, bit rates; `utilization_pct` is always `null` | 🟡 pending live evidence |
+| `get_flow_table(sw)` | ONOS `/flows` | id, table, state, priority, app_id, selector, treatment, packets/bytes, life | 🟡 pending live evidence |
+| `iperf(src, dst)` | one-shot `iperf3 -s -1` in dst, client in src | duration, bytes, Mbit/s, retransmits | 🟡 pending live evidence |
+
+`get_topology()` does **not** use ONOS `/hosts`. Healthy summary targets:
+
+- 6 switches
+- 10 physical inter-switch links
+- 9 configured host attachments
+- 8 logical hosts
+- 19 total physical links
+
+h6 appears twice: primary `h6-eth0`→s5 with `10.0.0.6/24`; secondary
+`h6-eth1`→s6 with MAC `00:00:00:00:06:02` and no IPv4.
+
+Port rates use a two-sample byte delta. `utilization_pct` is `null` because
+there is no trustworthy non-ground-truth link capacity (OVS advertised speed
+and TC/injector limits are not used).
+
+Ping destination is the configured primary IPv4 (never a caller-supplied IP).
+iperf uses iperf3 JSON (`-J`), TCP only, duration 1–5 s. The gateway does not
+install a pass/fail throughput threshold. After the test it terminates the
+server process group and best-effort `pkill -x iperf3` in the destination
+namespace.
+
+### Host-namespace mechanism
+
+Mininet host shells are discovered by the `/proc/<pid>/cmdline` token
+`mininet:<host>`. The PID is re-checked immediately before use. The gateway then
+runs `mnexec -a <pid> --` plus a **fixed** argv (`ping` or `iperf3` only).
+Callers cannot supply a PID, executable, or flag list. Stale PIDs and a missing
+topology return `HOST_NAMESPACE_NOT_FOUND` or `TOPOLOGY_NOT_RUNNING`.
+
+### Live verification
+
+On the Ubuntu Mininet server (or the UQ Kali VM as a compatibility check), with
+ONOS + `main6s8h` + baseline already up:
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD=rocks
+./scripts/verify_telemetry.sh
+```
+
+The script uses sudo only if `ovs-vsctl` is not usable as the current user
+(typical: Mininet/OVS need root). ONOS REST does not. If it re-executes:
+
+```bash
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH ./scripts/verify_telemetry.sh
+```
+
+The script must observe healthy topology counts, ping h1→h5 with received > 0,
+iperf throughput > 0, no leftover iperf3, 56 ADDED baseline flows unchanged,
+all-pairs ping 56/56, `org.onosproject.fwd` not ACTIVE, and no OVS
+NORMAL/FLOOD/`stp_enable`. Until that evidence file exists under
+`evidence/progress/telemetry/`, do not treat M4 as complete. Kali results are
+compatibility evidence, not a replacement for Ubuntu reference evidence, unless
+explicitly recorded as such.
+
+
+Static checks (no ONOS required):
+
+```bash
+python3 tests/test_telemetry.py
+```
+
+Developer notes: `telemetry/README.md`.
 
 ---
 
@@ -715,7 +881,7 @@ Intended order (planned):
 5. Classify and localise the fault
 6. Return the same diagnosis format as the LLM
 
-Both methods will call the same telemetry/tool gateway.
+Both methods will call the same existing `TelemetryGateway` (M6 / scripted baseline still 🟡).
 
 ---
 
@@ -773,7 +939,7 @@ When M5 implements reset tooling, replace this planned list with exact commands.
 
 **Symptoms:** no listener on 6653/8181; Mininet switches fail to connect.
 
-**Checks:** `./scripts/verify_onos.sh`, `docker ps --filter name=onos`.
+**Checks:** `./scripts/verify_onos.sh`, `docker ps --filter name=onos` (no sudo if `docker info` works).
 
 **Action:** `./setup/setup_onos.sh` or `docker start onos`. Wait for the OpenFlow listener.
 
@@ -816,6 +982,30 @@ sudo mn -c
 ```
 
 Then relaunch `main6s8h` and `python3 forwarding/baseline_forwarding.py install`.
+
+### Telemetry `ONOS_UNAVAILABLE` / `ONOS_AUTH_FAILED`
+
+**Symptoms:** `python3 -m telemetry.cli get-topology` returns `ok: false` with those codes.
+
+**Checks:** ONOS listening on `127.0.0.1:8181`; `ONOS_USER`/`ONOS_PASSWORD` set in this shell. `get-topology` does not need sudo. HTTP 401 means incorrect REST credentials, not a topology fault. If a later command uses sudo, pass `--preserve-env=ONOS_USER,ONOS_PASSWORD,PATH`.
+
+### Telemetry `TOPOLOGY_NOT_RUNNING` / `HOST_NAMESPACE_NOT_FOUND`
+
+**Symptoms:** `ping` / `iperf` fail; `get_topology` may still work if ONOS is up.
+
+**Checks:** `main6s8h` Mininet session still running; `pgrep -af 'mininet:h1'`; `which mnexec`; run the CLI as root. Do not pass a PID on the command line — the gateway discovers `mininet:<host>` itself.
+
+### Telemetry `INVALID_HOST` / `INVALID_SWITCH`
+
+Only `h1`–`h8` and `s1`–`s6` are accepted. IPs such as `127.0.0.1` and extra flags such as `--cmd` are rejected.
+
+### Telemetry `IPERF_SERVER_FAILED` / leftover iperf3
+
+Confirm iperf3 is installed on the Ubuntu host (`iperf3 -v`). Re-run; the gateway uses one-shot `iperf3 -s -1` and then `pkill -x iperf3` in the destination namespace. If a process remains, `sudo pkill -x iperf3` and investigate, then re-verify baseline flows were not changed.
+
+### Telemetry `COMMAND_TIMEOUT` / `PARSE_ERROR`
+
+Bounded ping/iperf hit the hard timeout, or output was not parseable. This is a tool failure (`ok: false`), not a connectivity diagnosis. Check the host namespace is healthy with a Mininet CLI ping before retrying.
 
 ### Docker / container resource issue
 
@@ -867,7 +1057,11 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 4. `sudo ./scripts/verify_main_openflow.sh` and `./scripts/verify_onos.sh`
 5. `python3 forwarding/baseline_forwarding.py install` then `verify`
 6. Mininet `pingall` → 56/56, 0% dropped
-7. Inspect flows with `status` / `verify` / `verify_main_openflow.sh`
+7. Collect structured telemetry (CLI exists; M4 ✅ only after live `verify_telemetry.sh` evidence):
+
+   `python3 -m telemetry.cli get-topology`  (no sudo; ONOS REST)
+
+   `./scripts/verify_telemetry.sh`  (sudo only if OVS/mnexec are not usable as this user)
 8. `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
 
 ### B. Full planned experiment workflow 🟡
@@ -881,7 +1075,7 @@ Unfinished steps are marked.
 5. Verify healthy baseline ✅
 6. Inject one fault 🟡
 7. Present **only a symptom** to the diagnostic method 🟡
-8. Collect structured telemetry 🟡
+8. Collect structured telemetry — CLI exists; live Ubuntu evidence still required 🟡
 9. Obtain LLM or scripted diagnosis 🟡
 10. Log result 🟡
 11. Compare diagnosis to hidden ground truth 🟡
@@ -896,17 +1090,18 @@ Unfinished steps are marked.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh` |
-| `topologies/` | `main_topology.py` plus progress-only Mininet tests |
+| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh` |
+| `topologies/` | `main_topology.py`, canonical `spec.py`, plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
+| `telemetry/` | Bounded structured diagnostic gateway (M4; live evidence pending) |
 | `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
-| `tests/` | Static topology and forwarding tests |
+| `tests/` | Static topology, forwarding, and telemetry tests |
 | `evidence/progress/` | Runtime evidence (ONOS, forwarding, TCLink) |
 | `docs/` | This manual, ONOS setup, decisions, Part A report |
 | `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
 | `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
 
-**Planned, not present:** `telemetry/`, `faults/`, `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
+**Planned, not present:** `faults/`, `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
 
 Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
 

@@ -96,7 +96,11 @@ case "${os_id}" in
     fi
     ;;
   debian|kali)
-    info "Debian-family distribution detected (${os_pretty}). Compatibility is determined by capability checks, not distribution name."
+    if [[ "${os_id}" == "kali" ]]; then
+      info "UQ Kali VM is a supported course compatibility target. Milestone evidence is still Ubuntu-based unless separately recorded."
+    else
+      info "Debian-family distribution detected (${os_pretty}). Compatibility is determined by capability checks, not distribution name."
+    fi
     ;;
   unknown)
     if [[ "$kernel" == "Linux" ]]; then
@@ -226,6 +230,7 @@ echo
 echo "Interpretation:"
 echo "- This is a capability-based M0 Mininet/OVS check, not a distribution-name check."
 echo "- Ubuntu ${REFERENCE_OS_VERSION}.4 LTS is the verified reference environment."
+echo "- The UQ-provided Kali VM is a supported course compatibility target."
 echo "- Other Linux distributions may PASS if required capabilities work."
 echo "- This is not evidence that Ryu, OS-Ken, or OpenFlow 1.3 controller integration works."
 echo "- Ryu, OS-Ken, telemetry, faults, the LLM agent, and the baseline"

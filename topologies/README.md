@@ -5,7 +5,10 @@
 This is the actual COMS6200 physical topology. It is not a progress-capability
 test.
 
-File: `main_topology.py`
+Configured identities live in `spec.py` and are imported by
+`main_topology.py` (Mininet construction) and the telemetry gateway.
+Do not add a second independently maintained host/port map.
+
 
 Registered Mininet topo name: `main6s8h`
 
@@ -107,7 +110,8 @@ The controller is **ONOS 2.7.0**, running in a Docker container. See
 Ryu plan. The enhanced 19-link topology was runtime-verified against ONOS on
 20 August 2026.
 
-Run these commands from the repository root on the Ubuntu Mininet server.
+Run these commands from the repository root on the Linux Mininet host
+(Ubuntu 24.04 verified reference, or the UQ Kali VM as a compatibility target).
 
 **STEP 1 — Ensure ONOS is running**
 
@@ -155,7 +159,7 @@ From another shell while Mininet is running:
 
 ```bash
 sudo ./scripts/verify_main_openflow.sh
-sudo ./scripts/verify_onos.sh
+./scripts/verify_onos.sh
 ```
 
 Both scripts are read-only. `verify_main_openflow.sh` prints bridge protocols,
@@ -166,7 +170,7 @@ fail-mode, controller attachment and OpenFlow 1.3 flow tables.
 
 ```bash
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 python3 forwarding/baseline_forwarding.py install
 ```
 

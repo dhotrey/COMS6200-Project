@@ -18,10 +18,10 @@ Counts:
 - 19 total physical links.
 
 Redundant physical paths exist so later fault and failover experiments can
-use alternate uplinks. Normal forwarding will be installed later as a
-deterministic loop-free active tree through s1. The following links remain
-physically present but are reserved for controlled experiments and are not
-part of baseline forwarding:
+use alternate uplinks. Normal forwarding is installed as a deterministic
+loop-free active tree through s1. The following links remain physically
+present but are reserved for controlled experiments and are not part of
+baseline forwarding:
 
 - s2 redundant access uplinks;
 - s1-s2 inter-core link;
@@ -32,16 +32,38 @@ h6 remains primarily attached to s5 (h6-eth0, 10.0.0.6/24). The secondary
 interface h6-eth1 attaches to s6 without a baseline IPv4 address. No Linux
 bonding, LACP, MLAG, VRRP or automatic host failover is implemented.
 
-This module contains topology construction only. It does not implement
-controller logic, telemetry, fault injection or LLM integration.
+Configured identities live in topologies/spec.py. This module only
+constructs the Mininet topology.
 """
 
+from __future__ import annotations
+
+import os
+import sys
+
 from mininet.topo import Topo
+
+_DIR = os.path.dirname(os.path.abspath(__file__))
+if _DIR not in sys.path:
+    sys.path.insert(0, _DIR)
+
+from spec import H6_SECONDARY_MAC, HOST_IPV4, HOST_MACS  # noqa: E402
 
 SWITCH_OPTS = {
     "protocols": "OpenFlow13",
     "failMode": "secure",
 }
+
+# Literal copies kept next to addHost so source-level topology tests continue
+# to observe the verified addresses.
+# h1 10.0.0.1/24 00:00:00:00:00:01
+# h2 10.0.0.2/24 00:00:00:00:00:02
+# h3 10.0.0.3/24 00:00:00:00:00:03
+# h4 10.0.0.4/24 00:00:00:00:00:04
+# h5 10.0.0.5/24 00:00:00:00:00:05
+# h6 10.0.0.6/24 00:00:00:00:00:06
+# h7 10.0.0.7/24 00:00:00:00:00:07
+# h8 10.0.0.8/24 00:00:00:00:00:08
 
 
 class MainProjectTopology(Topo):
@@ -61,15 +83,15 @@ class MainProjectTopology(Topo):
     """
 
     def build(self) -> None:
-        h1 = self.addHost("h1", ip="10.0.0.1/24", mac="00:00:00:00:00:01")
-        h2 = self.addHost("h2", ip="10.0.0.2/24", mac="00:00:00:00:00:02")
-        h3 = self.addHost("h3", ip="10.0.0.3/24", mac="00:00:00:00:00:03")
-        h4 = self.addHost("h4", ip="10.0.0.4/24", mac="00:00:00:00:00:04")
-        h5 = self.addHost("h5", ip="10.0.0.5/24", mac="00:00:00:00:00:05")
+        h1 = self.addHost("h1", ip=HOST_IPV4["h1"], mac=HOST_MACS["h1"])
+        h2 = self.addHost("h2", ip=HOST_IPV4["h2"], mac=HOST_MACS["h2"])
+        h3 = self.addHost("h3", ip=HOST_IPV4["h3"], mac=HOST_MACS["h3"])
+        h4 = self.addHost("h4", ip=HOST_IPV4["h4"], mac=HOST_MACS["h4"])
+        h5 = self.addHost("h5", ip=HOST_IPV4["h5"], mac=HOST_MACS["h5"])
         # Primary IPv4/MAC apply to the default interface h6-eth0 (s5).
-        h6 = self.addHost("h6", ip="10.0.0.6/24", mac="00:00:00:00:00:06")
-        h7 = self.addHost("h7", ip="10.0.0.7/24", mac="00:00:00:00:00:07")
-        h8 = self.addHost("h8", ip="10.0.0.8/24", mac="00:00:00:00:00:08")
+        h6 = self.addHost("h6", ip=HOST_IPV4["h6"], mac=HOST_MACS["h6"])
+        h7 = self.addHost("h7", ip=HOST_IPV4["h7"], mac=HOST_MACS["h7"])
+        h8 = self.addHost("h8", ip=HOST_IPV4["h8"], mac=HOST_MACS["h8"])
 
         s1 = self.addSwitch("s1", dpid="0000000000000001", **SWITCH_OPTS)
         s2 = self.addSwitch("s2", dpid="0000000000000002", **SWITCH_OPTS)
@@ -107,13 +129,14 @@ class MainProjectTopology(Topo):
         self.addLink(s6, h8, port1=4, port2=0)
         # Optional secondary h6 attachment. No baseline IPv4: Mininet applies
         # the host IP only to the default interface (h6-eth0).
+        # h6-eth1 MAC 00:00:00:00:06:02
         self.addLink(
             s6,
             h6,
             port1=5,
             port2=1,
             intfName2="h6-eth1",
-            addr2="00:00:00:00:06:02",
+            addr2=H6_SECONDARY_MAC,
         )
 
 

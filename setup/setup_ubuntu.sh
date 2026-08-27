@@ -3,9 +3,10 @@ set -euo pipefail
 
 # COMS6200 M0 environment setup.
 #
-# Ubuntu 24.04 is the primary tested / verified reference target.
-# apt-based Debian-family distributions (for example Debian or Kali) may
-# also be able to use this script, but package names and availability can
+# Historical filename. This script is not Ubuntu-only.
+# Ubuntu 24.04 is the verified reference environment.
+# The UQ-provided Kali VM is a supported course compatibility target.
+# Other apt-based Debian-family distributions may work; package names can
 # differ. This is not universal Linux installation support.
 #
 # Always run ./setup/verify_environment.sh after this script. Capability
@@ -17,6 +18,7 @@ cd "$ROOT"
 echo "==> COMS6200 environment setup"
 echo "==> Repository root: ${ROOT}"
 echo "==> Verified reference: Ubuntu 24.04.4 LTS"
+echo "==> Course compatibility target: UQ-provided Kali VM"
 echo "==> Automatic installation currently supports apt-based systems only"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -53,6 +55,10 @@ if [[ "${ID:-}" == "ubuntu" ]]; then
   echo "==> Ubuntu detected; this matches the project's installation reference family"
 elif [[ "${ID:-}" == "debian" || "${ID:-}" == "kali" ]]; then
   echo "==> Debian-family distribution detected (${PRETTY_NAME:-${ID}})."
+  if [[ "${ID:-}" == "kali" ]]; then
+    echo "==> UQ Kali VM: supported course compatibility target, not a fully"
+    echo "==> milestone-verified substitute for Ubuntu 24.04."
+  fi
   echo "==> The script will continue, but package availability can differ from Ubuntu 24.04."
 elif [[ -n "${ID:-}" ]]; then
   echo "==> WARNING: detected distribution is ${PRETTY_NAME:-${ID}}, not the Ubuntu 24.04 reference."

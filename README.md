@@ -25,7 +25,7 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M1 | Enhanced Main Mininet Topology | Completed |
 | M2 | ONOS + OpenFlow 1.3 Integration | Completed |
 | M3 | Deterministic Loop-Free Forwarding | Completed |
-| M4 | Structured Telemetry Gateway | **Next** |
+| M4 | Structured Telemetry Gateway | **Current** (code in tree; live Ubuntu evidence pending) |
 | M5 | First Automated Fault + Reset | Planned |
 | M6 | First LLM Tool-Calling Diagnosis | Planned |
 
@@ -41,15 +41,18 @@ Completed so far:
 
 Not implemented:
 
-- telemetry / tool gateway
 - automated fault injection
 - OpenAI LLM agent
 - scripted troubleshooting baseline
 - repeated experiments
 
+M4 telemetry code lives in `telemetry/`. The milestone is complete only after
+`scripts/verify_telemetry.sh` is captured on the Ubuntu Mininet server. See
+`docs/user-guide.md`.
+
 ## 3. Architecture
 
-Implemented through M3:
+Implemented through M3, with the M4 gateway package present:
 
 ```
 Mininet / Open vSwitch
@@ -57,15 +60,13 @@ Mininet / Open vSwitch
 OpenFlow 1.3
         ↓
 ONOS 2.7.0
+        ↓
+Telemetry / Tool Gateway   (live Ubuntu evidence still required for M4 ✅)
 ```
 
-Planned from M4 onward:
+Still planned:
 
 ```
-ONOS 2.7.0
-        ↓
-read-only REST / controller state
-        ↓
 Telemetry / Tool Gateway
        ↙              ↘
 OpenAI LLM        deterministic baseline
@@ -77,7 +78,7 @@ OpenAI LLM        deterministic baseline
  optional constrained repair
 ```
 
-The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway will expose a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
+The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway exposes a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
@@ -166,9 +167,13 @@ That ovsbr `pingall` result is a **simple two-host bridge test**. It is not evid
 
 ### Compatibility policy
 
-The project is intended to run on Linux. Ubuntu 24.04.4 LTS is the team's currently verified reference environment.
+The project is intended to run on Linux.
 
-Other Linux distributions such as Debian or Kali may also be used if they satisfy the project's environment verification checks. Passing `./setup/verify_environment.sh` means the environment has passed the current M0 Mininet / Open vSwitch **capability** checks. It does **not** mean ONOS is installed, and it does **not** mean every Linux distribution is officially supported.
+- **Verified reference environment:** Ubuntu 24.04.4 LTS (M0–M3 evidence).
+- **Supported course compatibility target:** the UQ-provided Kali VM. The apt-based `setup/setup_ubuntu.sh` continues on Kali; do not treat Kali as fully milestone-verified until evidence is recorded.
+
+Passing `./setup/verify_environment.sh` means the environment has passed the current M0 Mininet / Open vSwitch **capability** checks. It does **not** mean ONOS is installed, and it does **not** mean every Linux distribution is officially supported.
+
 
 ## 7. Quick Start
 
@@ -204,12 +209,15 @@ While Mininet is running, from another shell:
 
 ```bash
 export ONOS_USER=onos
-export ONOS_PASSWORD='<your ONOS REST password>'
+export ONOS_PASSWORD=rocks
 python3 forwarding/baseline_forwarding.py install
 python3 forwarding/baseline_forwarding.py verify
 sudo ./scripts/verify_main_openflow.sh
 ./scripts/verify_onos.sh
+./scripts/verify_telemetry.sh
 ```
+
+`setup_onos.sh` uses `docker` without sudo when `docker info` works. Mininet still typically needs `sudo mn`. `verify_telemetry.sh` re-executes with sudo only if OVS is not usable as the current user.
 
 Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`. Full procedure: `docs/setup/onos-setup.md`, `topologies/README.md` and `forwarding/README.md`.
 
@@ -224,6 +232,7 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `setup/verify_environment.sh` | Base Mininet / OVS capability verification |
 | `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
 | `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
+| `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
@@ -260,7 +269,7 @@ Mininet, Open vSwitch, and ONOS experiments must be executed in a Linux environm
 
 - Ubuntu server (verified reference: Ubuntu 24.04.4 LTS)
 - Ubuntu VM
-- Debian or Kali, if `./setup/verify_environment.sh` passes
+- UQ-provided Kali VM (supported course compatibility target)
 - another Linux workstation/server that passes the same capability checks
 
 Do not redesign the project to run Mininet natively on macOS. Do not treat every Linux distribution as officially supported.
@@ -326,22 +335,27 @@ COMS6200-Project/
 │
 ├── scripts/
 │   ├── verify_onos.sh
-│   └── verify_main_openflow.sh
+│   ├── verify_main_openflow.sh
+│   └── verify_telemetry.sh
 │
 ├── topologies/
 │   ├── main_topology.py
+│   ├── spec.py                     # shared host/switch/port identities
 │   ├── progress_custom_topology.py
 │   └── progress_tc_topology.py
 │
 ├── forwarding/
 │   └── baseline_forwarding.py      # ONOS REST baseline provisioner
 │
+├── telemetry/                      # M4 bounded diagnostic gateway
+│
 ├── controllers/
 │   └── main_controller.py          # superseded design reference; not used
 │
 ├── tests/
 │   ├── test_main_static.py
-│   └── test_baseline_forwarding.py
+│   ├── test_baseline_forwarding.py
+│   └── test_telemetry.py
 │
 ├── evidence/
 │   └── progress/
@@ -353,7 +367,6 @@ COMS6200-Project/
 │       └── part-a/
 │
 └── (planned)
-    ├── telemetry/
     ├── faults/
     ├── agent/
     ├── baseline/
@@ -364,9 +377,12 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M4 — Structured Telemetry Gateway**
+**M4 — Structured Telemetry Gateway** (current)
 
-Normalise ONOS REST device/link/flow/port state into the bounded agent-facing tools (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Raw REST access used by the forwarding installer does **not** complete this milestone.
+The `telemetry/` package implements the six bounded tools. M4 is **not**
+complete until live `scripts/verify_telemetry.sh` evidence exists on the Ubuntu
+testbed. Raw REST access used by the forwarding installer does **not** complete
+this milestone.
 
 M3 is complete: explicit `org.coms6200.baseline` flows forward the eight primary hosts through s1. Do not enable reactive forwarding, NORMAL, or STP.
 

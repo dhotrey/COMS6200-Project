@@ -8,12 +8,14 @@
 # this repository:
 #
 #   export ONOS_USER=onos
-#   export ONOS_PASSWORD='<your ONOS REST password>'
+#   export ONOS_PASSWORD=rocks
 #   ./scripts/verify_onos.sh
 #
 # See docs/setup/onos-setup.md.
 
 set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 ONOS_CONTAINER="${ONOS_CONTAINER:-onos}"
 ONOS_HOST="${ONOS_HOST:-127.0.0.1}"
@@ -22,28 +24,32 @@ ONOS_OF_PORT="${ONOS_OF_PORT:-6653}"
 ONOS_CLI_PORT="${ONOS_CLI_PORT:-8101}"
 ONOS_API="http://${ONOS_HOST}:${ONOS_REST_PORT}/onos/v1"
 
+# ss process names often need privilege; Docker uses a separate capability check.
 if [[ "${EUID}" -eq 0 ]]; then
-  SUDO=""
+  SS_SUDO=""
 else
-  SUDO="sudo"
+  SS_SUDO="sudo"
 fi
 
+# shellcheck source=../setup/docker_access.sh
+. "${ROOT}/setup/docker_access.sh"
+
 echo "===== ONOS container ====="
-if command -v docker >/dev/null 2>&1; then
-  ${SUDO} docker ps -a --filter "name=${ONOS_CONTAINER}" \
+if detect_docker optional; then
+  "${DOCKER[@]}" ps -a --filter "name=${ONOS_CONTAINER}" \
     --format '{{.ID}}  {{.Image}}  {{.Status}}  {{.Ports}}' ||
     echo "ERROR: could not query docker"
-  ${SUDO} docker inspect "${ONOS_CONTAINER}" \
+  "${DOCKER[@]}" inspect "${ONOS_CONTAINER}" \
     --format 'Memory={{.HostConfig.Memory}} RestartPolicy={{.HostConfig.RestartPolicy.Name}}' 2>/dev/null ||
     echo "NOTE: container '${ONOS_CONTAINER}' not found"
 else
-  echo "NOTE: docker not installed; if ONOS runs natively, check its service instead"
+  echo "NOTE: docker not usable; if ONOS runs natively, check its service instead"
 fi
 echo
 
 echo "===== Listening ports ====="
 if command -v ss >/dev/null 2>&1; then
-  ${SUDO} ss -lntp |
+  ${SS_SUDO} ss -lntp |
     grep -E ":${ONOS_OF_PORT}|:${ONOS_REST_PORT}|:${ONOS_CLI_PORT}" ||
     echo "NOTE: none of ${ONOS_OF_PORT}/${ONOS_REST_PORT}/${ONOS_CLI_PORT} are listening"
 else
@@ -52,8 +58,8 @@ fi
 echo
 
 echo "===== OpenFlow listener in ONOS log ====="
-if command -v docker >/dev/null 2>&1; then
-  ${SUDO} docker logs "${ONOS_CONTAINER}" 2>&1 |
+if [[ "${#DOCKER[@]}" -gt 0 ]]; then
+  "${DOCKER[@]}" logs "${ONOS_CONTAINER}" 2>&1 |
     grep "Listening for OF switch connections" | tail -5 ||
     echo "NOTE: no OpenFlow listener log line found"
 fi
@@ -66,7 +72,7 @@ ONOS_PASSWORD is not set, so no REST queries were attempted.
 Set credentials in your shell (do not commit them):
 
   export ONOS_USER=onos
-  export ONOS_PASSWORD='<your ONOS REST password>'
+  export ONOS_PASSWORD=rocks
 EOF
   exit 0
 fi

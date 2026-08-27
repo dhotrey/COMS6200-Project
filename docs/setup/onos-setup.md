@@ -49,7 +49,12 @@ docker run -d \
 ```
 
 The repository provides `setup/setup_onos.sh`, which performs the same steps
-idempotently.
+idempotently. The script tries `docker info` without sudo first. If that
+succeeds, every Docker action uses `docker` as the current user. `sudo docker`
+is a fallback only when direct daemon access fails. The script does not add
+users to the `docker` group or change socket permissions.
+
+Mininet is separate and typically still needs root (`sudo mn ...`).
 
 All published ports are bound to `127.0.0.1` only. ONOS is not reachable from
 the public internet, and no firewall rules were changed.

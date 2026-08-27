@@ -47,46 +47,41 @@ if [[ -r /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
   info "Detected OS: ${PRETTY_NAME:-unknown}"
-  if [[ "${ID:-}" != "ubuntu" ]]; then
-    echo "    Note: Ubuntu 24.04 is the verified reference. Continuing anyway."
-  fi
+  case "${ID:-}" in
+    ubuntu)
+      echo "    Ubuntu is the verified reference environment."
+      ;;
+    kali)
+      echo "    UQ Kali VM is a supported course compatibility target."
+      echo "    It is not a substitute for Ubuntu 24.04 milestone evidence."
+      ;;
+    *)
+      echo "    Note: Ubuntu 24.04 is the verified reference. Continuing anyway."
+      ;;
+  esac
 fi
 
-if [[ "${EUID}" -eq 0 ]]; then
-  SUDO=""
-  info "Running as root; not using sudo"
-else
-  command -v sudo >/dev/null 2>&1 || fail "sudo is required for non-root users."
-  SUDO="sudo"
-  info "Running as $(whoami); privileged commands will use sudo"
-fi
+# Docker access is capability-based. Mininet is not started here and still
+# typically requires root (sudo mn ...). This script does not add the user to
+# the docker group or change socket permissions.
+# shellcheck source=docker_access.sh
+. "${ROOT}/setup/docker_access.sh"
+detect_docker required || exit 1
 
-if ! command -v docker >/dev/null 2>&1; then
-  fail "docker is not installed.
-This script does not install a container runtime automatically.
-Install Docker on the server first, then re-run this script.
-Alternative: install the ONOS ${ONOS_VERSION} tar.gz under /opt/onos, which
-additionally requires a Java 11 JDK on the host."
-fi
-
-if ! ${SUDO} docker info >/dev/null 2>&1; then
-  fail "docker is installed but not usable (daemon not running, or permission denied)."
-fi
-
-info "Docker: $(${SUDO} docker --version)"
+info "Docker: $("${DOCKER[@]}" --version)"
 
 # --- Image ------------------------------------------------------------------
 
-if ${SUDO} docker image inspect "${ONOS_IMAGE}" >/dev/null 2>&1; then
+if "${DOCKER[@]}" image inspect "${ONOS_IMAGE}" >/dev/null 2>&1; then
   info "Image ${ONOS_IMAGE} already present; skipping pull"
 else
   info "Pulling ${ONOS_IMAGE} (about 1.5 GB unpacked)"
-  ${SUDO} docker pull "${ONOS_IMAGE}"
+  "${DOCKER[@]}" pull "${ONOS_IMAGE}"
 fi
 
 # --- Container --------------------------------------------------------------
 
-container_state="$(${SUDO} docker inspect -f '{{.State.Status}}' "${ONOS_CONTAINER}" 2>/dev/null || true)"
+container_state="$("${DOCKER[@]}" inspect -f '{{.State.Status}}' "${ONOS_CONTAINER}" 2>/dev/null || true)"
 
 case "${container_state}" in
   running)
@@ -94,7 +89,7 @@ case "${container_state}" in
     ;;
   "")
     info "Creating container '${ONOS_CONTAINER}'"
-    ${SUDO} docker run -d \
+    "${DOCKER[@]}" run -d \
       --name "${ONOS_CONTAINER}" \
       --memory="${CONTAINER_MEMORY}" \
       --memory-swap="${CONTAINER_MEMORY_SWAP}" \
@@ -108,7 +103,7 @@ case "${container_state}" in
     ;;
   *)
     info "Container '${ONOS_CONTAINER}' exists in state '${container_state}'; starting it"
-    ${SUDO} docker start "${ONOS_CONTAINER}" >/dev/null
+    "${DOCKER[@]}" start "${ONOS_CONTAINER}" >/dev/null
     ;;
 esac
 
@@ -117,7 +112,7 @@ esac
 info "Waiting for the ONOS OpenFlow listener on ${BIND_ADDR}:${OF_PORT} (up to 180s)"
 ready=0
 for _ in $(seq 1 36); do
-  if ${SUDO} docker logs "${ONOS_CONTAINER}" 2>&1 |
+  if "${DOCKER[@]}" logs "${ONOS_CONTAINER}" 2>&1 |
        grep -q "Listening for OF switch connections on ${OF_PORT}"; then
     ready=1
     break
@@ -132,7 +127,7 @@ else
   echo "         Inspect: docker logs ${ONOS_CONTAINER}" >&2
 fi
 
-${SUDO} docker ps --filter "name=${ONOS_CONTAINER}" \
+"${DOCKER[@]}" ps --filter "name=${ONOS_CONTAINER}" \
   --format '    {{.ID}}  {{.Image}}  {{.Status}}  {{.Ports}}'
 
 # --- Next steps -------------------------------------------------------------
@@ -151,26 +146,30 @@ Next steps:
   1. Verify the controller:
        ./scripts/verify_onos.sh
 
-  2. Set REST credentials in your shell (never commit them):
+  2. Set REST credentials in your shell (never commit them).
+     Reference lab REST/GUI (127.0.0.1:8181):
        export ONOS_USER=onos
-       export ONOS_PASSWORD='<your ONOS REST password>'
+       export ONOS_PASSWORD=rocks
 
-  3. Launch the main project topology:
+  3. Launch the main project topology (Mininet still needs root):
        sudo mn -c
        sudo mn --custom topologies/main_topology.py \\
          --topo main6s8h \\
          --controller=remote,ip=127.0.0.1,port=${OF_PORT} \\
          --switch=ovsk
 
-  4. Collect OVS-side evidence from another shell:
+  4. Install deterministic baseline forwarding, then collect evidence:
+       python3 forwarding/baseline_forwarding.py install
        sudo ./scripts/verify_main_openflow.sh
 
   5. Clean up Mininet after exiting:
        sudo mn -c
 
-Stop ONOS with:  docker stop ${ONOS_CONTAINER}
-Start it again:  docker start ${ONOS_CONTAINER}
+Stop ONOS with the same Docker access this script selected:
+  ${DOCKER[*]} stop ${ONOS_CONTAINER}
+Start it again:
+  ${DOCKER[*]} start ${ONOS_CONTAINER}
 
 Reactive forwarding (org.onosproject.fwd) is intentionally NOT activated.
-Host pingall is expected to fail until deterministic forwarding is implemented.
+Host pingall succeeds only after org.coms6200.baseline flows are installed.
 EOF
