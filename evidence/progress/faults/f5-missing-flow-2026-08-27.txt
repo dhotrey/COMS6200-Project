@@ -1,0 +1,29 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M5B F5 missing baseline unicast rule — live verification
+
+Git: feature/m5b-complete-fault-catalogue @ 7f377ae
+Catalogue: v1
+ONOS: 2.7.0
+OS: Ubuntu 24.04.4 LTS
+
+Injection:
+  python3 -m faults.cli inject --scenario F5
+  Resolve unique org.coms6200.baseline flow on s3:
+    priority 41000, ETH_DST=00:00:00:00:00:05 (h5), OUTPUT 1
+  Delete that single flow by resolved ONOS flowId
+
+Observed:
+  Baseline ADDED: 55 (was 56)
+  h1→h5: fail
+  h2→h5: fail
+  h1→h6: success
+  h3→h5: success
+
+Reset:
+  Reinstall only the missing baseline rule (spec_to_onos_json + POST)
+  Baseline ADDED restored to 56
+  pingall 56/56; 20 directed links
+
+Verifier: ./scripts/verify_fault_f5.sh → ALL CHECKS PASSED
+No secrets recorded.

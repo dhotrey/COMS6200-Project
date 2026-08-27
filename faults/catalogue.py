@@ -6,4 +6,4 @@ increment this version (or be explicitly documented as a new catalogue).
 """
 
 FAULT_CATALOGUE_VERSION = "v1"
-FAULT_CATALOGUE_STATUS = "frozen"  # set after live verification; candidates may still edit
+FAULT_CATALOGUE_STATUS = "frozen"

@@ -28,7 +28,8 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M3 Deterministic Loop-Free Forwarding | ✅ |
 | M4 Structured Telemetry Gateway | ✅ |
 | M5 First Automated Fault + Reset | ✅ |
-| Automated fault injection | 🟡 Partial — F1 verified; F2–F5 planned |
+| M5B Fault Catalogue v1 (F1–F5) | ✅ Frozen |
+| Automated fault injection | ✅ F1–F5 verified |
 | Deterministic scripted troubleshooting baseline | 🟡 |
 | LLM tool-calling integration | 🟡 |
 | Repeated evaluation experiments | 🟡 |
@@ -797,37 +798,35 @@ Developer notes: `telemetry/README.md`.
 
 ## Fault injection
 
-🟡 **Partial** — F1 ✅ runtime verified (Ubuntu `Aus`, 27 August 2026). F2–F5 🟡 planned.
+✅ **Fault Catalogue v1 — Frozen** (Ubuntu `Aus`, 27 August 2026).
 
-Evidence: `evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt`.
+All five mandatory scenarios are runtime-verified. Future LLM and scripted
+troubleshooting experiments **must** use this frozen catalogue. Changing
+targets, selectors, workloads, or reset semantics requires a new catalogue
+version.
 
-| ID | Status | Injected concept | Useful evidence |
+Evidence:
+
+- `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`
+- per-scenario files under `evidence/progress/faults/`
+
+| ID | Status | Injected concept (verified) | Useful evidence |
 | --- | --- | --- | --- |
-| F1 Link failure | ✅ | Disable primary s3–s1 uplink (`s3-eth1` + `s1-eth2`) | topology, port state, ping, flows |
-| F2 Congestion | 🟡 | Background traffic on a constrained link | port counters/rates, ping, iperf |
-| F3 ACL / policy error | 🟡 | High-priority selective drop rule | flow table, reachability, port state |
-| F4 Forwarding loop | 🟡 | Narrow test flow around the s3–s4 cycle | flow actions, topology, counters |
-| F5 Missing / incorrect OpenFlow rule | 🟡 | Delete or override a required flow | flow table, topology, ping |
-
-F4 safety (planned): narrow match, low-rate traffic, short hard timeout, watchdog/reset. Use s3–s4; do not destabilise all traffic.
+| F1 Link failure | ✅ | Disable primary s3–s1 (`s3-eth1`/`s1-eth2`) | topology, port state, ping |
+| F2 Congestion | ✅ | TBF on s1–s5 + background iperf h3→h6 | iperf, port stats, ping |
+| F3 ACL / policy error | ✅ | High-priority DROP h1→h5 on s3 (`org.coms6200.experiment`) | flows, ping |
+| F4 Forwarding loop | ✅ | Narrow h1→h5 cycle s3→s4→s1→s3 + safety TBF on s3–s4 | flows, counters, ping |
+| F5 Missing baseline flow | ✅ | Delete s3 baseline unicast for dest h5 | flows, ping |
 
 h6 dual-home is **not** a sixth mandatory fault ([Optional extensions](#optional-extensions)).
 
-### Operator CLI (F1 only) ✅
+### Operator CLI ✅
 
 The package `faults/` is an **operator/evaluator** injector. It is **not** an LLM
 tool. Do not expose fault CLI output, status, scenario IDs, or ground truth to
 the diagnostic agent. Telemetry must never import fault state.
 
-Requires **root** for link-state mutation. The injector does **not** call `sudo`
-internally. On a non-root session:
-
-```bash
-sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH,PYTHONPATH \
-  python3 -m faults.cli inject --scenario F1
-```
-
-On the reference server (already root):
+Requires **root** for mutations. The injector does **not** call `sudo` internally.
 
 ```bash
 export ONOS_USER=onos
@@ -835,46 +834,58 @@ export ONOS_PASSWORD=rocks
 export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
 
 python3 -m faults.cli status
-python3 -m faults.cli inject --scenario F1
-python3 -m faults.cli status
+python3 -m faults.cli inject --scenario F1   # or F2 F3 F4 F5
 python3 -m faults.cli reset
 ```
 
-Only `--scenario F1` is accepted for inject. There is no `--interface`, `--cmd`,
-`--link`, or `--pid`.
+Only `--scenario Fn` is accepted. No `--interface`, `--cmd`, `--rate`, `--pid`,
+or arbitrary flow IDs.
 
-Runtime state (outside the repo): `/run/coms6200/fault-state.json`
-(directory mode `0700`, file mode `0600`). Evaluator-only ground truth lives
-here; M4 never reads it.
+Runtime state: `/run/coms6200/fault-state.json` (dir `0700`, file `0600`).
+One active fault at a time.
 
-### F1 expected symptoms (verified)
+### Verified symptoms (catalogue v1)
 
-After inject and ONOS convergence (~1–2 s observed):
+**F1:** ONOS links 20→18; h1→h5 fails; h1→h2 and h3→h5 succeed; 56 baseline ADDED.
 
-- directed ONOS links **20 → 18**
-- `get_topology()`: configured inter-switch links remain **10**; observed physical
-  inter-switch links **9**
-- `get_port_status(s3)` port 1 and `get_port_status(s1)` port 2: `enabled=false`
-- M3 baseline remains **56 ADDED** (F1 does not mutate flows)
-- `ping(h1,h5)` fails (100% loss); `ping(h1,h2)` succeeds; `ping(h3,h5)` succeeds
+**F2:** h1→h5 remains reachable with high RTT; iperf throughput ≤ 25% of the
+measured healthy baseline (observed near-zero under 1 Mbit TBF + background);
+56 baseline ADDED; reset removes TBF and background iperf.
 
-After reset: interfaces UP; directed links **20**; pingall **56/56**.
+**F3:** h1→h5 fails; h2→h5 and h1→h6 succeed; 56 baseline + 1 experiment DROP;
+appId `org.coms6200.experiment` (neutral, not a fault label).
+
+**F4:** h1→h5 fails; h1→h2 and h3→h5 succeed; 3 experiment OUTPUT flows; safety
+TBF on `s3-eth5`; loop-path counters grow under bounded test traffic; 56 baseline.
+
+**F5:** baseline ADDED 55; h1→h5 and h2→h5 fail; h1→h6 and h3→h5 succeed; reset
+restores the missing rule → 56.
 
 ### Live verification
 
 ```bash
 ./scripts/verify_fault_f1.sh
+./scripts/verify_fault_f2.sh
+./scripts/verify_fault_f3.sh
+./scripts/verify_fault_f4.sh
+./scripts/verify_fault_f5.sh
+./scripts/verify_fault_catalogue.sh   # sequential F1–F5 + healthy gates
 ```
 
-Requires root, healthy ONOS + `main6s8h` + M3, and `ONOS_USER` / `ONOS_PASSWORD`.
-Uses a trap to reset F1 on abort. Manual recovery if cleanup fails:
+Each script traps cleanup. Manual recovery:
 
 ```bash
-python3 -m faults.cli reset --force-f1
-# or:
-ip link set dev s3-eth1 up
-ip link set dev s1-eth2 up
+python3 -m faults.cli reset
+python3 -m faults.cli reset --force-scenario F2   # or F1…F5
+python3 forwarding/baseline_forwarding.py install
+tc qdisc del dev s1-eth4 root 2>/dev/null || true
+tc qdisc del dev s3-eth5 root 2>/dev/null || true
 ```
+
+### Secrets for M6 (not used yet)
+
+Planned server secret file: `~/COMS6200-Project/.env` mode `600`, Git-ignored.
+See `docs/decisions/llm-api-gateway.md`. Do not commit API keys.
 
 Developer notes: `faults/README.md`.
 
@@ -1151,13 +1162,13 @@ Unfinished steps are marked.
 3. Start topology ✅
 4. Install baseline forwarding ✅
 5. Verify healthy baseline ✅
-6. Inject one fault ✅ (F1 only; F2–F5 🟡)
+6. Inject one fault ✅ (Fault Catalogue v1: F1–F5)
 7. Present **only a symptom** to the diagnostic method 🟡
 8. Collect structured telemetry ✅
 9. Obtain LLM or scripted diagnosis 🟡
 10. Log result 🟡
 11. Compare diagnosis to hidden ground truth 🟡
-12. Reset network ✅ for F1 (`python3 -m faults.cli reset`); other faults 🟡
+12. Reset network ✅ (`python3 -m faults.cli reset`)
 13. Verify healthy state ✅
 14. Repeat 🟡
 

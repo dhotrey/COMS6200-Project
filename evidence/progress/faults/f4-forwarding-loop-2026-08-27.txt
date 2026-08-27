@@ -1,0 +1,33 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M5B F4 bounded forwarding loop — live verification
+
+Git: feature/m5b-complete-fault-catalogue @ 7f377ae
+Catalogue: v1
+ONOS: 2.7.0
+OS: Ubuntu 24.04.4 LTS
+
+Injection:
+  python3 -m faults.cli inject --scenario F4
+  Narrow unicast match: ETH_SRC=h1, ETH_DST=h5
+  Hops:
+    s3 out_port 5 → s4
+    s4 out_port 1 → s1
+    s1 out_port 2 → s3
+  Safety TBF on s3-eth5: 2mbit (injector-only; not ground truth)
+
+Observed:
+  Experiment flows: 3 ADDED; baseline 56 ADDED unchanged
+  h1→h5: 100% loss
+  h1→h2: success
+  h3→h5: success
+  s3 port 5 counters grew after bounded ping burst
+    packets_tx 4779 → 26653; tx_bits_per_sec ~10 Mbit during sample
+  No uncontrolled iperf generator
+
+Reset:
+  removed 3 experiment flows; safety tbf cleared
+  pingall 56/56; 20 directed links; no NORMAL/STP/FLOOD
+
+Verifier: ./scripts/verify_fault_f4.sh → ALL CHECKS PASSED
+No secrets recorded.

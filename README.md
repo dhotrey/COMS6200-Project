@@ -26,7 +26,8 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M2 | ONOS + OpenFlow 1.3 Integration | Completed |
 | M3 | Deterministic Loop-Free Forwarding | Completed |
 | M4 | Structured Telemetry Gateway | **Completed** |
-| M5 | First Automated Fault + Reset | **Completed** (F1 only) |
+| M5 | First Automated Fault + Reset | **Completed** (F1) |
+| M5B | Complete Fault Catalogue v1 | **Completed** (F1–F5 frozen) |
 | M6 | First LLM Tool-Calling Diagnosis | **Next** |
 
 The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
@@ -39,12 +40,11 @@ Completed so far:
 - OpenFlow 1.3 controller integration against the enhanced topology
 - deterministic loop-free baseline forwarding (`pingall` 0% dropped, 56/56)
 - structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
-- F1 automated primary link failure + clean reset (`scripts/verify_fault_f1.sh` ALL CHECKS PASSED, 27 August 2026)
+- Fault Catalogue v1 frozen: F1–F5 inject/reset verified (`scripts/verify_fault_catalogue.sh` ALL FIVE PASSED, 27 August 2026)
 
 Not implemented:
 
-- F2–F5 fault injectors (only F1 is verified)
-- OpenAI LLM agent
+- OpenAI LLM agent (planned via Cloudflare AI Gateway — see `docs/decisions/llm-api-gateway.md`)
 - scripted troubleshooting baseline
 - repeated experiments
 
@@ -65,7 +65,7 @@ Telemetry / Tool Gateway
 Operator/evaluator only (not an LLM tool):
 
 ```
-Fault injector (F1) → Mininet/OVS link state
+Fault injector (F1–F5) → Mininet/OVS / ONOS experiment flows
 Fault injector → evaluator ground truth (/run/coms6200/fault-state.json)
 ```
 
@@ -87,15 +87,15 @@ The LLM will **not** receive unrestricted ONOS REST access or controller credent
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
-**Faults** (catalogue; only F1 implemented):
+**Faults** (Fault Catalogue v1 — frozen):
 
 | ID | Fault | Status |
 | --- | --- | --- |
-| F1 | Link failure (primary s3–s1) | **Completed** (27 August 2026) |
-| F2 | Congestion | Planned |
-| F3 | ACL / policy error | Planned |
-| F4 | Forwarding loop | Planned |
-| F5 | Missing / incorrect OpenFlow rule | Planned |
+| F1 | Link failure (primary s3–s1) | **Completed** |
+| F2 | Congestion (s1–s5 TBF + background) | **Completed** |
+| F3 | ACL / policy error (selective DROP) | **Completed** |
+| F4 | Forwarding loop (bounded unicast cycle) | **Completed** |
+| F5 | Missing baseline flow (s3→h5) | **Completed** |
 
 The project may later include **one optional constrained link-failure reroute demonstration**. Automated remediation is not the current priority. Do not add extra mandatory faults.
 
@@ -238,9 +238,10 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
 | `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
-| `scripts/verify_fault_f1.sh` | Live M5 F1 inject → observe → reset |
+| `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` | Live per-scenario fault inject/observe/reset |
+| `scripts/verify_fault_catalogue.sh` | Sequential F1–F5 catalogue verifier |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
-| `faults/` | Operator F1 injector/reset (not an LLM tool) |
+| `faults/` | Operator Fault Catalogue v1 injector/reset (not an LLM tool) |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
 
@@ -344,7 +345,8 @@ COMS6200-Project/
 │   ├── verify_onos.sh
 │   ├── verify_main_openflow.sh
 │   ├── verify_telemetry.sh
-│   └── verify_fault_f1.sh
+│   ├── verify_fault_f1.sh … verify_fault_f5.sh
+│   └── verify_fault_catalogue.sh
 │
 ├── topologies/
 │   ├── main_topology.py
@@ -387,9 +389,12 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M6 — First LLM Tool-Calling Diagnosis** (next)
+**M6 — OpenAI + Cloudflare AI Gateway Integration and First LLM Tool-Calling Diagnosis** (next)
 
-M5 is complete for **F1 only** on the Ubuntu reference server (27 August 2026): primary s3–s1 link failure via `ip link set … down` on `s3-eth1`/`s1-eth2`, ONOS 20→18 directed links, targeted connectivity symptoms, clean reset to 20 links and pingall 56/56. Evidence: `evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt`. F2–F5 remain planned. Do not expose the fault CLI to the LLM.
+M5B is complete: Fault Catalogue **v1** is frozen (F1–F5) on the Ubuntu reference
+server (27 August 2026). Evidence: `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`.
+Do not start formal LLM episodes until gateway caching policy and model freeze
+are applied (`docs/decisions/llm-api-gateway.md`). Do not commit `.env` secrets.
 
 ## 15. Project Reports
 

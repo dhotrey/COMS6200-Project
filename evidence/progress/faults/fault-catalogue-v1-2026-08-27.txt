@@ -1,0 +1,42 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: Fault Catalogue v1 — frozen after full sequential live verification
+
+Git commit (feature branch at verification): 7f377ae
+  later completion commit supersedes documentation/evidence on develop
+Catalogue version: v1
+Status: FROZEN
+ONOS: 2.7.0
+OS: Ubuntu 24.04.4 LTS
+hostname: Aus
+
+Sequential verifier:
+  ./scripts/verify_fault_catalogue.sh
+  Result: ALL FIVE SCENARIOS PASSED (~96 s wall clock)
+
+Per scenario (summary):
+  F1 link_failure     s3-eth1/s1-eth2 down; links 20→18; h1→h5 fail; reset OK
+  F2 congestion       TBF s1-eth4 + bg h3→h6; h1→h5 reachable but throughput <<25% healthy
+  F3 acl_policy_error s3 DROP h1→h5 prio 50000 app org.coms6200.experiment; selective fail
+  F4 forwarding_loop  s3→s4→s1→s3 for h1→h5 + safety TBF; counter growth; reset OK
+  F5 missing_flow     delete s3 baseline ETH_DST=h5; 55 ADDED; restore to 56
+
+Final gate after catalogue:
+  directed ONOS links: 20
+  baseline ADDED: 56
+  pingall: 56/56
+  org.onosproject.fwd: INSTALLED (not ACTIVE)
+  NORMAL/STP/FLOOD: none
+  residual tbf: none (s1-eth4, s3-eth5)
+  experiment flows: 0
+  active fault state: false
+
+Ground truth remains evaluator-only (/run/coms6200/fault-state.json).
+Telemetry schemas unchanged; no OpenAI key used.
+
+Individual evidence:
+  evidence/progress/faults/f1-link-failure-reset-2026-08-27.txt
+  evidence/progress/faults/f2-congestion-2026-08-27.txt
+  evidence/progress/faults/f3-acl-policy-2026-08-27.txt
+  evidence/progress/faults/f4-forwarding-loop-2026-08-27.txt
+  evidence/progress/faults/f5-missing-flow-2026-08-27.txt
