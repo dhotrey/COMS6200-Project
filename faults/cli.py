@@ -1,4 +1,4 @@
-"""Operator CLI for M5 fault injection.
+"""Operator CLI for Fault Catalogue v1 (F1–F5).
 
 This is NOT an LLM/agent tool. Do not expose it through telemetry schemas.
 """
@@ -10,7 +10,9 @@ import json
 import sys
 from typing import Any
 
+from faults.catalogue import FAULT_CATALOGUE_VERSION
 from faults.injector import inject, reset, status
+from faults.scenarios import RUNNABLE
 
 
 def _emit(result: dict[str, Any]) -> int:
@@ -23,9 +25,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m faults.cli",
         description=(
-            "Operator-only fault injector for COMS6200. "
-            "Currently only F1 (s3–s1 primary link failure) is runnable. "
-            "Does not accept interfaces, commands, PIDs, or REST paths. "
+            f"Operator-only fault injector for COMS6200 Fault Catalogue "
+            f"{FAULT_CATALOGUE_VERSION}. Runnable: {', '.join(sorted(RUNNABLE))}. "
+            "Does not accept interfaces, commands, PIDs, rates, or REST paths. "
             "Not an LLM tool."
         ),
     )
@@ -35,17 +37,23 @@ def _parser() -> argparse.ArgumentParser:
     inject_p.add_argument(
         "--scenario",
         required=True,
-        choices=["F1"],
-        help="Only F1 is implemented",
+        choices=sorted(RUNNABLE),
+        help="Allow-listed scenario ID only",
     )
 
-    sub.add_parser("status", help="Show active fault state / observed F1 interfaces")
+    sub.add_parser("status", help="Show active fault state")
 
-    reset_p = sub.add_parser("reset", help="Restore F1 link endpoints and clear state")
+    reset_p = sub.add_parser("reset", help="Reset active fault / recover canonical resources")
     reset_p.add_argument(
         "--force-f1",
         action="store_true",
         help="Restore canonical F1 interfaces even when state is missing",
+    )
+    reset_p.add_argument(
+        "--force-scenario",
+        choices=sorted(RUNNABLE),
+        default=None,
+        help="Recover a named scenario's canonical resources when state is missing",
     )
     return parser
 
@@ -58,7 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         return _emit(status())
     if args.command == "reset":
-        return _emit(reset(force_f1=bool(args.force_f1)))
+        return _emit(
+            reset(
+                force_f1=bool(args.force_f1),
+                force_scenario=args.force_scenario,
+            )
+        )
     parser.error(f"unknown command {args.command}")
     return 2
 

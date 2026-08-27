@@ -1,51 +1,41 @@
-# Faults package (M5)
+# Fault Catalogue v1 — operator/evaluator injector
 
-Operator/evaluator fault injection for COMS6200. **Not** an LLM tool and
-**not** imported by `telemetry/`.
+**Not an LLM tool.** Telemetry and future agents must never import this package
+or read `/run/coms6200/fault-state.json`.
 
-Currently runnable:
+## Catalogue
 
-- **F1** — primary `s3`↔`s1` link failure (`s3-eth1` / `s1-eth2` from
-  `topologies/spec.py`)
+`FAULT_CATALOGUE_VERSION = "v1"` in `catalogue.py`.
 
-Planned later: F2–F5.
+| ID | Family | Mechanism |
+| --- | --- | --- |
+| F1 | link_failure | `ip link set` down on s3–s1 |
+| F2 | congestion | TBF on s1–s5 + background iperf |
+| F3 | acl_policy_error | high-priority DROP (`org.coms6200.experiment`) |
+| F4 | forwarding_loop | narrow h1→h5 cycle + safety TBF on s3–s4 |
+| F5 | missing_flow | delete s3 baseline unicast for h5 |
 
 ## CLI
 
 ```bash
-# Requires root (does not invoke sudo itself)
-python3 -m faults.cli inject --scenario F1
+python3 -m faults.cli inject --scenario F2
 python3 -m faults.cli status
 python3 -m faults.cli reset
-python3 -m faults.cli reset --force-f1   # crash recovery for known F1 ifaces
 ```
 
-JSON on stdout. No `--interface`, `--cmd`, `--pid`, or arbitrary links.
+Requires root for mutations. Does not invoke `sudo` internally.
+No `--interface`, `--cmd`, `--rate`, `--pid`, or arbitrary flow IDs.
 
-## Design
+## Runtime state
 
-| Piece | Role |
-| --- | --- |
-| `scenarios.py` | Allow-listed scenarios + evaluator ground truth |
-| `injector.py` | Validate OVS bridges, `ip link set` down/up, rollback on failure |
-| `state.py` | Ephemeral `/run/coms6200/fault-state.json` (0600) |
-| `cli.py` | Thin operator CLI |
+`/run/coms6200/fault-state.json` (dir `0700`, file `0600`). One active fault.
 
-Mechanism: fixed argv `ip link set dev <iface> down|up` on both veth ends.
-Before mutation: interface exists and `ovs-vsctl port-to-br` matches the
-expected switch.
+## Reset / recovery
 
-## Ground truth boundary
-
-State may include evaluator-only fields (`scenario_id`, `fault_family`,
-location, expected correction). Telemetry must never read this file or import
-`faults`.
+`reset` clears the active scenario. `--force-scenario Fn` / `--force-f1`
+recover canonical resources when the state file is missing.
 
 ## Verification
 
-```bash
-python3 tests/test_faults.py
-./scripts/verify_fault_f1.sh
-```
-
-Live script requires healthy ONOS + `main6s8h` + M3 baseline first.
+- `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh`
+- `scripts/verify_fault_catalogue.sh`

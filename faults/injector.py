@@ -1,164 +1,41 @@
-"""Bounded F1 link-failure injector / reset.
+"""Operator fault injector dispatcher for Fault Catalogue v1 (F1–F5).
 
-Operator/evaluator only. Uses fixed argv subprocesses with the shell disabled.
-Does not invoke sudo internally.
+Evaluator/operator only. Uses fixed argv subprocesses with the shell disabled.
+Does not invoke sudo internally. Not an LLM tool.
 """
 
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from faults import envelope
-from faults.scenarios import LinkFailureScenario, require_scenario
-from faults.state import StateError, active_state, clear_state, read_state, utc_now, write_state
+from faults.catalogue import FAULT_CATALOGUE_VERSION
+from faults.common import FaultError
+from faults import f1_link, f2_congestion, f3_acl, f4_loop, f5_missing
+from faults.scenarios import RUNNABLE, require_scenario
+from faults.state import StateError, active_state, clear_state, read_state
 
 
-class FaultError(RuntimeError):
-    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.details = details or {}
+_INJECTORS: dict[str, Callable[[], dict[str, Any]]] = {
+    "F1": f1_link.inject_f1,
+    "F2": f2_congestion.inject_f2,
+    "F3": f3_acl.inject_f3,
+    "F4": f4_loop.inject_f4,
+    "F5": f5_missing.inject_f5,
+}
 
-
-def require_root() -> None:
-    if os.geteuid() != 0:
-        raise FaultError(
-            "ROOT_REQUIRED",
-            "link-state mutation requires root; re-run as root or with sudo "
-            "(this tool does not invoke sudo itself)",
-        )
-
-
-def _which(name: str) -> str:
-    path = shutil.which(name)
-    if not path:
-        raise FaultError("COMMAND_UNAVAILABLE", f"{name} is not available on PATH")
-    return path
-
-
-def _run(argv: list[str], timeout_s: float = 5.0) -> subprocess.CompletedProcess[str]:
-    if not argv or not all(isinstance(item, str) and item and "\x00" not in item for item in argv):
-        raise FaultError("INTERNAL_ERROR", "invalid fixed argv")
-    try:
-        return subprocess.run(
-            argv,
-            check=False,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise FaultError("COMMAND_TIMEOUT", f"{argv[0]} timed out") from exc
-    except FileNotFoundError as exc:
-        raise FaultError("COMMAND_UNAVAILABLE", f"{argv[0]} is not available") from exc
-
-
-def _iface_exists(name: str) -> bool:
-    completed = _run([_which("ip"), "-o", "link", "show", "dev", name])
-    return completed.returncode == 0
-
-
-def _iface_operstate(name: str) -> str:
-    path = Path("/sys/class/net") / name / "operstate"
-    try:
-        return path.read_text(encoding="utf-8").strip().lower()
-    except FileNotFoundError:
-        completed = _run([_which("ip"), "-o", "link", "show", "dev", name])
-        if completed.returncode != 0:
-            raise FaultError("INTERFACE_MISSING", f"interface {name} is missing")
-        text = completed.stdout
-        if "state UP" in text or ",UP," in text or " UP " in text:
-            return "up"
-        if "state DOWN" in text or " DOWN " in text:
-            return "down"
-        return "unknown"
-    except OSError as exc:
-        raise FaultError("INTERFACE_UNREADABLE", f"cannot read {path}") from exc
-
-
-def _port_to_br(iface: str) -> str:
-    completed = _run([_which("ovs-vsctl"), "port-to-br", iface])
-    if completed.returncode != 0:
-        raise FaultError(
-            "INTERFACE_NOT_OVS",
-            f"{iface} is not an OVS port on this host",
-            {"stderr": (completed.stderr or "")[-200:]},
-        )
-    bridge = (completed.stdout or "").strip()
-    if not bridge:
-        raise FaultError("INTERFACE_NOT_OVS", f"ovs-vsctl returned empty bridge for {iface}")
-    return bridge
-
-
-def _set_link(iface: str, up: bool) -> None:
-    action = "up" if up else "down"
-    completed = _run([_which("ip"), "link", "set", "dev", iface, action])
-    if completed.returncode != 0:
-        raise FaultError(
-            "LINK_MUTATION_FAILED",
-            f"failed to bring {iface} {action}",
-            {"stderr": (completed.stderr or "")[-300:]},
-        )
-
-
-def validate_endpoints(scenario: LinkFailureScenario) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for endpoint in scenario.endpoints:
-        iface = endpoint.interface
-        if not _iface_exists(iface):
-            raise FaultError(
-                "TOPOLOGY_NOT_RUNNING",
-                f"expected interface {iface} is missing; is main6s8h running?",
-            )
-        bridge = _port_to_br(iface)
-        if bridge != endpoint.switch:
-            raise FaultError(
-                "TOPOLOGY_MISMATCH",
-                f"{iface} belongs to bridge {bridge}, expected {endpoint.switch}",
-            )
-        oper = _iface_operstate(iface)
-        rows.append(
-            {
-                "switch": endpoint.switch,
-                "port": endpoint.port,
-                "interface": iface,
-                "bridge": bridge,
-                "operstate": oper,
-            }
-        )
-    return rows
-
-
-def _ensure_all_up(rows: list[dict[str, Any]]) -> None:
-    down = [row["interface"] for row in rows if row["operstate"] != "up"]
-    if down:
-        raise FaultError(
-            "LINK_NOT_UP",
-            "F1 endpoints must be UP before injection",
-            {"down": down},
-        )
-
-
-def _ensure_all_down(rows: list[dict[str, Any]]) -> None:
-    up = [row["interface"] for row in rows if row["operstate"] == "up"]
-    if up:
-        raise FaultError(
-            "LINK_STILL_UP",
-            "F1 endpoints did not go down",
-            {"still_up": up},
-        )
+_RESETTERS: dict[str, Callable[..., dict[str, Any]]] = {
+    "F1": f1_link.reset_f1,
+    "F2": f2_congestion.reset_f2,
+    "F3": f3_acl.reset_f3,
+    "F4": f4_loop.reset_f4,
+    "F5": f5_missing.reset_f5,
+}
 
 
 def inject(scenario_id: object = "F1") -> dict[str, Any]:
     action = "inject"
     try:
-        require_root()
         scenario = require_scenario(scenario_id)
         existing = active_state()
         if existing is not None:
@@ -166,61 +43,18 @@ def inject(scenario_id: object = "F1") -> dict[str, Any]:
                 "FAULT_ALREADY_ACTIVE",
                 f"active fault {existing.get('scenario_id')} already recorded; reset first",
             )
-        rows = validate_endpoints(scenario)
-        _ensure_all_up(rows)
-
-        # Persist intent before mutation so crash recovery can find resources.
-        pending = {
-            "status": "PENDING",
-            "scenario_id": scenario.scenario_id,
-            "injected_at": utc_now(),
-            "interfaces": list(scenario.interfaces),
-            "endpoints": [
-                {"switch": e.switch, "port": e.port, "interface": e.interface}
-                for e in scenario.endpoints
-            ],
-            "ground_truth": scenario.ground_truth(),
-            "note": "evaluator/operator only; never expose to telemetry or LLM tools",
-        }
-        write_state(pending)
-
-        mutated: list[str] = []
-        try:
-            for iface in scenario.interfaces:
-                _set_link(iface, up=False)
-                mutated.append(iface)
-            after = validate_endpoints(scenario)
-            _ensure_all_down(after)
-        except FaultError:
-            for iface in reversed(mutated):
-                try:
-                    _set_link(iface, up=True)
-                except FaultError:
-                    pass
-            clear_state()
-            raise
-
-        active = dict(pending)
-        active["status"] = "ACTIVE"
-        active["verified_at"] = utc_now()
-        active["endpoint_state"] = after
-        write_state(active)
-        return envelope.ok(
-            action,
-            {
-                "scenario_id": scenario.scenario_id,
-                "status": "ACTIVE",
-                "interfaces": list(scenario.interfaces),
-                "endpoint_state": after,
-                "ground_truth": scenario.ground_truth(),
-            },
-        )
+        handler = _INJECTORS[scenario.scenario_id]
+        data = handler()
+        data["catalogue_version"] = FAULT_CATALOGUE_VERSION
+        return envelope.ok(action, data)
     except FaultError as exc:
         return envelope.error(action, exc.code, exc.message, exc.details)
     except StateError as exc:
         return envelope.error(action, exc.code, exc.message)
     except ValueError as exc:
         return envelope.error(action, "INVALID_SCENARIO", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return envelope.error(action, "INTERNAL_ERROR", str(exc)[:300])
 
 
 def status() -> dict[str, Any]:
@@ -228,17 +62,13 @@ def status() -> dict[str, Any]:
     try:
         payload = read_state()
         if payload is None:
-            # Recoverable observation: report known F1 interface state if present.
-            try:
-                scenario = require_scenario("F1")
-                rows = validate_endpoints(scenario)
-                observed = {row["interface"]: row["operstate"] for row in rows}
-            except FaultError:
-                observed = {}
+            observed = f1_link.observe_f1_ifaces()
             return envelope.ok(
                 action,
                 {
                     "active": False,
+                    "catalogue_version": FAULT_CATALOGUE_VERSION,
+                    "runnable": sorted(RUNNABLE),
                     "state_file": None,
                     "observed_f1_interfaces": observed,
                 },
@@ -247,6 +77,7 @@ def status() -> dict[str, Any]:
             action,
             {
                 "active": payload.get("status") == "ACTIVE",
+                "catalogue_version": FAULT_CATALOGUE_VERSION,
                 "state": payload,
             },
         )
@@ -256,71 +87,41 @@ def status() -> dict[str, Any]:
         return envelope.error(action, exc.code, exc.message)
 
 
-def reset(force_f1: bool = False) -> dict[str, Any]:
-    """Restore F1 endpoints.
-
-    If an ACTIVE/PENDING state exists, restore those recorded interfaces.
-    If state is missing and force_f1 is True (or interfaces are down), restore
-    the canonical F1 interfaces after bridge validation.
-    """
+def reset(
+    force_f1: bool = False,
+    force_scenario: str | None = None,
+) -> dict[str, Any]:
+    """Reset active fault, or recover a named scenario when state is missing."""
     action = "reset"
     try:
-        require_root()
-        scenario = require_scenario("F1")
         payload = read_state()
-        if payload is None:
-            rows = validate_endpoints(scenario)
-            down = [row for row in rows if row["operstate"] != "up"]
-            if not down and not force_f1:
-                return envelope.ok(
-                    action,
-                    {
-                        "status": "IDLE",
-                        "message": "no active fault state; F1 endpoints already UP",
-                        "endpoint_state": rows,
-                    },
+        if payload is not None:
+            scenario_id = str(payload.get("scenario_id") or "")
+            if scenario_id not in _RESETTERS:
+                raise FaultError(
+                    "STATE_CORRUPT",
+                    f"unknown scenario_id in state: {scenario_id}",
                 )
-            # Crash recovery for known F1 resources only.
-            for iface in scenario.interfaces:
-                _set_link(iface, up=True)
-            after = validate_endpoints(scenario)
-            return envelope.ok(
-                action,
-                {
-                    "status": "RECOVERED",
-                    "message": "restored canonical F1 endpoints without state file",
-                    "interfaces": list(scenario.interfaces),
-                    "endpoint_state": after,
-                },
-            )
+            data = _RESETTERS[scenario_id](force=False, payload=payload)
+            data["catalogue_version"] = FAULT_CATALOGUE_VERSION
+            return envelope.ok(action, data)
 
-        recorded = payload.get("interfaces") or list(scenario.interfaces)
-        if list(recorded) != list(scenario.interfaces):
-            raise FaultError(
-                "STATE_MISMATCH",
-                "recorded interfaces do not match canonical F1 resources",
-                {"recorded": recorded, "expected": list(scenario.interfaces)},
-            )
-        # Validate bridges before mutation.
-        validate_endpoints(scenario)
-        for iface in scenario.interfaces:
-            _set_link(iface, up=True)
-        after = validate_endpoints(scenario)
-        still_down = [row["interface"] for row in after if row["operstate"] != "up"]
-        if still_down:
-            raise FaultError(
-                "RESET_INCOMPLETE",
-                "one or more F1 endpoints remain down after reset",
-                {"still_down": still_down},
-            )
-        clear_state()
+        # No state file: optional forced recovery for a known scenario.
+        if force_f1:
+            force_scenario = "F1"
+        if force_scenario:
+            if force_scenario not in _RESETTERS:
+                raise FaultError("INVALID_SCENARIO", f"unknown recovery scenario {force_scenario}")
+            data = _RESETTERS[force_scenario](force=True, payload=None)
+            data["catalogue_version"] = FAULT_CATALOGUE_VERSION
+            return envelope.ok(action, data)
+
         return envelope.ok(
             action,
             {
                 "status": "IDLE",
-                "scenario_id": "F1",
-                "interfaces": list(scenario.interfaces),
-                "endpoint_state": after,
+                "catalogue_version": FAULT_CATALOGUE_VERSION,
+                "message": "no active fault state",
             },
         )
     except FaultError as exc:
@@ -329,3 +130,10 @@ def reset(force_f1: bool = False) -> dict[str, Any]:
         return envelope.error(action, exc.code, exc.message)
     except ValueError as exc:
         return envelope.error(action, "INVALID_SCENARIO", str(exc))
+    except Exception as exc:  # noqa: BLE001
+        # Best-effort: do not leave callers without an envelope.
+        try:
+            clear_state()
+        except Exception:
+            pass
+        return envelope.error(action, "INTERNAL_ERROR", str(exc)[:300])
