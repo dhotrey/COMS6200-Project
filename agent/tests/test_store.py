@@ -74,6 +74,11 @@ def test_conversation_crud_and_schema(database):
     assert saved["messages"] == [user, assistant]
     assert saved["history"] == history
 
+    renamed = store.rename(first["id"], "Core path check")
+    assert renamed == {"id": first["id"], "title": "Core path check"}
+    assert store.get(first["id"])["title"] == "Core path check"
+    assert store.rename("missing", "Nope") is None
+
     store.delete(first["id"])
     assert store.get(first["id"]) is None
     assert (

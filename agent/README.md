@@ -16,6 +16,8 @@ Open http://127.0.0.1:8000. Opening `index.html` directly is a preview only:
 model/thinking pickers work, but chat and saved history require the server. With
 D1 configured, the UI and history work without AI Gateway credentials; sending
 messages requires AI Gateway configuration. Keep one server process/worker.
+Assistant replies render Markdown. Tool calls are faint until hovered or clicked.
+The sidebar is resizable, and conversations can be renamed from the list.
 
 ## Credentials
 
@@ -109,7 +111,7 @@ observations may be exported to that Logfire project.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.
 - `setup_d1.py`: explicit D1 schema setup and verification command.
 - `config.py`, `prompt.md`: settings and editable system instructions.
-- `index.html`: entire frontend.
+- `index.html`: entire frontend (Markdown rendering, resizable sidebar, rename).
 
 ```sh
 uv run --project agent python -m pytest agent/tests

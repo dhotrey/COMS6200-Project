@@ -78,6 +78,13 @@ def test_missing_credentials_and_conversation_crud(client):
     assert store.get(cid)["messages"] == []
     assert client.get("/api/conversations").json()[0]["id"] == cid
     assert "history" not in client.get(f"/api/conversations/{cid}").json()
+    renamed = client.patch(
+        f"/api/conversations/{cid}", json={"title": "  Link down notes  "}
+    )
+    assert renamed.status_code == 200
+    assert renamed.json() == {"id": cid, "title": "Link down notes"}
+    assert client.get("/api/conversations").json()[0]["title"] == "Link down notes"
+    assert client.patch("/api/conversations/missing", json={"title": "Gone"}).status_code == 404
     assert client.delete(f"/api/conversations/{cid}").status_code == 200
     assert client.get(f"/api/conversations/{cid}").status_code == 404
 

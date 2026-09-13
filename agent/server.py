@@ -74,6 +74,21 @@ async def delete(cid: str):
     return {"ok": True}
 
 
+class RenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+
+
+@app.patch("/api/conversations/{cid}")
+def rename(cid: str, body: RenameRequest):
+    title = " ".join(body.title.split())
+    if not title:
+        raise HTTPException(422, "Title cannot be empty")
+    item = store.rename(cid, title[:80])
+    if not item:
+        raise HTTPException(404, "Conversation not found")
+    return item
+
+
 class ChatRequest(BaseModel):
     conversation_id: str
     message: str = Field(min_length=1, max_length=16000)

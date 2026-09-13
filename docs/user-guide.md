@@ -964,6 +964,10 @@ A separate fault picker previews F1–F5. Its **Load scenario** button is disabl
 fault injection/reset still uses the operator workflow above. The selection stays
 in the browser and is not sent to the assistant or applied to the network.
 Conversation history and turn measurements are stored in Cloudflare D1.
+The chat window renders assistant Markdown (lists, emphasis, code). Tool calls
+appear as faint one-line labels until hovered or clicked. The conversation
+sidebar is drag-resizable; double-click a title or use the pencil control to
+rename it (`PATCH /api/conversations/{id}`).
 Tool delays default to a random 1–10 seconds for telemetry testing; set both
 `TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0` for research runs.
 Execution and artificial-delay timings are recorded separately. Stop cancels
@@ -986,7 +990,8 @@ Describe observable symptoms. Do not name the injector.
 
 The starter produces ordinary conversational answers grounded in tool observations.
 It does not enforce a diagnosis JSON schema. Tool arguments/results and turn
-statistics are stored structurally and shown in the UI. Measurements include
+statistics are stored structurally. In the UI, tool results stay collapsed and
+low-contrast until selected; measurements include
 per-tool latency, per-model-request latency, whole-turn time, tokens summed over
 all model rounds, cached/reasoning tokens, estimated cost, and invalid calls.
 Cancelled or failed turns flag potentially incomplete usage.

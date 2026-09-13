@@ -32,7 +32,8 @@
       }
       button,
       textarea,
-      select {
+      select,
+      input {
         font: inherit;
         color: inherit;
       }
@@ -58,23 +59,39 @@
       button:focus-visible,
       select:focus-visible,
       textarea:focus-visible,
+      input:focus-visible,
       summary:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;
       }
       .layout {
         display: grid;
-        grid-template-columns: 244px minmax(0, 1fr);
+        grid-template-columns: var(--sidebar-width, 244px) 5px minmax(0, 1fr);
         height: 100dvh;
       }
       .sidebar {
         padding: 27px 18px;
-        border-right: 1px solid var(--line);
         display: flex;
         flex-direction: column;
         gap: 22px;
         background: var(--panel);
+        min-width: 0;
         min-height: 0;
+        border-right: 1px solid var(--line);
+      }
+      .sidebar-resizer {
+        cursor: col-resize;
+        background: transparent;
+        touch-action: none;
+      }
+      .sidebar-resizer:hover,
+      .sidebar-resizer.dragging {
+        background: var(--accent);
+        opacity: 0.35;
+      }
+      body.resizing {
+        cursor: col-resize;
+        user-select: none;
       }
       .brand {
         font-size: 19px;
@@ -120,9 +137,33 @@
         white-space: nowrap;
         text-align: left;
       }
+      .conversation .rename,
       .conversation .delete {
         color: var(--muted);
-        padding: 6px 10px;
+        padding: 6px 8px;
+        opacity: 0;
+      }
+      .conversation:hover .rename,
+      .conversation:hover .delete,
+      .conversation:focus-within .rename,
+      .conversation:focus-within .delete,
+      .conversation.editing .delete {
+        opacity: 1;
+      }
+      .conversation .title-input {
+        flex: 1;
+        min-width: 0;
+        margin: 0 4px;
+        padding: 6px 8px;
+        border: 1px solid var(--accent);
+        border-radius: 7px;
+        background: var(--bg);
+        font: inherit;
+        color: inherit;
+      }
+      .conversation.editing .choose,
+      .conversation.editing .rename {
+        display: none;
       }
       .sidebar footer {
         font-size: 11px;
@@ -243,40 +284,135 @@
         padding: 14px 18px;
       }
       .body {
-        white-space: pre-wrap;
         overflow-wrap: anywhere;
         font-size: 14px;
       }
+      .message.user .body {
+        white-space: pre-wrap;
+      }
+      .body.md > *:first-child {
+        margin-top: 0;
+      }
+      .body.md > *:last-child {
+        margin-bottom: 0;
+      }
+      .body.md p {
+        margin: 0 0 0.8em;
+      }
+      .body.md h1,
+      .body.md h2,
+      .body.md h3,
+      .body.md h4 {
+        font-size: 1.05em;
+        line-height: 1.35;
+        margin: 1em 0 0.45em;
+      }
+      .body.md ul,
+      .body.md ol {
+        margin: 0.35em 0 0.9em;
+        padding-left: 1.35em;
+      }
+      .body.md li {
+        margin: 0.2em 0;
+      }
+      .body.md code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.88em;
+        background: var(--soft);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+      }
+      .body.md pre.md-fence {
+        margin: 0.6em 0 1em;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        max-height: 320px;
+        overflow: auto;
+      }
+      .body.md pre.md-fence code {
+        background: none;
+        padding: 0;
+        font-size: 12px;
+      }
+      .body.md a {
+        color: var(--accent);
+      }
       .tools {
-        display: grid;
-        gap: 7px;
-        margin: 12px 0;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+        margin: 8px 0 2px;
       }
       .tools:empty {
         display: none;
       }
-      details {
-        border: 1px solid var(--line);
-        border-radius: 9px;
-        background: var(--panel);
+      .tool-call {
+        max-width: 100%;
+      }
+      .tool-chip {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        opacity: 0.42;
+        font:
+          12px/1.45 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        padding: 2px 7px;
+        border-radius: 6px;
+        text-align: left;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        transition:
+          opacity 0.16s ease,
+          background 0.16s ease;
+      }
+      .tool-chip:hover,
+      .tool-chip:focus-visible,
+      .tool-call.open .tool-chip,
+      .tool-chip.running {
+        opacity: 0.92;
+      }
+      button.tool-chip:hover:not(:disabled),
+      button.tool-chip:focus-visible,
+      .tool-call.open .tool-chip {
+        border-color: transparent;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--muted) 12%, transparent);
+      }
+      .tool-chip.running {
+        opacity: 0.58;
+      }
+      .tool-panel {
+        margin: 4px 0 10px 8px;
+        padding: 0 0 0 10px;
+        border-left: 1px solid var(--line);
+        width: min(100%, 640px);
+      }
+      .tool-panel[hidden] {
+        display: none !important;
+      }
+      details.metrics-requests {
+        border: 0;
+        background: transparent;
         font-size: 12px;
-        overflow: hidden;
       }
       summary {
-        padding: 9px 12px;
         cursor: pointer;
-        font-family: ui-monospace, monospace;
-        overflow-wrap: anywhere;
       }
       pre {
         white-space: pre-wrap;
         overflow-wrap: anywhere;
         margin: 0;
-        padding: 12px;
-        border-top: 1px solid var(--line);
+        padding: 8px 0;
         font-size: 11px;
-        max-height: 320px;
+        max-height: 280px;
         overflow: auto;
+        color: var(--muted);
       }
       .metrics {
         display: flex;
@@ -381,6 +517,9 @@
           grid-template-columns: 1fr;
           grid-template-rows: auto minmax(0, 1fr);
         }
+        .sidebar-resizer {
+          display: none;
+        }
         .sidebar {
           padding: 10px 15px;
           flex-direction: row;
@@ -411,6 +550,10 @@
           min-width: 100px;
           max-width: 160px;
           font-size: 11px;
+        }
+        .conversation .rename,
+        .conversation .delete {
+          opacity: 1;
         }
         .topbar {
           padding: 10px 15px;
@@ -463,6 +606,13 @@
           workspace
         </footer>
       </aside>
+      <div
+        class="sidebar-resizer"
+        id="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize conversation sidebar"
+      ></div>
       <main>
         <header class="topbar">
           <div>
@@ -573,7 +723,10 @@
         busy = value;
         document
           .querySelectorAll(".sidebar button, .selectors select")
-          .forEach((el) => (el.disabled = value || loading));
+          .forEach((el) => {
+            if (el.classList.contains("rename")) return;
+            el.disabled = value || loading;
+          });
         $("send").hidden = value;
         $("stop").hidden = !value;
         $("send").disabled = loading || !config?.configured;
@@ -581,6 +734,99 @@
         $("status").textContent = value
           ? "Investigating…"
           : "Ready to investigate";
+      }
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (ch) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
+        );
+      }
+      function inlineMarkdown(text) {
+        const codes = [];
+        let html = escapeHtml(text).replace(/`([^`]+)`/g, (_, code) => {
+          codes.push(`<code>${code}</code>`);
+          return `\0C${codes.length - 1}\0`;
+        });
+        html = html
+          .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/(^|[^*])\*([^*\n]+?)\*/g, "$1<em>$2</em>")
+          .replace(
+            /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            '<a href="$2" rel="noopener noreferrer" target="_blank">$1</a>',
+          );
+        return html.replace(/\0C(\d+)\0/g, (_, index) => codes[Number(index)]);
+      }
+      function markdownBlocks(text) {
+        const lines = text.replace(/\r\n/g, "\n").split("\n");
+        let html = "",
+          i = 0;
+        while (i < lines.length) {
+          const line = lines[i];
+          if (!line.trim()) {
+            i += 1;
+            continue;
+          }
+          const heading = line.match(/^(#{1,4}) (.+)/);
+          if (heading) {
+            const level = heading[1].length;
+            html += `<h${level}>${inlineMarkdown(heading[2])}</h${level}>`;
+            i += 1;
+            continue;
+          }
+          if (/^[-*] /.test(line) || /^\d+\. /.test(line)) {
+            const ordered = /^\d+\. /.test(line);
+            html += ordered ? "<ol>" : "<ul>";
+            while (
+              i < lines.length &&
+              (ordered ? /^\d+\. /.test(lines[i]) : /^[-*] /.test(lines[i]))
+            ) {
+              html += `<li>${inlineMarkdown(lines[i].replace(ordered ? /^\d+\. / : /^[-*] /, ""))}</li>`;
+              i += 1;
+            }
+            html += ordered ? "</ol>" : "</ul>";
+            continue;
+          }
+          const para = [];
+          while (
+            i < lines.length &&
+            lines[i].trim() &&
+            !/^#{1,4} /.test(lines[i]) &&
+            !/^[-*] /.test(lines[i]) &&
+            !/^\d+\. /.test(lines[i])
+          ) {
+            para.push(lines[i]);
+            i += 1;
+          }
+          html += `<p>${para.map(inlineMarkdown).join("<br>")}</p>`;
+        }
+        return html;
+      }
+      function markdown(source) {
+        if (!source) return "";
+        const chunks = [];
+        const fence = /```[a-zA-Z0-9_-]*\n?([\s\S]*?)```/g;
+        let last = 0,
+          match;
+        while ((match = fence.exec(source))) {
+          if (match.index > last)
+            chunks.push(["md", source.slice(last, match.index)]);
+          chunks.push(["code", match[1].replace(/\n$/, "")]);
+          last = match.index + match[0].length;
+        }
+        if (last < source.length) chunks.push(["md", source.slice(last)]);
+        return chunks
+          .map(([kind, value]) =>
+            kind === "code"
+              ? `<pre class="md-fence"><code>${escapeHtml(value)}</code></pre>`
+              : markdownBlocks(value),
+          )
+          .join("");
+      }
+      function renderBody(view) {
+        if (view.el.classList.contains("user")) {
+          view.body.textContent = view.raw;
+          return;
+        }
+        view.body.innerHTML = markdown(view.raw);
       }
       function scroll() {
         const el = $("timeline");
@@ -618,7 +864,7 @@
       function message(role, text = "") {
         $("messages").querySelector(".empty")?.remove();
         const el = node("article", `message ${role}`),
-          body = node("div", "body", text),
+          body = node("div", role === "user" ? "body" : "body md"),
           tools = node("div", "tools"),
           metrics = node("div", "metrics");
         el.append(
@@ -628,19 +874,35 @@
           metrics,
         );
         $("messages").append(el);
-        return { el, body, tools, metrics, calls: new Map() };
+        const view = { el, body, tools, metrics, calls: new Map(), raw: text };
+        renderBody(view);
+        return view;
+      }
+      function toolLabel(entry, finished, data) {
+        const duration = data.duration_seconds ?? data.latency_seconds;
+        if (!finished) return `${entry.name} · running`;
+        if (duration != null) return `${entry.name} · ${Number(duration).toFixed(2)}s`;
+        return entry.name;
       }
       function tool(view, data, finished = false) {
         const id = data.call_id || data.id || `${data.name}-${view.calls.size}`;
         let entry = view.calls.get(id);
         if (!entry) {
-          const detail = node("details"),
-            summary = node("summary"),
+          const wrap = node("div", "tool-call"),
+            chip = node("button", "tool-chip"),
+            panel = node("div", "tool-panel"),
             args = node("pre"),
             result = node("pre");
-          detail.append(summary, args, result);
-          view.tools.append(detail);
-          entry = { summary, args, result, name: data.name || "Tool" };
+          chip.type = "button";
+          panel.hidden = true;
+          panel.append(args, result);
+          wrap.append(chip, panel);
+          chip.onclick = () => {
+            wrap.classList.toggle("open");
+            panel.hidden = !wrap.classList.contains("open");
+          };
+          view.tools.append(wrap);
+          entry = { wrap, chip, args, result, name: data.name || "Tool" };
           view.calls.set(id, entry);
         }
         if (data.name) entry.name = data.name;
@@ -652,17 +914,12 @@
               : JSON.stringify(data.arguments, null, 2));
         entry.args.hidden = !entry.args.textContent;
         entry.finished = finished;
-        const duration = data.duration_seconds ?? data.latency_seconds;
-        entry.summary.textContent = `${finished ? (data.ok === false ? "!" : "✓") : "◌"} ${entry.name}${finished ? (duration != null ? ` · ${Number(duration).toFixed(2)}s` : " · complete") : " · running"}`;
+        entry.chip.classList.toggle("running", !finished);
+        entry.chip.textContent = toolLabel(entry, finished, data);
         entry.result.hidden = !finished;
         if (finished)
           entry.result.textContent =
-            "Result\n" +
-            JSON.stringify(
-              data,
-              null,
-              2,
-            );
+            "Result\n" + JSON.stringify(data, null, 2);
       }
       function stats(view, data = {}) {
         view.metrics.replaceChildren();
@@ -695,7 +952,7 @@
             );
           }
         if (data.requests?.length) {
-          const details = node("details");
+          const details = node("details", "metrics-requests");
           details.style.width = "100%";
           details.append(
             node(
@@ -724,6 +981,54 @@
           view.metrics.append(details);
         }
       }
+      function startRename(row, item, choose) {
+        if (row.classList.contains("editing")) return;
+        row.classList.add("editing");
+        const field = node("input", "title-input");
+        field.type = "text";
+        field.maxLength = 80;
+        field.value = item.title || "New conversation";
+        field.setAttribute("aria-label", "Conversation title");
+        let cancelled = false;
+        const finish = async (save) => {
+          if (!row.classList.contains("editing")) return;
+          const next = field.value.trim();
+          row.classList.remove("editing");
+          field.remove();
+          if (!save || cancelled || !next || next === (item.title || "New conversation"))
+            return;
+          try {
+            const updated = await api(
+              `/api/conversations/${encodeURIComponent(item.id)}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: next }),
+              },
+            );
+            item.title = updated.title;
+            choose.textContent = updated.title;
+            choose.title = updated.title;
+            await list();
+          } catch (e) {
+            notice(e.message, true);
+          }
+        };
+        field.onkeydown = (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            field.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancelled = true;
+            finish(false);
+          }
+        };
+        field.onblur = () => finish(true);
+        choose.after(field);
+        field.focus();
+        field.select();
+      }
       async function list() {
         const items = await api("/api/conversations");
         $("conversations").replaceChildren();
@@ -733,14 +1038,25 @@
               `conversation${item.id === currentId ? " active" : ""}`,
             ),
             choose = node("button", "choose", item.title || "New conversation"),
+            rename = node("button", "rename", "✎"),
             remove = node("button", "delete", "×");
-          choose.title = item.title || "New conversation";
+          const label = item.title || "New conversation";
+          choose.title = label;
           choose.onclick = () => open(item.id);
+          rename.title = "Rename conversation";
+          rename.setAttribute("aria-label", `Rename ${label}`);
+          rename.onclick = (event) => {
+            event.stopPropagation();
+            if (loading) return;
+            startRename(row, item, choose);
+          };
+          choose.ondblclick = (event) => {
+            event.preventDefault();
+            if (loading) return;
+            startRename(row, item, choose);
+          };
           remove.title = "Delete conversation";
-          remove.setAttribute(
-            "aria-label",
-            `Delete ${item.title || "conversation"}`,
-          );
+          remove.setAttribute("aria-label", `Delete ${label}`);
           remove.onclick = async () => {
             if (
               busy ||
@@ -767,7 +1083,7 @@
             }
           };
           choose.disabled = remove.disabled = busy || loading;
-          row.append(choose, remove);
+          row.append(choose, rename, remove);
           $("conversations").append(row);
         }
       }
@@ -886,7 +1202,10 @@
               .join("\n");
             if (!raw) return;
             const data = JSON.parse(raw);
-            if (data.type === "text") view.body.textContent += data.text;
+            if (data.type === "text") {
+              view.raw += data.text;
+              renderBody(view);
+            }
             else if (data.type === "tool_start") tool(view, data);
             else if (data.type === "tool_end") tool(view, data, true);
             else if (data.type === "stats") stats(view, data.stats);
@@ -919,8 +1238,10 @@
           const stopped = e.name === "AbortError";
           if (view)
             for (const entry of view.calls.values()) {
-              if (!entry.finished)
-                entry.summary.textContent = `${entry.name} · result unavailable`;
+              if (!entry.finished) {
+                entry.chip.textContent = `${entry.name} · result unavailable`;
+                entry.chip.classList.remove("running");
+              }
             }
           if (view)
             view.el.append(
@@ -973,6 +1294,33 @@
           loading = false;
           lock(false);
         }
+      })();
+      (function resizeSidebar() {
+        const layout = document.querySelector(".layout");
+        const handle = $("sidebar-resizer");
+        const stored = Number(localStorage.getItem("sidebar-width"));
+        const apply = (width) => {
+          const next = Math.min(420, Math.max(188, Math.round(width)));
+          layout.style.setProperty("--sidebar-width", `${next}px`);
+          localStorage.setItem("sidebar-width", String(next));
+        };
+        if (stored >= 188) apply(stored);
+        handle.onpointerdown = (event) => {
+          if (window.matchMedia("(max-width: 720px)").matches) return;
+          event.preventDefault();
+          handle.classList.add("dragging");
+          document.body.classList.add("resizing");
+          handle.setPointerCapture(event.pointerId);
+          const move = (ev) => apply(ev.clientX);
+          const up = () => {
+            handle.classList.remove("dragging");
+            document.body.classList.remove("resizing");
+            handle.removeEventListener("pointermove", move);
+            handle.removeEventListener("pointerup", up);
+          };
+          handle.addEventListener("pointermove", move);
+          handle.addEventListener("pointerup", up);
+        };
       })();
     </script>
   </body>

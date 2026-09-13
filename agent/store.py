@@ -284,6 +284,17 @@ def save(
     )
 
 
+def rename(cid: str, title: str) -> dict[str, str] | None:
+    existing = _db().query("SELECT id FROM conversations WHERE id = ?", [cid])
+    if not existing:
+        return None
+    _db().query(
+        "UPDATE conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [title, cid],
+    )
+    return {"id": cid, "title": title}
+
+
 def delete(cid: str) -> None:
     _db().query("DELETE FROM conversations WHERE id = ?", [cid])
 
