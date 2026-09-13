@@ -151,18 +151,24 @@ Next steps:
        export ONOS_USER=onos
        export ONOS_PASSWORD=rocks
 
-  3. Launch the main project topology (Mininet still needs root):
+  3. Launch the main project topology (Mininet still needs root).
+     Session helper:
+       ./scripts/testbed.sh start
+     Or interactive Mininet:
        sudo mn -c
        sudo mn --custom topologies/main_topology.py \\
          --topo main6s8h \\
          --controller=remote,ip=127.0.0.1,port=${OF_PORT} \\
          --switch=ovsk
 
-  4. Install deterministic baseline forwarding, then collect evidence:
+  4. If you used interactive Mininet, install deterministic baseline forwarding:
        python3 forwarding/baseline_forwarding.py install
        sudo ./scripts/verify_main_openflow.sh
+     ./scripts/testbed.sh start already installs baseline flows.
 
-  5. Clean up Mininet after exiting:
+  5. Clean up:
+       ./scripts/testbed.sh stop
+     After an interactive Mininet CLI:
        sudo mn -c
 
 Stop ONOS with the same Docker access this script selected:

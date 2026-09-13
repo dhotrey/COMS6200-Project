@@ -12,6 +12,10 @@ uv run --project agent python -m agent.setup_d1
 uv run --project agent python -m agent
 ```
 
+`python -m agent` re-executes with sudo so ping/iperf can enter Mininet
+namespaces. It loads the root `.env` and defaults ONOS REST to `onos` / `rocks`
+if those variables are unset. Stop any previous non-root agent process first.
+
 Open http://127.0.0.1:8000. Opening `index.html` directly is a preview only:
 model/thinking pickers work, but chat and saved history require the server. With
 D1 configured, the UI and history work without AI Gateway credentials; sending
@@ -33,6 +37,8 @@ Existing environment variables take precedence. Restart after configuration chan
 - `CLOUDFLARE_BYOK_ALIAS`: optional stored-key alias (otherwise Cloudflare's default).
 - `LOGFIRE_TOKEN`: optional Logfire project write token. Missing means export disabled.
 - Existing `ONOS_USER` / `ONOS_PASSWORD` configure telemetry; never sent to the model.
+  If omitted, the harness uses the reference lab pair `onos` / `rocks`. You can also
+  put them in the root `.env`.
 
 The D1 account token and AI Gateway authentication token are different
 credentials. Do not substitute `CLOUDFLARE_AI_GATEWAY_API_TOKEN` for
@@ -60,21 +66,25 @@ D1. The ignored legacy `agent/chat.sqlite3` is not read, migrated, or deleted.
 
 ## Fault scenario picker
 
-The UI includes a preview picker for F1–F5. **Load scenario is disabled** until
-operator fault injection is connected. Selection is browser-only: it is not sent
-in chat requests, saved as conversation context, or applied to the network.
-For now, inject/reset faults separately using the existing operator workflow.
+The UI includes a picker for F1–F5. **Load scenario** injects the chosen
+catalogue fault on the live network (resetting any active catalogue fault first).
+**Reset** clears it. The picker value is not sent in chat requests, stored as
+assistant context, or added to the system prompt. Describe a symptom; do not name
+the scenario. Start a new conversation after changing the fault.
 
 ## Network access
 
-Run beside the existing Mininet/ONOS installation. Start the topology and baseline
-using the root user manual. The six tools directly use `telemetry.TelemetryGateway`;
-`nmap` returns `NOT_IMPLEMENTED`. There is no fault-state/injector access in the agent.
-Inject/reset scenarios separately; start a new conversation for an independent run.
+Run beside the existing Mininet/ONOS installation. Session helper:
+`./scripts/testbed.sh start`. Load F1–F5 from the UI or `./scripts/testbed.sh inject F1`.
+The six tools directly use `telemetry.TelemetryGateway`; `nmap` returns
+`NOT_IMPLEMENTED`. Inject/reset is operator-only and is not an LLM tool.
+Start a new conversation after changing the fault.
 
-Host probes require access to Mininet namespaces, usually root. If needed, launch
-with the same configured environment and `sudo --preserve-env=ONOS_USER,ONOS_PASSWORD agent/.venv/bin/python -m agent` from the root. Keep the UI bound to loopback;
-this local research app has no authentication. Use an SSH tunnel for remote access.
+Host probes require access to Mininet namespaces, usually root. `python -m agent`
+now re-executes with sudo and preserves ONOS plus Cloudflare variables. To skip
+that (tests or an already-privileged process), set `COMS6200_AGENT_NO_SUDO=1`.
+Keep the UI bound to loopback; this local research app has no authentication.
+Use an SSH tunnel for remote access.
 
 ## Measurements and limits
 
@@ -94,10 +104,11 @@ sent to the model. One turn runs at a time to avoid overlapping network probes.
 Stop closes model streaming; an already-running bounded diagnostic finishes its
 cleanup before another turn can start.
 
-Defaults: 10 tool calls, 300 seconds, 32,000 reported tokens per turn. A token
-threshold stops subsequent requests and bounds output; it is not a hard billing
-cap because each request also incurs input tokens. Set gateway spend limits for a
-financial cap. A final answer is requested after the tool budget is exhausted.
+Defaults: 10 tool calls and 300 seconds per turn. The per-turn token stop is
+off (`MAX_TURN_TOKENS=0`). Set a positive value to restore it. A per-request
+output cap of 8,192 tokens remains. This is not a billing cap; set gateway spend
+limits for a financial cap. A final answer is requested after the tool budget is
+exhausted.
 
 Cloudflare D1 stores conversations, provider context, tool results and statistics.
 Logfire receives model/tool timing spans and turn metrics when configured. Tool
@@ -106,6 +117,7 @@ observations may be exported to that Logfire project.
 ## Files
 
 - `server.py`: routes and streamed turn lifecycle.
+- `fault_control.py`: operator F1–F5 load/reset for the UI (not an LLM tool).
 - `loop.py`: complete model/tool loop and measurements.
 - `tools.py`: existing tool adapter and nmap placeholder.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.

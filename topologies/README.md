@@ -130,6 +130,8 @@ only as a design reference.
 
 **STEP 2 — Mininet**
 
+Session helper (background, no CLI): `./scripts/testbed.sh start` from the repository root. That also starts OVS/ONOS if needed and installs baseline flows. Manual equivalent:
+
 ```bash
 sudo mn \
   --custom topologies/main_topology.py \

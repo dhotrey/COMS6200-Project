@@ -410,6 +410,31 @@ def test_hybrid_topology_does_not_use_onos_hosts() -> None:
     assert {row["role"] for row in h6} == {"primary", "secondary"}
 
 
+def test_host_exec_permission_denied_is_not_parse_error() -> None:
+    from unittest.mock import patch
+
+    from telemetry.host_exec import HostExecError, run_in_host
+
+    completed = subprocess.CompletedProcess(
+        args=["mnexec"],
+        returncode=1,
+        stdout="",
+        stderr="mnexec: Permission denied\n",
+    )
+    with (
+        patch("telemetry.host_exec.find_host_pid", return_value=1),
+        patch("telemetry.host_exec._is_host_shell", return_value=True),
+        patch("telemetry.host_exec._mnexec", return_value="/usr/bin/mnexec"),
+        patch("telemetry.host_exec.subprocess.run", return_value=completed),
+    ):
+        try:
+            run_in_host("h1", ["ping", "-n", "-c", "1", "10.0.0.5"], timeout_s=2.0)
+        except HostExecError as exc:
+            assert exc.code == "HOST_NAMESPACE_DENIED"
+            return
+        raise AssertionError("expected HOST_NAMESPACE_DENIED")
+
+
 def test_tool_schemas_reject_arbitrary_properties() -> None:
     validate_arguments("get_topology", {})
     validate_arguments("ping", {"src": "h1", "dst": "h5"})
@@ -536,6 +561,7 @@ def main() -> int:
         test_error_envelope,
         test_gateway_validation_errors_use_envelope,
         test_hybrid_topology_does_not_use_onos_hosts,
+        test_host_exec_permission_denied_is_not_parse_error,
         test_tool_schemas_reject_arbitrary_properties,
         test_onos_client_has_no_generic_or_hosts_path,
         test_no_shell_true_in_telemetry_package,

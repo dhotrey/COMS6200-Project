@@ -643,8 +643,9 @@
             <option value="F4">F4 · Forwarding loop</option>
             <option value="F5">F5 · Missing / incorrect flow rule</option>
           </select>
-          <button type="button" disabled title="Fault injection is not connected yet">Load scenario</button>
-          <p id="scenario-note">Preview only — scenario loading is not connected. Selecting a fault does not change the network or tell the assistant which fault you chose.</p>
+          <button type="button" id="load-scenario">Load scenario</button>
+          <button type="button" id="reset-scenario">Reset</button>
+          <p id="scenario-note">Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.</p>
         </section>
         <div class="banner" id="banner" hidden role="status"></div>
         <section class="timeline" id="timeline" aria-label="Chat messages">
@@ -722,7 +723,9 @@
       function lock(value) {
         busy = value;
         document
-          .querySelectorAll(".sidebar button, .selectors select")
+          .querySelectorAll(
+            ".sidebar button, .selectors select, #scenario, #load-scenario, #reset-scenario",
+          )
           .forEach((el) => {
             if (el.classList.contains("rename")) return;
             el.disabled = value || loading;
@@ -1129,6 +1132,76 @@
             : available[0] || "";
       }
       $("model").onchange = efforts;
+      const scenarioHint =
+        "Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
+      function showScenario(status) {
+        if (!status) {
+          $("scenario-note").textContent = scenarioHint;
+          return;
+        }
+        if (status.active && status.scenario_id) {
+          $("scenario").value = status.scenario_id;
+          $("scenario-note").textContent =
+            "Network has " +
+            status.scenario_id +
+            " active (operator view only). " +
+            scenarioHint;
+          return;
+        }
+        $("scenario-note").textContent =
+          (status.error ? status.error + " " : "No catalogue fault is active. ") +
+          scenarioHint;
+      }
+      async function refreshScenario() {
+        if (location.protocol === "file:") return;
+        showScenario(await api("/api/scenario"));
+      }
+      $("load-scenario").onclick = async () => {
+        const scenario = $("scenario").value;
+        if (!scenario || busy || loading) return;
+        loading = true;
+        lock(false);
+        try {
+          const status = await api("/api/scenario/load", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scenario }),
+          });
+          showScenario(status);
+          notice(
+            "Loaded " +
+              scenario +
+              " on the network. The assistant is not told the scenario id — describe a symptom. Start a new conversation for a clean run.",
+          );
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+        }
+      };
+      $("reset-scenario").onclick = async () => {
+        if (busy || loading) return;
+        loading = true;
+        lock(false);
+        try {
+          showScenario(
+            await api("/api/scenario/reset", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            }),
+          );
+          notice(
+            "Catalogue fault reset. Start a new conversation so old tool results are not reused.",
+          );
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+        }
+      };
       $("new").onclick = () => {
         if (busy || loading) return;
         currentId = null;
@@ -1283,6 +1356,7 @@
           if (!$("model").value && config.models.length)
             $("model").value = config.models[0].id;
           efforts();
+          await refreshScenario();
           if (!config.configured)
             notice(
               "Gateway credentials are not configured yet. Add them to the root .env file to start chatting.",

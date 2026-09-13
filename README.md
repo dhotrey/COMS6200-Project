@@ -212,7 +212,15 @@ ONOS is a **separate** step. Do not expect `setup_ubuntu.sh` to install it:
 ./scripts/verify_onos.sh
 ```
 
-Wait until ONOS is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server). Then launch the main topology:
+Wait until ONOS is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server). Then either use the session helper (background Mininet, no `mininet>` prompt):
+
+```bash
+./scripts/testbed.sh start
+./scripts/testbed.sh inject F1    # F1–F5; also accepted: f1 or 1
+./scripts/testbed.sh stop
+```
+
+Or launch the main topology interactively:
 
 ```bash
 sudo mn -c
@@ -247,6 +255,7 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `setup/setup_ubuntu.sh` | Base Mininet / OVS environment (M0) |
 | `setup/setup_onos.sh` | ONOS 2.7.0 controller environment (M2) |
 | `setup/verify_environment.sh` | Base Mininet / OVS capability verification |
+| `scripts/testbed.sh` | Session start/stop plus F1–F5 inject/reset (operator helper; not an LLM tool) |
 | `scripts/verify_onos.sh` | ONOS health and REST/OpenFlow verification |
 | `scripts/verify_main_openflow.sh` | Running topology / OVS OpenFlow verification |
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |

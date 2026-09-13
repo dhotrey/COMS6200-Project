@@ -1,13 +1,29 @@
 """Local settings. Provider keys stay in Cloudflare; secrets never reach the UI."""
 import json
 import os
+import sys
 from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT.parent / ".env")
+REPO_ROOT = ROOT.parent
+load_dotenv(REPO_ROOT / ".env")
+# Reference lab ONOS REST. Override with env or root .env; never sent to the model.
+if not os.environ.get("ONOS_USER", "").strip():
+    os.environ["ONOS_USER"] = "onos"
+if os.environ.get("ONOS_PASSWORD", "") == "":
+    os.environ["ONOS_PASSWORD"] = "rocks"
+_SUDO_ENV = (
+    "ONOS_USER", "ONOS_PASSWORD", "ONOS_URL", "ONOS_HOST", "ONOS_OF_PORT",
+    "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_D1_DATABASE_ID",
+    "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_AI_GATEWAY_API_TOKEN",
+    "CLOUDFLARE_BYOK_ALIAS", "LOGFIRE_TOKEN",
+    "TOOL_DELAY_MIN_SECONDS", "TOOL_DELAY_MAX_SECONDS",
+    "MAX_TOOL_CALLS", "MAX_TURN_SECONDS", "MAX_TURN_TOKENS",
+    "PYTHONPATH",
+)
 EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 MODELS = [
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": EFFORTS},
@@ -31,6 +47,22 @@ def d1_settings() -> tuple[str, str, str]:
 def configured():
     return all(os.getenv(k, "").strip() for k in (
         "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_AI_GATEWAY_API_TOKEN"))
+
+
+def ensure_mininet_privileges() -> None:
+    """Re-exec with sudo so ping/iperf can enter Mininet host namespaces."""
+    if os.geteuid() == 0:
+        return
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("COMS6200_AGENT_NO_SUDO"):
+        return
+    pythonpath = os.environ.get("PYTHONPATH", "")
+    root = str(REPO_ROOT)
+    os.environ["PYTHONPATH"] = root if not pythonpath else f"{root}:{pythonpath}"
+    print("Re-executing with sudo so ping/iperf can enter Mininet host namespaces.", flush=True)
+    os.execvp("sudo", [
+        "sudo", f"--preserve-env={','.join(_SUDO_ENV)}",
+        sys.executable, "-m", "agent",
+    ])
 
 
 class GatewayClient:

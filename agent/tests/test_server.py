@@ -140,3 +140,45 @@ def test_failed_or_cancelled_turn_drops_unpaired_tools(client, monkeypatch, fail
     assert saved["messages"][1]["stats"]["usage_complete"] is False
     assert server.busy is False
     server.app.state.client = None
+
+
+def test_chat_request_forbids_scenario_field(client):
+    payload = body("unused")
+    payload["scenario"] = "F1"
+    assert client.post("/api/chat", json=payload).status_code == 422
+
+
+def test_load_endpoint_reset_and_unknown_scenario(client, monkeypatch):
+    monkeypatch.setattr(
+        server.fault_control,
+        "load_scenario",
+        lambda sid: {
+            "ok": True,
+            "active": True,
+            "scenario_id": sid,
+            "runnable": ["F1"],
+            "error": None,
+        },
+    )
+    loaded = client.post("/api/scenario/load", json={"scenario": "F1"})
+    assert loaded.status_code == 200
+    assert loaded.json()["scenario_id"] == "F1"
+    assert "ground_truth" not in loaded.json()
+    assert client.post("/api/scenario/load", json={"scenario": "F9"}).status_code == 422
+    monkeypatch.setattr(server, "busy", True)
+    assert client.post("/api/scenario/load", json={"scenario": "F1"}).status_code == 409
+    monkeypatch.setattr(server, "busy", False)
+    monkeypatch.setattr(
+        server.fault_control,
+        "reset_scenario",
+        lambda: {
+            "ok": True,
+            "active": False,
+            "scenario_id": None,
+            "runnable": ["F1"],
+            "error": None,
+        },
+    )
+    reset = client.post("/api/scenario/reset")
+    assert reset.status_code == 200
+    assert reset.json()["active"] is False

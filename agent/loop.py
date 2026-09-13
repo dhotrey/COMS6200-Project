@@ -20,24 +20,27 @@ async def run(client, history, model, effort, state):
                  total_tokens=0, model_calls=0, tool_calls=0, invalid_tool_calls=0,
                  cost_usd=0.0, first_token_seconds=None, requests=[], usage_complete=True)
     max_calls = int(os.getenv("MAX_TOOL_CALLS", "10"))
-    max_tokens = int(os.getenv("MAX_TURN_TOKENS", "32000"))
+    max_tokens = int(os.getenv("MAX_TURN_TOKENS", "0"))
     try:
         async with asyncio.timeout(float(os.getenv("MAX_TURN_SECONDS", "300"))):
             while True:
                 if stats["model_calls"] >= max_calls + 2:
                     raise RuntimeError("Model request limit reached.")
-                if stats["total_tokens"] >= max_tokens:
+                if max_tokens > 0 and stats["total_tokens"] >= max_tokens:
                     raise RuntimeError("Turn token budget reached.")
                 call_started = time.perf_counter()
                 stats["model_calls"] += 1
                 response = None
                 with logfire.span("model request", model=model, effort=effort) as span:
+                    output_limit = 8192
+                    if max_tokens > 0:
+                        output_limit = min(8192, max(1, max_tokens - stats["total_tokens"]))
                     payload = {
                         "model": model, "reasoning": {"effort": effort}, "instructions": prompt,
                         "input": history, "tools": TOOLS, "parallel_tool_calls": False, "store": False,
                         "include": ["reasoning.encrypted_content"], "stream": True,
                         "tool_choice": "none" if stats["tool_calls"] >= max_calls else "auto",
-                        "max_output_tokens": min(8192, max_tokens - stats["total_tokens"]),
+                        "max_output_tokens": output_limit,
                     }
                     async for event in client.stream_events(payload):
                         if event.get("type") in ("response.output_text.delta", "response.refusal.delta"):

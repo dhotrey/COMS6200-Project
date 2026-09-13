@@ -99,7 +99,7 @@ def run_in_host(
         raise HostExecError("HOST_NAMESPACE_NOT_FOUND", f"stale namespace pid for {host}")
     command = [_mnexec(), "-a", str(pid), "--", *argv]
     try:
-        return subprocess.run(
+        completed = subprocess.run(
             command,
             check=False,
             shell=False,
@@ -113,6 +113,13 @@ def run_in_host(
         raise HostExecError("TOPOLOGY_NOT_RUNNING", "mnexec is not available") from exc
     except ValidationError:
         raise
+    blob = f"{completed.stdout or ''}\n{completed.stderr or ''}".lower()
+    if completed.returncode != 0 and "permission denied" in blob:
+        raise HostExecError(
+            "HOST_NAMESPACE_DENIED",
+            "cannot enter Mininet host namespace (run the diagnostic process as root)",
+        )
+    return completed
 
 
 def start_in_host(host: str, argv: list[str]) -> subprocess.Popen[str]:

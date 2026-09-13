@@ -91,3 +91,45 @@ def test_tool_budget_never_executes_excess_calls(monkeypatch):
     outputs = [item for item in history if item["type"] == "function_call_output"]
     assert [item["call_id"] for item in outputs] == ["one", "two"]
     assert json.loads(outputs[1]["output"])["error"] == "Tool budget reached"
+
+
+def test_zero_token_budget_does_not_stop_later_rounds(monkeypatch):
+    monkeypatch.setenv("MAX_TURN_TOKENS", "0")
+    monkeypatch.setenv("MAX_TOOL_CALLS", "2")
+
+    async def execute(name, arguments):
+        return {"ok": True, "data": {}, "invalid": False}
+
+    monkeypatch.setattr(loop, "execute_tool", execute)
+    client = FakeClient(
+        response(call("one"), tokens=(20000, 20000, 0, 0)),
+        response(message("Done"), tokens=(20000, 20000, 0, 0)),
+    )
+    state = {"content": "", "tools": [], "stats": {}}
+    history = []
+
+    async def collect():
+        return [event async for event in loop.run(client, history, "gpt-5.6-luna", "medium", state)]
+
+    events = asyncio.run(collect())
+    assert state["content"] == "Done"
+    assert state["stats"]["total_tokens"] == 80000
+    assert client.requests[1]["max_output_tokens"] == 8192
+    assert "error" not in {event["type"] for event in events}
+
+
+def test_positive_token_budget_still_stops_later_rounds(monkeypatch):
+    monkeypatch.setenv("MAX_TURN_TOKENS", "30")
+
+    async def execute(name, arguments):
+        return {"ok": True, "data": {}, "invalid": False}
+
+    monkeypatch.setattr(loop, "execute_tool", execute)
+    client = FakeClient(response(call("one"), tokens=(20, 20, 0, 0)), response(message("Done")))
+    state = {"content": "", "tools": [], "stats": {}}
+
+    async def collect():
+        return [event async for event in loop.run(client, [], "gpt-5.6-luna", "medium", state)]
+
+    with pytest.raises(RuntimeError, match="Turn token budget reached"):
+        asyncio.run(collect())

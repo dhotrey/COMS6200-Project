@@ -56,7 +56,7 @@ sections must not invent CLIs.
 6. [ONOS controller](#onos-controller)
 7. [Main experimental topology](#main-experimental-topology)
 8. [Host addressing](#host-addressing)
-9. [Starting the network](#starting-the-network)
+9. [Starting the network](#starting-the-network) (includes [session start / stop / inject](#session-start--stop--inject))
 10. [Verifying controller integration](#verifying-controller-integration)
 11. [ONOS host discovery](#onos-host-discovery)
 12. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
@@ -278,7 +278,7 @@ docker start onos
 
 Try `docker info` **without** sudo first. If it succeeds, run all Docker commands as the current user. `setup/setup_onos.sh` does the same: it uses `docker` directly when `docker info` works, and falls back to `sudo docker` only when direct access fails. It does **not** add users to the `docker` group or change socket permissions.
 
-Mininet is separate: `sudo mn -c` and `sudo mn --custom ...` remain required on typical Linux hosts.
+Mininet is separate: `sudo mn -c` and `sudo mn --custom ...` remain required on typical Linux hosts if you use the interactive CLI. `./scripts/testbed.sh start` starts the same topology in the background.
 
 Wait until OpenFlow is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server).
 
@@ -443,6 +443,24 @@ h6 secondary is unused by baseline forwarding. No bonding, LACP, MLAG, VRRP, or 
 ## Starting the network
 
 ONOS must be up first. Switches request OpenFlow 1.3 and secure fail mode in the topology. Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`.
+
+### Session start / stop / inject
+
+Operator convenience for bringing a **previously installed** testbed up and down. It does not install Mininet, OVS, Docker, or the ONOS image — run `./setup/setup_ubuntu.sh` and `./setup/setup_onos.sh` once first. This helper has **not** been claimed as Ubuntu milestone evidence; the manual `mn` path below remains valid.
+
+```bash
+./scripts/testbed.sh start           # OVS + ONOS + background main6s8h + baseline flows
+./scripts/testbed.sh inject F1       # or F2 F3 F4 F5 (also accepted: f1 or 1)
+./scripts/testbed.sh reset           # clear the active catalogue fault
+./scripts/testbed.sh status
+./scripts/testbed.sh stop            # reset fault, stop Mininet, stop ONOS (OVS stays up)
+```
+
+`start` leaves Mininet running in the background (no `mininet>` prompt). Host `ping`/`iperf` through the telemetry gateway still work. `inject` resets any already-active catalogue fault first, then injects the requested scenario. Do not tell the LLM the scenario id.
+
+If an interactive `mininet>` session already owns the switches, exit it or run `stop` before `start`. First-time ONOS install is still `./setup/setup_onos.sh`. REST defaults to `onos` / `rocks`; override with `ONOS_USER` / `ONOS_PASSWORD`.
+
+The same steps, expanded by hand:
 
 ```bash
 ./setup/setup_onos.sh          # or: docker start onos
@@ -831,6 +849,20 @@ the diagnostic agent. Telemetry must never import fault state.
 
 Requires **root** for mutations. The injector does **not** call `sudo` internally.
 
+The harness UI **Load scenario** / **Reset** buttons call the same injector
+(`POST /api/scenario/load` and `POST /api/scenario/reset`). They do not put the
+scenario id in the chat prompt or tool schemas.
+
+Session wrapper (resets an already-active catalogue fault before inject):
+
+```bash
+./scripts/testbed.sh inject F1   # or F2 F3 F4 F5
+./scripts/testbed.sh reset
+./scripts/testbed.sh status
+```
+
+Underlying operator CLI (same injector; `inject` here does **not** auto-reset):
+
 ```bash
 export ONOS_USER=onos
 export ONOS_PASSWORD=rocks
@@ -921,14 +953,19 @@ Those prompts invalidate a fair comparison.
 
 ## Asking the LLM for a diagnosis
 
-The conversational starter harness lives in `agent/`. From the repository root:
+The conversational starter harness lives in `agent/`. Bring the testbed up first
+(`./scripts/testbed.sh start` and `./scripts/testbed.sh inject Fn`, or the
+manual Mininet path). From the repository root:
 
 ```sh
 uv sync --project agent
 uv run --project agent python -m agent
 ```
 
-Open http://127.0.0.1:8000. A directly opened `agent/index.html` is preview-only;
+`python -m agent` asks for sudo so ping/iperf can enter Mininet namespaces, and
+uses reference-lab ONOS REST `onos` / `rocks` unless `ONOS_USER` / `ONOS_PASSWORD`
+are already set (shell or root `.env`). Stop any older non-root agent process
+before restarting. Open http://127.0.0.1:8000. A directly opened `agent/index.html` is preview-only;
 its pickers work, but chat/history require the Python server. Copy `.env.example` to `.env` and populate
 `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_AI_GATEWAY_ID`, and
@@ -957,12 +994,16 @@ the create/save/read/delete smoke test passed, and cleanup restored
 Six existing telemetry tools are reused on the same machine; `nmap` is a
 placeholder returning `NOT_IMPLEMENTED`. Host probes retain Mininet namespace
 privilege requirements. Follow [agent setup](../agent/README.md) for launch,
-privileges, limits, Logfire, and offline tests. Run one server worker.
+privileges, limits, Logfire, and offline tests. Run one server worker. Bring
+the testbed up with `./scripts/testbed.sh start` (or interactive `mn`) before
+sending diagnosis prompts.
 
 The model picker offers Luna, Terra, Sol and Astra with supported thinking levels.
-A separate fault picker previews F1–F5. Its **Load scenario** button is disabled;
-fault injection/reset still uses the operator workflow above. The selection stays
-in the browser and is not sent to the assistant or applied to the network.
+A separate fault picker can **Load** or **Reset** F1–F5 on the live network.
+That mutation is operator-only: the selected id is not sent in chat requests,
+saved as assistant context, or written into the system prompt. Describe a
+symptom; do not name F1–F5. Start a new conversation after changing the fault.
+`./scripts/testbed.sh inject F1` remains valid.
 Conversation history and turn measurements are stored in Cloudflare D1.
 The chat window renders assistant Markdown (lists, emphasis, code). Tool calls
 appear as faint one-line labels until hovered or clicked. The conversation
@@ -972,8 +1013,11 @@ Tool delays default to a random 1–10 seconds for telemetry testing; set both
 `TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0` for research runs.
 Execution and artificial-delay timings are recorded separately. Stop cancels
 model generation; an in-flight bounded probe must finish cleanup before another
-turn. Start a new conversation after resetting/changing scenarios to avoid stale
-context. This harness does not load fault labels or injector state.
+turn. Follow-up questions in the same conversation are supported: each send
+appends to that conversation’s stored history. Start a new conversation after
+resetting/changing scenarios to avoid stale context. The per-turn token stop is
+off (`MAX_TURN_TOKENS=0`); tool-call and 300-second limits remain. This harness
+does not load fault labels or injector state.
 
 Example symptom-only prompts:
 
@@ -1024,6 +1068,15 @@ Both methods will call the same existing `TelemetryGateway` (M6 / scripted basel
 ---
 
 ## Resetting the testbed
+
+### Session stop
+
+```bash
+./scripts/testbed.sh reset    # clear F1–F5, leave Mininet/ONOS up
+./scripts/testbed.sh stop     # reset fault, stop Mininet, stop ONOS
+```
+
+`stop` leaves the Open vSwitch service running. The next session is `./scripts/testbed.sh start`.
 
 ### Available today ✅
 
@@ -1111,13 +1164,18 @@ Disable it for baseline experiments. The project must not use reactive forwardin
 
 Violates deterministic loop-free design. Do not enable them to “fix” ping. Use `org.coms6200.baseline` instead.
 
+### Session helper refuses to start (`s1 already exists`)
+
+An interactive `mininet>` session is already running, or a previous helper did not stop cleanly. Exit Mininet or run `./scripts/testbed.sh stop`, then `start` again.
+
 ### Stale Mininet / OVS state
 
 ```bash
-sudo mn -c
+./scripts/testbed.sh stop
+./scripts/testbed.sh start
 ```
 
-Then relaunch `main6s8h` and `python3 forwarding/baseline_forwarding.py install`.
+Or by hand: `sudo mn -c`, relaunch `main6s8h`, then `python3 forwarding/baseline_forwarding.py install`.
 
 ### Telemetry `ONOS_UNAVAILABLE` / `ONOS_AUTH_FAILED`
 
@@ -1148,6 +1206,18 @@ Confirm iperf3 is installed on the Ubuntu host (`iperf3 -v`). Re-run; the gatewa
 ### Telemetry `COMMAND_TIMEOUT` / `PARSE_ERROR`
 
 Bounded ping/iperf hit the hard timeout, or output was not parseable. This is a tool failure (`ok: false`), not a connectivity diagnosis. Check the host namespace is healthy with a Mininet CLI ping before retrying.
+
+### Agent tools report `ONOS_AUTH_FAILED` / ping `PARSE_ERROR` / iperf `Permission denied`
+
+The chat process was missing ONOS REST credentials or was not root. Stop the old
+server (Ctrl-C) and start it again from the repo root:
+
+```bash
+uv run --project agent python -m agent
+```
+
+Allow the sudo re-exec. You should see `uid=0` and `ONOS REST user=onos`. Then
+start a **new** conversation; old failed tool results stay in the previous thread.
 
 ### Agent fails to start because D1 is unavailable
 
@@ -1204,16 +1274,16 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 
 1. `./setup/setup_ubuntu.sh` then `./setup/verify_environment.sh`
 2. `./setup/setup_onos.sh` then `./scripts/verify_onos.sh`
-3. Launch `main6s8h` (see [Starting the network](#starting-the-network))
+3. Launch `main6s8h` — session helper `./scripts/testbed.sh start`, or the manual `mn` path in [Starting the network](#starting-the-network)
 4. `sudo ./scripts/verify_main_openflow.sh` and `./scripts/verify_onos.sh`
-5. `python3 forwarding/baseline_forwarding.py install` then `verify`
-6. Mininet `pingall` → 56/56, 0% dropped
+5. Baseline flows: `start` already installs them; otherwise `python3 forwarding/baseline_forwarding.py install` then `verify`
+6. Mininet `pingall` → 56/56, 0% dropped (interactive CLI only; background helper has no `mininet>` prompt)
 7. Collect structured telemetry ✅ (`python3 -m telemetry.cli get-topology`; `./scripts/verify_telemetry.sh`)
-8. Inject F1 ✅ (`python3 -m faults.cli inject --scenario F1`)
+8. Inject F1 ✅ (`./scripts/testbed.sh inject F1` or `python3 -m faults.cli inject --scenario F1`)
 9. Observe with telemetry ✅ (targeted pings / topology / ports)
-10. Reset F1 ✅ (`python3 -m faults.cli reset`; or `./scripts/verify_fault_f1.sh`)
+10. Reset F1 ✅ (`./scripts/testbed.sh reset`; or `python3 -m faults.cli reset`; or `./scripts/verify_fault_f1.sh`)
 11. Verify healthy baseline again ✅ (20 directed links; pingall 56/56)
-12. `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
+12. Session teardown `./scripts/testbed.sh stop`, or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
 
 ### B. Full planned experiment workflow 🟡
 
@@ -1241,7 +1311,7 @@ Unfinished steps are marked.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` |
+| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` |
 | `topologies/` | `main_topology.py`, canonical `spec.py`, plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
 | `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |

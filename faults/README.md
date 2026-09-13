@@ -23,6 +23,8 @@ python3 -m faults.cli status
 python3 -m faults.cli reset
 ```
 
+Session wrapper (auto-resets an active fault before inject): `./scripts/testbed.sh inject F2`.
+
 Requires root for mutations. Does not invoke `sudo` internally.
 No `--interface`, `--cmd`, `--rate`, `--pid`, or arbitrary flow IDs.
 

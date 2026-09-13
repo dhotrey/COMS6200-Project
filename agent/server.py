@@ -7,9 +7,9 @@ from contextlib import asynccontextmanager
 import logfire
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from . import config, store
+from . import config, fault_control, store
 from .loop import run
 
 busy = False
@@ -90,10 +90,46 @@ def rename(cid: str, body: RenameRequest):
 
 
 class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     conversation_id: str
     message: str = Field(min_length=1, max_length=16000)
     model: str
     effort: str
+
+
+class LoadScenarioRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scenario: str = Field(min_length=2, max_length=2)
+
+
+def _scenario_http(result: dict) -> dict:
+    if result.get("ok"):
+        return result
+    message = result.get("error") or "scenario change failed"
+    status_code = 503 if "root" in message.lower() else 409
+    raise HTTPException(status_code, message)
+
+
+@app.get("/api/scenario")
+def scenario_status():
+    return fault_control.public_status()
+
+
+@app.post("/api/scenario/load")
+async def scenario_load(body: LoadScenarioRequest):
+    if busy:
+        raise HTTPException(409, "Stop the current turn before changing the scenario")
+    scenario = body.scenario.strip().upper()
+    if scenario not in fault_control.RUNNABLE:
+        raise HTTPException(422, "scenario must be F1–F5")
+    return _scenario_http(await asyncio.to_thread(fault_control.load_scenario, scenario))
+
+
+@app.post("/api/scenario/reset")
+async def scenario_reset():
+    if busy:
+        raise HTTPException(409, "Stop the current turn before resetting the scenario")
+    return _scenario_http(await asyncio.to_thread(fault_control.reset_scenario))
 
 
 @app.post("/api/chat")
