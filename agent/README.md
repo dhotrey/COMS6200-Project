@@ -1,19 +1,21 @@
 # Network Lab
 
 Small conversational debugging harness: vanilla HTML chat, FastAPI, one OpenAI
-Responses tool loop, existing telemetry tools, and SQLite. No LangChain, RAG,
-ingestion, frontend dependencies, or additional services.
+Responses tool loop, existing telemetry tools, and Cloudflare D1. No LangChain,
+RAG, ingestion, frontend dependencies, or additional local services.
 
 From the repository root:
 
 ```sh
 uv sync --project agent
+uv run --project agent python -m agent.setup_d1
 uv run --project agent python -m agent
 ```
 
 Open http://127.0.0.1:8000. Opening `index.html` directly is a preview only:
-model/thinking pickers work, but chat and saved history require the server. The UI and history work without credentials; sending
-messages requires Cloudflare configuration. Keep one server process/worker.
+model/thinking pickers work, but chat and saved history require the server. With
+D1 configured, the UI and history work without AI Gateway credentials; sending
+messages requires AI Gateway configuration. Keep one server process/worker.
 
 ## Credentials
 
@@ -21,6 +23,8 @@ Add the entries from `.env.example` to the **repository-root `.env`**.
 Existing environment variables take precedence. Restart after configuration changes.
 
 - `CLOUDFLARE_ACCOUNT_ID`: account ID.
+- `CLOUDFLARE_API_TOKEN`: account API token with D1 Write access.
+- `CLOUDFLARE_D1_DATABASE_ID`: UUID of the D1 database used for chat storage.
 - `CLOUDFLARE_AI_GATEWAY_ID`: gateway name/ID.
 - `CLOUDFLARE_AI_GATEWAY_API_TOKEN`: authenticated gateway token.
 - Store your **OpenAI API key in Cloudflare AI Gateway BYOK**; it is not needed locally.
@@ -28,9 +32,29 @@ Existing environment variables take precedence. Restart after configuration chan
 - `LOGFIRE_TOKEN`: optional Logfire project write token. Missing means export disabled.
 - Existing `ONOS_USER` / `ONOS_PASSWORD` configure telemetry; never sent to the model.
 
+The D1 account token and AI Gateway authentication token are different
+credentials. Do not substitute `CLOUDFLARE_AI_GATEWAY_API_TOKEN` for
+`CLOUDFLARE_API_TOKEN`.
+
 The server sends requests to the gateway's `/openai/responses` endpoint. Provider
 Authorization is omitted so Cloudflare supplies its stored key. Gateway response
 caching is bypassed. No automatic retries hide extra calls or delays.
+
+## Cloudflare D1
+
+The harness follows the same official Cloudflare Python SDK pattern used by
+Kirana. Apply and verify the idempotent schema before first launch:
+
+```sh
+uv run --project agent python -m agent.setup_d1
+```
+
+The command creates `conversations` and `messages`, the message lookup index, and
+the cascading foreign key. No seed rows are required. The server runs the same
+schema check at startup and refuses to start if D1 is unavailable or malformed.
+
+Conversation creation, history, tool results, and turn statistics now go only to
+D1. The ignored legacy `agent/chat.sqlite3` is not read, migrated, or deleted.
 
 ## Fault scenario picker
 
@@ -73,16 +97,17 @@ threshold stops subsequent requests and bounds output; it is not a hard billing
 cap because each request also incurs input tokens. Set gateway spend limits for a
 financial cap. A final answer is requested after the tool budget is exhausted.
 
-`agent/chat.sqlite3` (Git-ignored) stores conversations, provider context, tool
-results and statistics. Logfire receives model/tool timing spans and turn metrics
-when configured. Tool observations may be exported to that Logfire project.
+Cloudflare D1 stores conversations, provider context, tool results and statistics.
+Logfire receives model/tool timing spans and turn metrics when configured. Tool
+observations may be exported to that Logfire project.
 
 ## Files
 
 - `server.py`: routes and streamed turn lifecycle.
 - `loop.py`: complete model/tool loop and measurements.
 - `tools.py`: existing tool adapter and nmap placeholder.
-- `store.py`: SQLite persistence.
+- `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.
+- `setup_d1.py`: explicit D1 schema setup and verification command.
 - `config.py`, `prompt.md`: settings and editable system instructions.
 - `index.html`: entire frontend.
 
@@ -90,6 +115,7 @@ when configured. Tool observations may be exported to that Logfire project.
 uv run --project agent python -m pytest agent/tests
 ```
 
-Tests use fake model responses and mocked tools; they do not spend API credits or
-change a network. Live gateway/Logfire and Mininet integration require configured
-services and are separate from those tests.
+Tests use fake model responses, mocked tools, and an in-memory D1-dialect test
+double; they do not call Cloudflare, spend API credits, or change a network. Live
+gateway/D1/Logfire and Mininet integration require configured services and are
+separate from those tests.

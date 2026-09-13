@@ -17,16 +17,21 @@ busy = False
 
 @asynccontextmanager
 async def lifespan(app):
-    store.initialize()
+    await asyncio.to_thread(store.initialize)
     logfire.configure(service_name="network-agent", send_to_logfire="if-token-present",
                       console=False)
     app.state.client = config.make_client() if config.configured() else None
     if app.state.client:
         logfire.instrument_httpx(app.state.client.http, capture_all=False, capture_headers=False,
                                  capture_request_body=False, capture_response_body=False)
-    yield
-    if app.state.client:
-        await app.state.client.close()
+    try:
+        yield
+    finally:
+        try:
+            if app.state.client:
+                await app.state.client.close()
+        finally:
+            await asyncio.to_thread(store.close)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -65,7 +70,7 @@ def conversation(cid: str):
 async def delete(cid: str):
     if busy:
         raise HTTPException(409, "Stop the current turn before deleting a conversation")
-    store.delete(cid)
+    await asyncio.to_thread(store.delete, cid)
     return {"ok": True}
 
 
@@ -86,7 +91,7 @@ async def chat(body: ChatRequest):
     option = next((m for m in config.MODELS if m["id"] == body.model), None)
     if not option or body.effort not in option["efforts"]:
         raise HTTPException(422, "Unsupported model or reasoning effort")
-    item = store.get(body.conversation_id)
+    item = await asyncio.to_thread(store.get, body.conversation_id)
     if item is None:
         raise HTTPException(404, "Conversation not found")
     if busy:
@@ -126,7 +131,9 @@ async def chat(body: ChatRequest):
                     history.append({"role": "assistant", "content": state["content"]})
             assistant = {"role": "assistant", **state}
             try:
-                store.save(body.conversation_id, user, assistant, history)
+                await asyncio.to_thread(
+                    store.save, body.conversation_id, user, assistant, history
+                )
             finally:
                 busy = False
         yield "data: " + json.dumps({"type": "stats", "stats": state["stats"]}) + "\n\n"

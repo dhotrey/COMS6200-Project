@@ -15,7 +15,9 @@ From the repository root, run `uv sync --project agent`, then
 `uv run --project agent python -m agent`. Open http://127.0.0.1:8000.
 Configure the root `.env` using `.env.example`; store the OpenAI key in Cloudflare
 BYOK. [Agent setup](agent/README.md) covers credentials, Logfire, tool timings,
-SQLite history, and tests. Six diagnostic tools are reused; nmap is a placeholder.
+Cloudflare D1 history, and tests. Run
+`uv run --project agent python -m agent.setup_d1` before first launch. Six
+diagnostic tools are reused; nmap is a placeholder.
 Live model/testbed verification is pending. Disable the default artificial tool
 delays before measuring actual research performance.
 
@@ -327,6 +329,8 @@ Git operations (commit, push, merge, rebase) are controlled by the human team, n
 The OpenAI provider key is stored in Cloudflare BYOK. Local gateway credentials are loaded from the root `.env` or environment variables.
 
 - Copy `.env.example` to `.env` for the chat harness.
+- Configure `CLOUDFLARE_API_TOKEN` with D1 Write access and set
+  `CLOUDFLARE_D1_DATABASE_ID`; this account token is not the AI Gateway token.
 - Never commit `.env` or real API keys.
 - Do not put secrets in `README.md`, scripts, or source files.
 

@@ -1,12 +1,38 @@
 """API persistence and failed/interrupted turn cleanup, all offline."""
 import asyncio
 import json
+import sqlite3
 import sys
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent import server, store
+
+
+class SQLiteD1:
+    """D1-compatible persistence double for offline API tests."""
+
+    def __init__(self):
+        self.connection = sqlite3.connect(":memory:", check_same_thread=False)
+        self.connection.row_factory = sqlite3.Row
+        self.connection.execute("PRAGMA foreign_keys = ON")
+
+    def query(self, sql, params=None):
+        with self.connection:
+            cursor = self.connection.execute(sql, params or [])
+            return [dict(row) for row in cursor.fetchall()]
+
+    def batch(self, statements):
+        results = []
+        with self.connection:
+            for sql, params in statements:
+                cursor = self.connection.execute(sql, params)
+                results.append([dict(row) for row in cursor.fetchall()])
+        return results
+
+    def close(self):
+        self.connection.close()
 
 
 def _wakeful_loop_factory():
@@ -29,8 +55,8 @@ def _wakeful_loop_factory():
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_DB_PATH", str(tmp_path / "chat.sqlite3"))
+def client(monkeypatch):
+    monkeypatch.setattr(store, "_database", SQLiteD1())
     monkeypatch.setattr(server.config, "configured", lambda: False)
     monkeypatch.setattr(server.config, "make_client", lambda: pytest.fail("Unexpected provider client"))
     monkeypatch.setattr(server.logfire, "configure", lambda **_: None)
@@ -70,7 +96,7 @@ def test_completed_turn_persists_text_and_statistics(client, monkeypatch):
     assert result.status_code == 200
     events = [json.loads(line[6:]) for line in result.text.splitlines() if line.startswith("data: ")]
     assert events[-1] == {"type": "done"}
-    # Reopening the SQLite connection reads durable messages and model history.
+    # Rechecking D1 reads durable messages and provider history.
     store.initialize()
     saved = store.get(cid)
     assert saved["title"] == "Check the network"

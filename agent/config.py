@@ -20,6 +20,14 @@ PRICES = {"gpt-5.6-luna": (.2, .02, 1.2), "gpt-5.6-terra": (2, .2, 12),
           "gpt-5.6-sol": (4, .4, 20), "gpt-6-astra": (10, 1, 50)}
 
 
+def d1_settings() -> tuple[str, str, str]:
+    return (
+        os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip(),
+        os.getenv("CLOUDFLARE_API_TOKEN", "").strip(),
+        os.getenv("CLOUDFLARE_D1_DATABASE_ID", "").strip(),
+    )
+
+
 def configured():
     return all(os.getenv(k, "").strip() for k in (
         "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_AI_GATEWAY_API_TOKEN"))

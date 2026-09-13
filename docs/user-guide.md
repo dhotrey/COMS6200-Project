@@ -201,7 +201,10 @@ Supported by current setup scripts:
 
 `setup/setup_ubuntu.sh` installs the Mininet/OVS packages via apt. `setup/setup_onos.sh` requires Docker already usable on the host.
 
-Do not store secrets in this repository. ONOS REST credentials are environment variables. OpenAI keys will later use `.env` (see `.env.example`); never commit `.env`.
+Do not store secrets in this repository. ONOS REST credentials and Cloudflare
+tokens are environment variables loaded from the ignored root `.env` (see
+`.env.example`). The OpenAI provider key stays in Cloudflare BYOK; never commit
+`.env`.
 
 ---
 
@@ -882,10 +885,12 @@ tc qdisc del dev s1-eth4 root 2>/dev/null || true
 tc qdisc del dev s3-eth5 root 2>/dev/null || true
 ```
 
-### Secrets for M6 (not used yet)
+### Harness secrets
 
-Planned server secret file: `~/COMS6200-Project/.env` mode `600`, Git-ignored.
-See `docs/decisions/llm-api-gateway.md`. Do not commit API keys.
+Use the repository-root `.env` with mode `600`; it is Git-ignored. It contains
+the D1 account API token and AI Gateway authentication token, while the OpenAI
+provider key remains in Cloudflare BYOK. See
+`docs/decisions/llm-api-gateway.md`. Do not commit API keys.
 
 Developer notes: `faults/README.md`.
 
@@ -925,11 +930,29 @@ uv run --project agent python -m agent
 
 Open http://127.0.0.1:8000. A directly opened `agent/index.html` is preview-only;
 its pickers work, but chat/history require the Python server. Copy `.env.example` to `.env` and populate
-`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID`, and
-`CLOUDFLARE_AI_GATEWAY_API_TOKEN`. Store the OpenAI provider key in Cloudflare
-BYOK. `CLOUDFLARE_BYOK_ALIAS` and `LOGFIRE_TOKEN` are optional. Restart after
-changing credentials. No local OpenAI key is required. The UI starts without
-credentials; live requests require the gateway and running testbed.
+`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_AI_GATEWAY_ID`, and
+`CLOUDFLARE_AI_GATEWAY_API_TOKEN`. `CLOUDFLARE_API_TOKEN` needs D1 Write
+permission and is distinct from the AI Gateway authentication token. Store the
+OpenAI provider key in Cloudflare BYOK. `CLOUDFLARE_BYOK_ALIAS` and
+`LOGFIRE_TOKEN` are optional. Restart after changing credentials. No local
+OpenAI key is required.
+
+Create and verify the D1 schema before first launch:
+
+```sh
+uv run --project agent python -m agent.setup_d1
+```
+
+This idempotently creates the `conversations` and `messages` tables, the message
+lookup index, and an `ON DELETE CASCADE` foreign key. No seed data is required.
+The server repeats the schema check at startup and requires D1 even when the AI
+Gateway is not configured. Existing local `agent/chat.sqlite3` conversations
+are intentionally not read, migrated, or deleted.
+
+Live D1 verification (13 September 2026): schema setup returned `ok: true`,
+the create/save/read/delete smoke test passed, and cleanup restored
+`conversation_count` to `0`.
 
 Six existing telemetry tools are reused on the same machine; `nmap` is a
 placeholder returning `NOT_IMPLEMENTED`. Host probes retain Mininet namespace
@@ -940,7 +963,7 @@ The model picker offers Luna, Terra, Sol and Astra with supported thinking level
 A separate fault picker previews F1–F5. Its **Load scenario** button is disabled;
 fault injection/reset still uses the operator workflow above. The selection stays
 in the browser and is not sent to the assistant or applied to the network.
-SQLite history and turn measurements live in ignored `agent/chat.sqlite3`.
+Conversation history and turn measurements are stored in Cloudflare D1.
 Tool delays default to a random 1–10 seconds for telemetry testing; set both
 `TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0` for research runs.
 Execution and artificial-delay timings are recorded separately. Stop cancels
@@ -1121,6 +1144,15 @@ Confirm iperf3 is installed on the Ubuntu host (`iperf3 -v`). Re-run; the gatewa
 
 Bounded ping/iperf hit the hard timeout, or output was not parseable. This is a tool failure (`ok: false`), not a connectivity diagnosis. Check the host namespace is healthy with a Mininet CLI ping before retrying.
 
+### Agent fails to start because D1 is unavailable
+
+Run `uv run --project agent python -m agent.setup_d1`. Confirm the root `.env`
+contains `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and
+`CLOUDFLARE_D1_DATABASE_ID`, and that outbound HTTPS to the Cloudflare API is
+available. HTTP 403 normally means the account token lacks D1 Write permission
+or does not cover the selected account/database. The AI Gateway token cannot be
+used in place of the account API token.
+
 ### Docker / container resource issue
 
 The reference container is capped (`--memory=640m`, JVM `-Xmx256m`) for a small host. Inspect `docker logs onos` and `./scripts/verify_onos.sh`. Do not invent unrelated Docker “fixes”. Host Java is not required.
@@ -1216,7 +1248,7 @@ Unfinished steps are marked.
 | `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
 | `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
 
-**Implemented starter:** `agent/` (chat harness, tools, SQLite, UI).
+**Implemented starter:** `agent/` (chat harness, tools, Cloudflare D1, UI).
 
 **Planned, not present:** `baseline/` (scripted troubleshooter), `experiments/`.
 

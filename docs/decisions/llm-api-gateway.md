@@ -73,7 +73,8 @@ Do not commit real `OPENAI_API_KEY` or Cloudflare tokens.
 
 See `agent/README.md` for actual configuration. The root `.env.example` lists
 gateway variables; the OpenAI key stays in Cloudflare BYOK. Gateway response
-caching is bypassed. This starter adds conversational output, SQLite history,
-Logfire and per-call metrics; formal experiments and structured scoring remain
-out of scope. Artificial tool latency defaults to 1–10 seconds and must be
-disabled for actual timing measurements.
+caching is bypassed. The starter adds conversational output, Cloudflare D1
+history, Logfire and per-call metrics; formal experiments and structured scoring
+remain out of scope. D1 uses a separate account API token with D1 Write access;
+the local SQLite history was not migrated. Artificial tool latency defaults to
+1–10 seconds and must be disabled for actual timing measurements.
