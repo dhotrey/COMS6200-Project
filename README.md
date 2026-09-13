@@ -9,6 +9,16 @@ This project evaluates whether a tool-using LLM can diagnose and localise contro
 - **[User Manual](docs/user-guide.md)** — comprehensive setup, operation, fault scenarios, troubleshooting workflow, expected behaviour, reset procedures and experimental usage.
 - **[Part A report](docs/reports/part-a/)** — proposal/progress report (Markdown source, generated Word/PDF).
 
+## Chat harness
+
+From the repository root, run `uv sync --project agent`, then
+`uv run --project agent python -m agent`. Open http://127.0.0.1:8000.
+Configure the root `.env` using `.env.example`; store the OpenAI key in Cloudflare
+BYOK. [Agent setup](agent/README.md) covers credentials, Logfire, tool timings,
+SQLite history, and tests. Six diagnostic tools are reused; nmap is a placeholder.
+Live model/testbed verification is pending. Disable the default artificial tool
+delays before measuring actual research performance.
+
 ## 1. Project Overview
 
 The research question is:
@@ -44,7 +54,7 @@ Completed so far:
 
 Not implemented:
 
-- OpenAI LLM agent (planned via Cloudflare AI Gateway — see `docs/decisions/llm-api-gateway.md`)
+- Live end-to-end verification of the OpenAI chat harness (implementation is in `agent/`)
 - scripted troubleshooting baseline
 - repeated experiments
 
@@ -314,9 +324,9 @@ Git operations (commit, push, merge, rebase) are controlled by the human team, n
 
 ## 12. Secrets and OpenAI API
 
-OpenAI credentials will eventually be loaded through `OPENAI_API_KEY` from a local `.env` file or an environment variable.
+The OpenAI provider key is stored in Cloudflare BYOK. Local gateway credentials are loaded from the root `.env` or environment variables.
 
-- Copy `.env.example` to `.env` when the agent milestone begins.
+- Copy `.env.example` to `.env` for the chat harness.
 - Never commit `.env` or real API keys.
 - Do not put secrets in `README.md`, scripts, or source files.
 
@@ -379,8 +389,8 @@ COMS6200-Project/
 │   └── reports/
 │       └── part-a/
 │
+├── agent/                         # conversational starter harness
 └── (planned)
-    ├── agent/
     ├── baseline/
     └── experiments/
 ```

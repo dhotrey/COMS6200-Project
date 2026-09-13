@@ -1,9 +1,9 @@
 # Decision: OpenAI via Cloudflare AI Gateway (planned for M6)
 
 Date: 27 August 2026
-Status: **Accepted (planned)** — architecture decision recorded before M6.
-Runtime Cloudflare / OpenAI configuration is **not** implemented in this
-milestone. The automated fault catalogue (M5B) must be frozen first.
+Status: **Accepted; starter implemented** — live gateway verification pending.
+The `agent/` starter now routes Responses requests through the provider-specific
+Cloudflare gateway endpoint, using BYOK and a local gateway token.
 
 ## Context
 
@@ -68,3 +68,12 @@ Do not commit real `OPENAI_API_KEY` or Cloudflare tokens.
 - Do not implement the LLM agent here.
 - Do not configure Cloudflare runtime here.
 - Do not store or transmit the OpenAI API key as part of M5B.
+
+## Starter implementation (10 September 2026)
+
+See `agent/README.md` for actual configuration. The root `.env.example` lists
+gateway variables; the OpenAI key stays in Cloudflare BYOK. Gateway response
+caching is bypassed. This starter adds conversational output, SQLite history,
+Logfire and per-call metrics; formal experiments and structured scoring remain
+out of scope. Artificial tool latency defaults to 1–10 seconds and must be
+disabled for actual timing measurements.

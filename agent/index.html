@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Network Lab</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f8fa;
+        --panel: #fff;
+        --muted: #687384;
+        --ink: #192738;
+        --line: #e0e5eb;
+        --accent: #176a57;
+        --soft: #eaf4f0;
+        --error: #b13737;
+        font:
+          15px/1.6 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      button,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        cursor: pointer;
+      }
+      button {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 9px;
+        padding: 8px 12px;
+      }
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      button:disabled,
+      select:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 244px minmax(0, 1fr);
+        height: 100dvh;
+      }
+      .sidebar {
+        padding: 27px 18px;
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        background: var(--panel);
+        min-height: 0;
+      }
+      .brand {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: -0.6px;
+      }
+      .brand span {
+        color: var(--accent);
+      }
+      .eyebrow {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .new {
+        width: 100%;
+        text-align: left;
+      }
+      .conversations {
+        overflow: auto;
+        flex: 1;
+      }
+      .conversation {
+        display: flex;
+        align-items: center;
+        border-radius: 9px;
+        margin-bottom: 5px;
+      }
+      .conversation.active {
+        background: var(--soft);
+      }
+      .conversation button {
+        background: transparent;
+        border: 0;
+      }
+      .conversation .choose {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
+      }
+      .conversation .delete {
+        color: var(--muted);
+        padding: 6px 10px;
+      }
+      .sidebar footer {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+      }
+      .topbar {
+        padding: 18px 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .workspace-title {
+        font-weight: 600;
+      }
+      .subtitle {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .selectors {
+        display: flex;
+        gap: 12px;
+      }
+      .selectors label {
+        font-size: 10px;
+        letter-spacing: 0.8px;
+        color: var(--muted);
+        text-transform: uppercase;
+        display: flex;
+        flex-direction: column;
+      }
+      .selectors select {
+        font-size: 12px;
+        letter-spacing: 0;
+        text-transform: none;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 5px 8px;
+        max-width: 210px;
+      }
+      .banner {
+        padding: 10px 30px;
+        font-size: 12px;
+        color: var(--accent);
+        background: var(--soft);
+      }
+      .banner.error {
+        color: var(--error);
+      }
+      .timeline {
+        overflow: auto;
+        flex: 1;
+        padding: 36px 28px;
+        scroll-behavior: auto;
+      }
+      .content {
+        max-width: 850px;
+        margin: auto;
+      }
+      .empty {
+        padding: 12vh 0 8vh;
+        max-width: 560px;
+        margin: auto;
+      }
+      .empty .symbol {
+        font: 26px monospace;
+        color: var(--accent);
+        margin-bottom: 18px;
+      }
+      .empty h1 {
+        font-size: 32px;
+        line-height: 1.2;
+        letter-spacing: -1.2px;
+        font-weight: 600;
+        margin: 0 0 16px;
+      }
+      .empty p {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 26px;
+      }
+      .suggestions button {
+        font-size: 12px;
+        text-align: left;
+      }
+      .message {
+        margin-bottom: 30px;
+      }
+      .message .role {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1.3px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        color: var(--accent);
+      }
+      .message.user .role {
+        color: var(--muted);
+      }
+      .message.user .body {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px 18px;
+      }
+      .body {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 14px;
+      }
+      .tools {
+        display: grid;
+        gap: 7px;
+        margin: 12px 0;
+      }
+      .tools:empty {
+        display: none;
+      }
+      details {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--panel);
+        font-size: 12px;
+        overflow: hidden;
+      }
+      summary {
+        padding: 9px 12px;
+        cursor: pointer;
+        font-family: ui-monospace, monospace;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 0;
+        padding: 12px;
+        border-top: 1px solid var(--line);
+        font-size: 11px;
+        max-height: 320px;
+        overflow: auto;
+      }
+      .metrics {
+        display: flex;
+        gap: 6px 16px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font:
+          11px/1.8 ui-monospace,
+          monospace;
+        margin-top: 12px;
+      }
+      .composer-area {
+        padding: 12px 28px 20px;
+      }
+      .composer {
+        max-width: 850px;
+        margin: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        box-shadow: 0 4px 20px #00000004;
+        border-radius: 14px;
+        padding: 14px;
+      }
+      .composer textarea {
+        width: 100%;
+        resize: none;
+        background: transparent;
+        border: 0;
+        outline: 0;
+        min-height: 50px;
+        max-height: 180px;
+        font-size: 14px;
+        padding: 0;
+      }
+      .composer-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .status {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .send {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff !important;
+        padding: 7px 19px;
+        font-size: 12px;
+      }
+      .hint {
+        text-align: center;
+        font-size: 10px;
+        color: var(--muted);
+        margin: 7px 0 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #10171c;
+          --panel: #161f25;
+          --muted: #94a3af;
+          --ink: #e2e9ed;
+          --line: #2a363f;
+          --accent: #69cbb0;
+          --soft: #1b322e;
+          --error: #ff9696;
+        }
+        .send {
+          color: #10291f !important;
+        }
+      }
+      .scenario-picker {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding: 12px 30px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+      }
+      .scenario-picker label { font-weight: 600; }
+      .scenario-picker select {
+        max-width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--panel);
+      }
+      .scenario-picker p {
+        flex-basis: 100%;
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      @media (max-width: 720px) {
+        .scenario-picker { padding: 10px 15px; }
+        .layout {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        .sidebar {
+          padding: 10px 15px;
+          flex-direction: row;
+          align-items: center;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          gap: 12px;
+        }
+        .sidebar footer,
+        .sidebar .eyebrow {
+          display: none;
+        }
+        .brand {
+          font-size: 16px;
+          white-space: nowrap;
+        }
+        .sidebar .new {
+          width: auto;
+          white-space: nowrap;
+          font-size: 11px;
+        }
+        .conversations {
+          display: flex;
+          gap: 4px;
+        }
+        .conversation {
+          margin: 0;
+          min-width: 100px;
+          max-width: 160px;
+          font-size: 11px;
+        }
+        .topbar {
+          padding: 10px 15px;
+        }
+        .workspace-title,
+        .subtitle {
+          display: none;
+        }
+        .selectors {
+          width: 100%;
+        }
+        .selectors label {
+          flex: 1;
+        }
+        .selectors select {
+          max-width: 100%;
+          width: 100%;
+        }
+        .timeline {
+          padding: 24px 18px;
+        }
+        .composer-area {
+          padding: 8px 12px 12px;
+        }
+        .empty {
+          padding-top: 6vh;
+        }
+        .empty h1 {
+          font-size: 27px;
+        }
+        .banner {
+          padding: 8px 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand"><span>◈</span> Network Lab</div>
+        <button class="new" id="new">＋ New conversation</button>
+        <div class="eyebrow">Conversations</div>
+        <nav
+          class="conversations"
+          id="conversations"
+          aria-label="Conversations"
+        ></nav>
+        <footer>
+          Observe. Investigate. Understand.<br />Network troubleshooting
+          workspace
+        </footer>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div>
+            <div class="workspace-title">Diagnostic workspace</div>
+            <div class="subtitle">
+              An assistant for understanding your network
+            </div>
+          </div>
+          <div class="selectors">
+            <label>Model<select id="model" aria-label="Model">
+              <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+              <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+              <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+              <option value="gpt-6-astra">GPT-6 Astra</option>
+            </select></label
+            ><label
+              >Thinking<select id="effort" aria-label="Thinking level"></select
+            ></label>
+          </div>
+        </header>
+        <section class="scenario-picker" aria-label="Fault scenario controls">
+          <label for="scenario">Fault scenario</label>
+          <select id="scenario" aria-describedby="scenario-note">
+            <option value="">Choose a scenario…</option>
+            <option value="F1">F1 · Link failure</option>
+            <option value="F2">F2 · Congestion</option>
+            <option value="F3">F3 · ACL / policy error</option>
+            <option value="F4">F4 · Forwarding loop</option>
+            <option value="F5">F5 · Missing / incorrect flow rule</option>
+          </select>
+          <button type="button" disabled title="Fault injection is not connected yet">Load scenario</button>
+          <p id="scenario-note">Preview only — scenario loading is not connected. Selecting a fault does not change the network or tell the assistant which fault you chose.</p>
+        </section>
+        <div class="banner" id="banner" hidden role="status"></div>
+        <section class="timeline" id="timeline" aria-label="Chat messages">
+          <div class="content" id="messages"></div>
+        </section>
+        <div class="composer-area">
+          <form class="composer" id="composer">
+            <textarea
+              id="input"
+              aria-label="Message"
+              placeholder="Describe what you’re seeing on the network…"
+              rows="2"
+              required
+            ></textarea>
+            <div class="composer-bottom">
+              <span class="status" id="status" role="status"
+                >Ready to investigate</span
+              ><button class="send" id="send" type="submit">Send ↑</button
+              ><button id="stop" type="button" hidden>Stop</button>
+            </div>
+          </form>
+          <p class="hint">
+            Enter to send · Shift + Enter for a new line · Verify diagnostic
+            conclusions against tool results
+          </p>
+        </div>
+      </main>
+    </div>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      // Static options keep the file preview usable; the server is authoritative when connected.
+      let config = {
+          configured: false,
+          default_model: "gpt-5.6-luna",
+          default_effort: "medium",
+          models: Array.from($("model").options, option => ({
+            id: option.value,
+            label: option.text,
+            efforts: option.value === "gpt-6-astra"
+              ? ["low", "medium", "high", "xhigh", "max"]
+              : ["none", "low", "medium", "high", "xhigh", "max"],
+          })),
+        },
+        currentId = null,
+        busy = false,
+        controller = null,
+        loading = false;
+      function node(tag, className, text) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text !== undefined) el.textContent = text;
+        return el;
+      }
+      async function api(path, options = {}) {
+        const response = await fetch(path, options);
+        if (!response.ok) {
+          let data;
+          try {
+            data = await response.json();
+          } catch {}
+          throw new Error(
+            typeof data?.detail === "string"
+              ? data.detail
+              : `Request failed (${response.status})`,
+          );
+        }
+        return response.status === 204 ? null : response.json();
+      }
+      function notice(text, error = false) {
+        $("banner").textContent = text;
+        $("banner").hidden = !text;
+        $("banner").classList.toggle("error", error);
+      }
+      function lock(value) {
+        busy = value;
+        document
+          .querySelectorAll(".sidebar button, .selectors select")
+          .forEach((el) => (el.disabled = value || loading));
+        $("send").hidden = value;
+        $("stop").hidden = !value;
+        $("send").disabled = loading || !config?.configured;
+        $("input").disabled = loading;
+        $("status").textContent = value
+          ? "Investigating…"
+          : "Ready to investigate";
+      }
+      function scroll() {
+        const el = $("timeline");
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 180)
+          el.scrollTop = el.scrollHeight;
+      }
+      function empty() {
+        $("messages").replaceChildren();
+        const el = node("div", "empty");
+        el.append(
+          node("div", "symbol", "⌁"),
+          node("div", "eyebrow", "Your network, explained"),
+          node("h1", "", "Let’s find what’s going wrong."),
+          node(
+            "p",
+            "",
+            "Describe a symptom or ask a question. Your assistant can inspect the network, run diagnostics, and help you follow the evidence.",
+          ),
+        );
+        const suggestions = node("div", "suggestions");
+        for (const text of [
+          "Inspect the network topology",
+          "Help me investigate a connectivity issue",
+        ]) {
+          const b = node("button", "", text);
+          b.onclick = () => {
+            $("input").value = text;
+            $("input").focus();
+          };
+          suggestions.append(b);
+        }
+        el.append(suggestions);
+        $("messages").append(el);
+      }
+      function message(role, text = "") {
+        $("messages").querySelector(".empty")?.remove();
+        const el = node("article", `message ${role}`),
+          body = node("div", "body", text),
+          tools = node("div", "tools"),
+          metrics = node("div", "metrics");
+        el.append(
+          node("div", "role", role === "user" ? "You" : "Network assistant"),
+          body,
+          tools,
+          metrics,
+        );
+        $("messages").append(el);
+        return { el, body, tools, metrics, calls: new Map() };
+      }
+      function tool(view, data, finished = false) {
+        const id = data.call_id || data.id || `${data.name}-${view.calls.size}`;
+        let entry = view.calls.get(id);
+        if (!entry) {
+          const detail = node("details"),
+            summary = node("summary"),
+            args = node("pre"),
+            result = node("pre");
+          detail.append(summary, args, result);
+          view.tools.append(detail);
+          entry = { summary, args, result, name: data.name || "Tool" };
+          view.calls.set(id, entry);
+        }
+        if (data.name) entry.name = data.name;
+        if (data.arguments !== undefined)
+          entry.args.textContent =
+            "Arguments\n" +
+            (typeof data.arguments === "string"
+              ? data.arguments
+              : JSON.stringify(data.arguments, null, 2));
+        entry.args.hidden = !entry.args.textContent;
+        entry.finished = finished;
+        const duration = data.duration_seconds ?? data.latency_seconds;
+        entry.summary.textContent = `${finished ? (data.ok === false ? "!" : "✓") : "◌"} ${entry.name}${finished ? (duration != null ? ` · ${Number(duration).toFixed(2)}s` : " · complete") : " · running"}`;
+        entry.result.hidden = !finished;
+        if (finished)
+          entry.result.textContent =
+            "Result\n" +
+            JSON.stringify(
+              data,
+              null,
+              2,
+            );
+      }
+      function stats(view, data = {}) {
+        view.metrics.replaceChildren();
+        if (data.usage_complete === false)
+          view.metrics.append(node("span", "", "Token usage incomplete"));
+        if (data.status && data.status !== "completed")
+          view.metrics.append(node("span", "", data.status));
+        const entries = [
+          ["duration_seconds", "elapsed", "s"],
+          ["first_token_seconds", "first token", "s"],
+          ["total_tokens", "tokens", ""],
+          ["input_tokens", "input", ""],
+          ["output_tokens", "output", ""],
+          ["cached_tokens", "cached", ""],
+          ["reasoning_tokens", "reasoning", ""],
+          ["model_calls", "model calls", ""],
+          ["tool_calls", "tool calls", ""],
+          ["invalid_tool_calls", "invalid calls", ""],
+          ["cost_usd", "estimated cost", "$"],
+        ];
+        for (const [key, label, unit] of entries)
+          if (data[key] != null) {
+            const value = Number(data[key]);
+            view.metrics.append(
+              node(
+                "span",
+                "",
+                `${unit === "$" ? "$" + value.toFixed(5) : (unit === "s" ? value.toFixed(2) : value.toLocaleString()) + unit} ${label}`,
+              ),
+            );
+          }
+        if (data.requests?.length) {
+          const details = node("details");
+          details.style.width = "100%";
+          details.append(
+            node(
+              "summary",
+              "",
+              `${data.requests.length} model request${data.requests.length === 1 ? "" : "s"}`,
+            ),
+          );
+          for (const [index, request] of data.requests.entries()) {
+            const row = node("div");
+            row.style.padding = "8px 12px";
+            row.append(
+              node(
+                "div",
+                "",
+                `Request ${index + 1} · ${request.model || "Model"}`,
+              ),
+            );
+            if (request.response_id)
+              row.append(node("div", "status", request.response_id));
+            const metrics = node("div", "metrics");
+            stats({ metrics }, request);
+            row.append(metrics);
+            details.append(row);
+          }
+          view.metrics.append(details);
+        }
+      }
+      async function list() {
+        const items = await api("/api/conversations");
+        $("conversations").replaceChildren();
+        for (const item of items) {
+          const row = node(
+              "div",
+              `conversation${item.id === currentId ? " active" : ""}`,
+            ),
+            choose = node("button", "choose", item.title || "New conversation"),
+            remove = node("button", "delete", "×");
+          choose.title = item.title || "New conversation";
+          choose.onclick = () => open(item.id);
+          remove.title = "Delete conversation";
+          remove.setAttribute(
+            "aria-label",
+            `Delete ${item.title || "conversation"}`,
+          );
+          remove.onclick = async () => {
+            if (
+              busy ||
+              loading ||
+              !confirm("Delete this conversation and its history?")
+            )
+              return;
+            loading = true;
+            lock(false);
+            try {
+              await api(`/api/conversations/${encodeURIComponent(item.id)}`, {
+                method: "DELETE",
+              });
+              if (currentId === item.id) {
+                currentId = null;
+                empty();
+              }
+              await list();
+            } catch (e) {
+              notice(e.message, true);
+            } finally {
+              loading = false;
+              lock(false);
+            }
+          };
+          choose.disabled = remove.disabled = busy || loading;
+          row.append(choose, remove);
+          $("conversations").append(row);
+        }
+      }
+      async function open(id) {
+        if (busy || loading) return;
+        loading = true;
+        lock(false);
+        try {
+          const data = await api(
+            `/api/conversations/${encodeURIComponent(id)}`,
+          );
+          currentId = id;
+          empty();
+          for (const saved of data.messages || []) {
+            const view = message(saved.role, saved.content || "");
+            for (const call of saved.tools || []) tool(view, call, true);
+            if (saved.stats) stats(view, saved.stats);
+          }
+          await list();
+          $("timeline").scrollTop = $("timeline").scrollHeight;
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+        }
+      }
+      function efforts() {
+        const available =
+          config.models.find((m) => m.id === $("model").value)?.efforts || [];
+        const previous = $("effort").value;
+        $("effort").replaceChildren(
+          ...available.map((value) => {
+            const el = node("option", "", value);
+            el.value = value;
+            return el;
+          }),
+        );
+        $("effort").value = available.includes(previous)
+          ? previous
+          : available.includes(config.default_effort)
+            ? config.default_effort
+            : available[0] || "";
+      }
+      $("model").onchange = efforts;
+      $("new").onclick = () => {
+        if (busy || loading) return;
+        currentId = null;
+        empty();
+        document
+          .querySelectorAll(".conversation")
+          .forEach((el) => el.classList.remove("active"));
+        $("input").value = "";
+        $("input").focus();
+      };
+      $("stop").onclick = () => controller?.abort();
+      $("input").onkeydown = (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+          event.preventDefault();
+          if (!busy) $("composer").requestSubmit();
+        }
+      };
+      $("composer").onsubmit = async (event) => {
+        event.preventDefault();
+        const text = $("input").value.trim();
+        if (!text || busy || loading || !config?.configured) return;
+        lock(true);
+        controller = new AbortController();
+        const signal = controller.signal;
+        let view;
+        try {
+          if (!currentId) {
+            const conversation = await api("/api/conversations", {
+              method: "POST",
+              signal,
+            });
+            currentId = conversation.id;
+          }
+          message("user", text);
+          view = message("assistant");
+          $("input").value = "";
+          $("timeline").scrollTop = $("timeline").scrollHeight;
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversation_id: currentId,
+              message: text,
+              model: $("model").value,
+              effort: $("effort").value,
+            }),
+            signal,
+          });
+          if (!response.ok) {
+            let payload;
+            try {
+              payload = await response.json();
+            } catch {}
+            throw new Error(
+              typeof payload?.detail === "string"
+                ? payload.detail
+                : `Request failed (${response.status})`,
+            );
+          }
+          if (!response.body)
+            throw new Error("Streaming is unavailable in this browser.");
+          const reader = response.body.getReader(),
+            decoder = new TextDecoder();
+          let buffer = "",
+            done = false;
+          function consume(frame) {
+            const raw = frame
+              .split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trimStart())
+              .join("\n");
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (data.type === "text") view.body.textContent += data.text;
+            else if (data.type === "tool_start") tool(view, data);
+            else if (data.type === "tool_end") tool(view, data, true);
+            else if (data.type === "stats") stats(view, data.stats);
+            else if (data.type === "error")
+              view.el.append(
+                node("div", "status", data.message || "The request failed."),
+              );
+            else if (data.type === "done") done = true;
+            scroll();
+          }
+          while (true) {
+            const chunk = await reader.read();
+            buffer += decoder.decode(chunk.value || new Uint8Array(), {
+              stream: !chunk.done,
+            });
+            buffer = buffer.replace(/\r\n/g, "\n");
+            let boundary;
+            while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+              consume(buffer.slice(0, boundary));
+              buffer = buffer.slice(boundary + 2);
+            }
+            if (chunk.done) break;
+          }
+          if (buffer.trim()) consume(buffer);
+          if (!done)
+            throw new Error(
+              "The connection ended before the response completed.",
+            );
+        } catch (e) {
+          const stopped = e.name === "AbortError";
+          if (view)
+            for (const entry of view.calls.values()) {
+              if (!entry.finished)
+                entry.summary.textContent = `${entry.name} · result unavailable`;
+            }
+          if (view)
+            view.el.append(
+              node("div", "status", stopped ? "Stopped" : e.message),
+            );
+          else if (!stopped) notice(e.message, true);
+          if (!view) $("input").value = text;
+        } finally {
+          controller = null;
+          try {
+            await list();
+          } catch (e) {
+            notice(e.message, true);
+          }
+          lock(false);
+          $("input").focus();
+        }
+      };
+      (async () => {
+        empty();
+        efforts();
+        if (location.protocol === "file:") {
+          notice("Preview only. From the repository root, run uv run --project agent python -m agent, then open http://127.0.0.1:8000 to chat.");
+          lock(false);
+          return;
+        }
+        loading = true;
+        lock(false);
+        try {
+          config = await api("/api/config");
+          $("model").replaceChildren(
+            ...config.models.map((model) => {
+              const option = node("option", "", model.label);
+              option.value = model.id;
+              return option;
+            }),
+          );
+          $("model").value = config.default_model;
+          if (!$("model").value && config.models.length)
+            $("model").value = config.models[0].id;
+          efforts();
+          if (!config.configured)
+            notice(
+              "Gateway credentials are not configured yet. Add them to the root .env file to start chatting.",
+            );
+          await list();
+        } catch (e) {
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+        }
+      })();
+    </script>
+  </body>
+</html>

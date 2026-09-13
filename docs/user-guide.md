@@ -31,7 +31,7 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M5B Fault Catalogue v1 (F1–F5) | ✅ Frozen |
 | Automated fault injection | ✅ F1–F5 verified |
 | Deterministic scripted troubleshooting baseline | 🟡 |
-| LLM tool-calling integration | 🟡 |
+| LLM tool-calling integration | Harness implemented; live gateway/testbed verification pending |
 | Repeated evaluation experiments | 🟡 |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
@@ -916,9 +916,39 @@ Those prompts invalidate a fair comparison.
 
 ## Asking the LLM for a diagnosis
 
-🟡 Planned until **M6**. There is no LLM runner in this repository.
+The conversational starter harness lives in `agent/`. From the repository root:
 
-Recommended symptom-only prompts (planned usage):
+```sh
+uv sync --project agent
+uv run --project agent python -m agent
+```
+
+Open http://127.0.0.1:8000. A directly opened `agent/index.html` is preview-only;
+its pickers work, but chat/history require the Python server. Copy `.env.example` to `.env` and populate
+`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID`, and
+`CLOUDFLARE_AI_GATEWAY_API_TOKEN`. Store the OpenAI provider key in Cloudflare
+BYOK. `CLOUDFLARE_BYOK_ALIAS` and `LOGFIRE_TOKEN` are optional. Restart after
+changing credentials. No local OpenAI key is required. The UI starts without
+credentials; live requests require the gateway and running testbed.
+
+Six existing telemetry tools are reused on the same machine; `nmap` is a
+placeholder returning `NOT_IMPLEMENTED`. Host probes retain Mininet namespace
+privilege requirements. Follow [agent setup](../agent/README.md) for launch,
+privileges, limits, Logfire, and offline tests. Run one server worker.
+
+The model picker offers Luna, Terra, Sol and Astra with supported thinking levels.
+A separate fault picker previews F1–F5. Its **Load scenario** button is disabled;
+fault injection/reset still uses the operator workflow above. The selection stays
+in the browser and is not sent to the assistant or applied to the network.
+SQLite history and turn measurements live in ignored `agent/chat.sqlite3`.
+Tool delays default to a random 1–10 seconds for telemetry testing; set both
+`TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0` for research runs.
+Execution and artificial-delay timings are recorded separately. Stop cancels
+model generation; an in-flight bounded probe must finish cleanup before another
+turn. Start a new conversation after resetting/changing scenarios to avoid stale
+context. This harness does not load fault labels or injector state.
+
+Example symptom-only prompts:
 
 - “Diagnose why h1 cannot communicate with h5. Use the available diagnostic tools, identify the most likely root cause and localise the fault.”
 - “Investigate why TCP throughput between h1 and h8 has degraded. Determine whether the issue is physical, congestion-related or forwarding-related.”
@@ -931,20 +961,15 @@ Describe observable symptoms. Do not name the injector.
 
 ## Expected diagnostic output
 
-🟡 **Planned diagnosis contract — exact schema will be updated when M6 is implemented.**
+The starter produces ordinary conversational answers grounded in tool observations.
+It does not enforce a diagnosis JSON schema. Tool arguments/results and turn
+statistics are stored structurally and shown in the UI. Measurements include
+per-tool latency, per-model-request latency, whole-turn time, tokens summed over
+all model rounds, cached/reasoning tokens, estimated cost, and invalid calls.
+Cancelled or failed turns flag potentially incomplete usage.
 
-Intended fields:
-
-- Fault category
-- Fault location
-- Evidence used
-- Root-cause explanation
-- Recommended corrective action
-- Confidence
-
-Possibly also: tools called, diagnosis duration.
-
-Both the LLM and the scripted troubleshooting baseline should return a **compatible** structured diagnosis so the evaluator can score them against hidden ground truth.
+A compatible structured diagnosis contract for the future scripted baseline and
+evaluator remains planned; no automated diagnosis scoring is implemented.
 
 ---
 
@@ -1191,7 +1216,9 @@ Unfinished steps are marked.
 | `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
 | `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
 
-**Planned, not present:** `agent/`, `baseline/` (scripted troubleshooter), `experiments/`.
+**Implemented starter:** `agent/` (chat harness, tools, SQLite, UI).
+
+**Planned, not present:** `baseline/` (scripted troubleshooter), `experiments/`.
 
 Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
 

@@ -1,0 +1,93 @@
+"""Exercise complete turns without network access or diagnostic commands."""
+import asyncio
+import copy
+import json
+
+import pytest
+
+from agent import loop
+
+
+def response(*output, tokens=(10, 5, 2, 1)):
+    inp, out, cached, reasoning = tokens
+    return {"id": "response-test", "model": "gpt-5.6-luna", "status": "completed",
+            "output": list(output), "usage": {
+                "input_tokens": inp, "output_tokens": out, "total_tokens": inp + out,
+                "input_tokens_details": {"cached_tokens": cached},
+                "output_tokens_details": {"reasoning_tokens": reasoning}}}
+
+
+def call(cid="call-1"):
+    return {"type": "function_call", "name": "get_topology", "call_id": cid, "arguments": "{}"}
+
+
+def message(text):
+    return {"type": "message", "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": text, "annotations": []}]}
+
+
+class FakeClient:
+    def __init__(self, *responses):
+        self.results = iter(responses)
+        self.requests = []
+
+    async def stream_events(self, payload):
+        self.requests.append(copy.deepcopy(payload))
+        result = next(self.results)
+        for item in result["output"]:
+            if item["type"] == "message":
+                for part in item["content"]:
+                    if part["type"] == "output_text":
+                        yield {"type": "response.output_text.delta", "delta": part["text"]}
+        yield {"type": "response.completed", "response": result}
+
+
+def test_multiround_usage_and_tool_pairing(monkeypatch):
+    async def execute(name, arguments):
+        return {"name": name, "ok": True, "data": {"switches": []}, "duration_seconds": 2}
+
+    monkeypatch.setattr(loop, "execute_tool", execute)
+    client = FakeClient(response(call()), response(message("Done"), tokens=(20, 7, 3, 2)))
+    history = [{"role": "user", "content": "Check the network"}]
+    state = {"content": "", "tools": [], "stats": {}}
+
+    async def collect():
+        return [event async for event in loop.run(client, history, "gpt-5.6-luna", "medium", state)]
+
+    events = asyncio.run(collect())
+    stats = state["stats"]
+    assert (stats["input_tokens"], stats["output_tokens"], stats["total_tokens"]) == (30, 12, 42)
+    assert (stats["cached_tokens"], stats["reasoning_tokens"]) == (5, 3)
+    assert stats["cost_usd"] == pytest.approx((25 * .2 + 5 * .02 + 12 * 1.2) / 1e6)
+    assert stats["model_calls"] == 2 and stats["tool_calls"] == 1
+    assert len(stats["requests"]) == 2 and stats["duration_seconds"] >= 0
+    assert stats["first_token_seconds"] is not None
+    assert state["content"] == "Done"
+    observation = client.requests[1]["input"][2]
+    assert observation["call_id"] == "call-1"
+    assert json.loads(observation["output"]) == {"ok": True, "data": {"switches": []}, "error": None}
+    assert [e["type"] for e in events] == ["tool_start", "tool_end", "stats", "text"]
+
+
+def test_tool_budget_never_executes_excess_calls(monkeypatch):
+    monkeypatch.setenv("MAX_TOOL_CALLS", "1")
+    executed = []
+
+    async def execute(name, arguments):
+        executed.append(name)
+        return {"ok": True, "data": {}}
+
+    monkeypatch.setattr(loop, "execute_tool", execute)
+    client = FakeClient(response(call("one"), call("two")), response())
+    state = {"content": "", "tools": [], "stats": {}}
+    history = []
+
+    async def collect():
+        return [event async for event in loop.run(client, history, "gpt-5.6-luna", "medium", state)]
+
+    asyncio.run(collect())
+    assert len(executed) == 1
+    assert client.requests[1]["tool_choice"] == "none"
+    outputs = [item for item in history if item["type"] == "function_call_output"]
+    assert [item["call_id"] for item in outputs] == ["one", "two"]
+    assert json.loads(outputs[1]["output"])["error"] == "Tool budget reached"
