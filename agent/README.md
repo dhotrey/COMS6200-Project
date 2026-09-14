@@ -8,7 +8,6 @@ From the repository root:
 
 ```sh
 uv sync --project agent
-uv run --project agent python -m agent.setup_d1
 uv run --project agent python -m agent
 ```
 
