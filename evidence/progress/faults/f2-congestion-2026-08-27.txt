@@ -1,0 +1,29 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M5B F2 congestion — live verification
+
+Git: feature/m5b-complete-fault-catalogue @ 7f377ae
+Catalogue: v1
+ONOS: 2.7.0
+OS: Ubuntu 24.04.4 LTS
+
+Injection:
+  python3 -m faults.cli inject --scenario F2
+  TBF on s1-eth4 (s1 port 4 ↔ s5 port 1): rate 1mbit burst 32kbit latency 400ms
+  Background iperf3: h3 → h6 (port 5202), duration 120s
+
+Observed:
+  Healthy iperf h1→h5: ~10135–13015 Mbit/s (virtual link)
+  During F2: ping h1→h5 still succeeds (elevated RTT ~400 ms)
+  During F2 iperf h1→h5: 0.0 Mbit/s (ratio << 0.25 of healthy; DEGRADE_MAX_RATIO=0.25)
+  s1 port 4 counters showed high activity during background load
+  Baseline ADDED remained 56
+
+Reset:
+  python3 -m faults.cli reset
+  tbf removed (qdisc noqueue)
+  no lingering host iperf3
+  directed links 20; pingall 56/56; fwd INSTALLED not ACTIVE
+
+Verifier: ./scripts/verify_fault_f2.sh → ALL CHECKS PASSED
+No secrets recorded.

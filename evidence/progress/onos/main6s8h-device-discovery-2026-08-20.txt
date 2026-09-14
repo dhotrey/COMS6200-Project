@@ -1,0 +1,220 @@
+Date: 20 August 2026
+Purpose: verify the project topology main6s8h against ONOS 2.7.0, and confirm
+device, DPID, OpenFlow-version and topology discovery.
+
+Topology source: topologies/main_topology.py (unmodified for this test)
+Static check: addSwitch=6  addHost=8  addLink=17
+Repository HEAD during test: 7546d1a
+
+===== LAUNCH COMMAND =====
+sudo mn -c
+sudo mn --custom topologies/main_topology.py \
+  --topo main6s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+
+Mininet startup:
+*** Adding hosts: h1 h2 h3 h4 h5 h6 h7 h8
+*** Adding switches: s1 s2 s3 s4 s5 s6
+*** Adding links: (s1,s2) (s1,s3) (s1,s4) (s1,s5) (s1,s6)
+                  (s2,s3) (s2,s4) (s2,s5) (s2,s6)
+                  (s3,h1) (s3,h2) (s4,h3) (s4,h4)
+                  (s5,h5) (s5,h6) (s6,h7) (s6,h8)
+*** Starting 6 switches: s1 s2 s3 s4 s5 s6
+
+Mininet "links" output confirmed the explicit port map:
+  s1-eth1<->s2-eth1 (OK OK)      s2-eth2<->s3-eth2 (OK OK)
+  s1-eth2<->s3-eth1 (OK OK)      s2-eth3<->s4-eth2 (OK OK)
+  s1-eth3<->s4-eth1 (OK OK)      s2-eth4<->s5-eth2 (OK OK)
+  s1-eth4<->s5-eth1 (OK OK)      s2-eth5<->s6-eth2 (OK OK)
+  s1-eth5<->s6-eth1 (OK OK)
+  s3-eth3<->h1-eth0 (OK OK)      s5-eth3<->h5-eth0 (OK OK)
+  s3-eth4<->h2-eth0 (OK OK)      s5-eth4<->h6-eth0 (OK OK)
+  s4-eth3<->h3-eth0 (OK OK)      s6-eth3<->h7-eth0 (OK OK)
+  s4-eth4<->h4-eth0 (OK OK)      s6-eth4<->h8-eth0 (OK OK)
+
+===== OVS-SIDE, PER SWITCH (read-only) =====
+== s1 ==
+controller   : ptcp:6654 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000001"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000001
+flow entries : 3
+== s2 ==
+controller   : ptcp:6655 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000002"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000002
+flow entries : 3
+== s3 ==
+controller   : ptcp:6656 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000003"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000003
+flow entries : 3
+== s4 ==
+controller   : ptcp:6657 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000004"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000004
+flow entries : 3
+== s5 ==
+controller   : ptcp:6658 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000005"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000005
+flow entries : 3
+== s6 ==
+controller   : ptcp:6659 tcp:127.0.0.1:6653
+protocols    : [OpenFlow13]
+fail-mode    : secure
+dpid         : "0000000000000006"
+of13 features: OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000006
+flow entries : 3
+
+All six tcp:127.0.0.1:6653 controller entries reported:
+  is_connected : true
+  role         : master
+  status       : {sec_since_connect="54", state=ACTIVE}
+
+The ptcp:665x entries are Mininet's per-switch local passive listeners and are
+expected to show is_connected: false.
+
+===== ONOS-SIDE DEVICES (REST /onos/v1/devices) =====
+device_count 6
+of:0000000000000001  s1  OF_13  available=True  Open vSwitch 3.3.9
+of:0000000000000002  s2  OF_13  available=True  Open vSwitch 3.3.9
+of:0000000000000003  s3  OF_13  available=True  Open vSwitch 3.3.9
+of:0000000000000004  s4  OF_13  available=True  Open vSwitch 3.3.9
+of:0000000000000005  s5  OF_13  available=True  Open vSwitch 3.3.9
+of:0000000000000006  s6  OF_13  available=True  Open vSwitch 3.3.9
+
+DPID mapping verified, not assumed:
+  s1 -> of:0000000000000001
+  s2 -> of:0000000000000002
+  s3 -> of:0000000000000003
+  s4 -> of:0000000000000004
+  s5 -> of:0000000000000005
+  s6 -> of:0000000000000006
+Each ONOS device annotation datapathDescription matches the Mininet switch name.
+
+===== ONOS-SIDE DEVICES (CLI: devices) =====
+id=of:0000000000000001, available=true, local-status=connected 1m0s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=1, driver=default, datapathDescription=s1, protocol=OF_13
+id=of:0000000000000002, available=true, local-status=connected 1m0s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=2, driver=default, datapathDescription=s2, protocol=OF_13
+id=of:0000000000000003, available=true, local-status=connected 1m0s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=3, driver=default, datapathDescription=s3, protocol=OF_13
+id=of:0000000000000004, available=true, local-status=connected 1m1s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=4, driver=default, datapathDescription=s4, protocol=OF_13
+id=of:0000000000000005, available=true, local-status=connected 1m1s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=5, driver=default, datapathDescription=s5, protocol=OF_13
+id=of:0000000000000006, available=true, local-status=connected 1m0s ago, role=MASTER, type=SWITCH, mfr=Nicira, Inc., hw=Open vSwitch, sw=3.3.9, chassis=6, driver=default, datapathDescription=s6, protocol=OF_13
+
+===== ONOS TOPOLOGY SUMMARY =====
+REST /onos/v1/topology
+  {"devices":6,"links":18,"clusters":1}
+
+CLI summary
+  node=172.17.0.2, version=2.7.0 clusterId=default
+  nodes=1, devices=6, links=18, hosts=0, SCC(s)=1, flows=18, intents=0
+
+===== ONOS LINK DISCOVERY (LLDP) =====
+directed_link_count   18
+undirected_pair_count 9
+
+Undirected switch-switch pairs discovered:
+  of:...0001 <-> of:...0002     (core)
+  of:...0001 <-> of:...0003
+  of:...0001 <-> of:...0004
+  of:...0001 <-> of:...0005
+  of:...0001 <-> of:...0006
+  of:...0002 <-> of:...0003
+  of:...0002 <-> of:...0004
+  of:...0002 <-> of:...0005
+  of:...0002 <-> of:...0006
+
+These are exactly the 9 expected physical switch-switch links.
+
+Directed links with ports (CLI: links):
+src=of:0000000000000001/1, dst=of:0000000000000002/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000001/2, dst=of:0000000000000003/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000001/3, dst=of:0000000000000004/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000001/4, dst=of:0000000000000005/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000001/5, dst=of:0000000000000006/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000002/1, dst=of:0000000000000001/1, type=DIRECT, state=ACTIVE
+src=of:0000000000000002/2, dst=of:0000000000000003/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000002/3, dst=of:0000000000000004/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000002/4, dst=of:0000000000000005/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000002/5, dst=of:0000000000000006/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000003/1, dst=of:0000000000000001/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000003/2, dst=of:0000000000000002/2, type=DIRECT, state=ACTIVE
+src=of:0000000000000004/1, dst=of:0000000000000001/3, type=DIRECT, state=ACTIVE
+src=of:0000000000000004/2, dst=of:0000000000000002/3, type=DIRECT, state=ACTIVE
+src=of:0000000000000005/1, dst=of:0000000000000001/4, type=DIRECT, state=ACTIVE
+src=of:0000000000000005/2, dst=of:0000000000000002/4, type=DIRECT, state=ACTIVE
+src=of:0000000000000006/1, dst=of:0000000000000001/5, type=DIRECT, state=ACTIVE
+src=of:0000000000000006/2, dst=of:0000000000000002/5, type=DIRECT, state=ACTIVE
+
+The discovered port numbers match the project's explicit port map exactly:
+  s1:1<->s2:1, s1:2<->s3:1, s1:3<->s4:1, s1:4<->s5:1, s1:5<->s6:1
+  s2:2<->s3:2, s2:3<->s4:2, s2:4<->s5:2, s2:5<->s6:2
+
+LINK-COUNT SEMANTICS
+  Mininet reports 17 links  = 9 switch-switch + 8 host-switch
+  ONOS reports 18 links     = 9 switch-switch, counted as DIRECTED pairs
+  ONOS does not represent host-facing links as topology links.
+  The ONOS directed-link count must not be compared with the Mininet count.
+
+===== ONOS HOSTS =====
+host_count 0
+CLI: hosts -> (no output)
+
+Expected. Host discovery in ONOS is packet-driven, and no forwarding
+application is active, so no host traffic was generated or forwarded.
+
+===== ONOS FLOWS =====
+flow_count 18   (3 per device)
+of:0000000000000001  3
+of:0000000000000002  3
+of:0000000000000003  3
+of:0000000000000004  3
+of:0000000000000005  3
+of:0000000000000006  3
+
+Per-device rules (CLI: flows -s), identical pattern on all six switches:
+  ADDED, table=0, priority=40000, selector=[ETH_TYPE:lldp], treatment=[immediate=[OUTPUT:CONTROLLER], clearDeferred]
+  ADDED, table=0, priority=40000, selector=[ETH_TYPE:bddp], treatment=[immediate=[OUTPUT:CONTROLLER], clearDeferred]
+  ADDED, table=0, priority=40000, selector=[ETH_TYPE:arp],  treatment=[immediate=[OUTPUT:CONTROLLER], clearDeferred]
+
+Example counters observed after ~60 s of LLDP discovery:
+  of:...0001 lldp bytes=13761 packets=99 ; bddp bytes=13761 packets=99 ; arp packets=0
+  of:...0002 lldp bytes=14039 packets=101; bddp bytes=14039 packets=101; arp packets=0
+  of:...0003 lldp bytes=5282  packets=38 ; bddp bytes=5282  packets=38 ; arp packets=0
+  of:...0004 lldp bytes=5699  packets=41 ; bddp bytes=5699  packets=41 ; arp packets=0
+  of:...0005 lldp bytes=3475  packets=25 ; bddp bytes=3475  packets=25 ; arp packets=0
+  of:...0006 lldp bytes=5282  packets=38 ; bddp bytes=5282  packets=38 ; arp packets=0
+
+No host-forwarding flows exist. No OVS NORMAL action was used. STP was not
+enabled. Reactive forwarding (org.onosproject.fwd) was not activated.
+
+===== HOST CONNECTIVITY =====
+pingall was NOT run and host connectivity was NOT established.
+
+This is deliberate, not a controller-integration failure. The redundant physical
+topology contains cycles, and connectivity must come from deterministic
+loop-free forwarding designed in a later milestone, not from uncontrolled
+flooding or a reactive learning application.
+
+===== RESOURCE USE DURING THE RUN =====
+Mem:  955Mi total, 872Mi used, 82Mi available
+Swap: 2.3Gi total, 1.1Gi used
+
+===== CLEANUP AND CONTROLLER HEALTH =====
+exit
+sudo mn -c   -> *** Cleanup complete.
+ONOS container: Up
+GET /onos/v1/devices -> HTTP 200
+
+After teardown ONOS correctly reported the devices as
+available=false / local-status=disconnected, and links returned to 0.

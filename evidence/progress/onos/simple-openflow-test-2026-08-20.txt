@@ -1,0 +1,103 @@
+Date: 20 August 2026
+Purpose: minimal OpenFlow 1.3 sanity test between Mininet/OVS and ONOS 2.7.0.
+
+Topology: h1 -- s1 -- h2 (non-redundant, no cycles)
+
+===== COMMAND =====
+sudo mn -c
+sudo mn --topo single,2 \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch ovsk,protocols=OpenFlow13
+
+Mininet startup:
+*** Adding controller
+*** Adding hosts: h1 h2
+*** Adding switches: s1
+*** Adding links: (h1, s1) (h2, s1)
+*** Starting controller c0
+*** Starting 1 switches: s1
+
+===== OVS-SIDE: ovs-vsctl show =====
+Bridge s1
+    Controller "ptcp:6654"
+    Controller "tcp:127.0.0.1:6653"
+        is_connected: true
+    fail_mode: secure
+    Port s1-eth1
+    Port s1-eth2
+    Port s1 (internal)
+ovs_version: "3.3.9"
+
+===== OVS-SIDE: controller target =====
+ovs-vsctl get-controller s1
+  ptcp:6654
+  tcp:127.0.0.1:6653
+
+===== OVS-SIDE: protocols =====
+ovs-vsctl get bridge s1 protocols
+  [OpenFlow13]
+
+===== OVS-SIDE: fail mode =====
+ovs-vsctl get-fail-mode s1
+  secure
+
+===== OVS-SIDE: controller connection state =====
+ovs-vsctl --columns=target,is_connected,role,status list controller
+  target      : "tcp:127.0.0.1:6653"
+  is_connected: true
+  role        : master
+  status      : {last_error="Connection timed out", sec_since_connect="22",
+                 sec_since_disconnect="23", state=ACTIVE}
+
+  target      : "ptcp:6654"
+  is_connected: false
+  role        : []
+  status      : {}
+
+Note on last_error: the first connection attempt was made while ONOS was still
+starting its OpenFlow listener. OVS retried and the session reached
+state=ACTIVE, is_connected=true. The ptcp:6654 entry is Mininet's own local
+passive listener, not the ONOS session.
+
+===== OPENFLOW 1.3 NEGOTIATION (runtime) =====
+ovs-ofctl -O OpenFlow13 show s1 | head -3
+  OFPT_FEATURES_REPLY (OF1.3) (xid=0x2): dpid:0000000000000001
+  n_tables:254, n_buffers:0
+  capabilities: FLOW_STATS TABLE_STATS PORT_STATS GROUP_STATS QUEUE_STATS
+
+===== FLOWS INSTALLED BY ONOS =====
+ovs-ofctl -O OpenFlow13 dump-flows s1
+  OFPST_FLOW reply (OF1.3) (xid=0x2):
+   cookie=0x100007a585b6f, priority=40000, dl_type=0x8942 actions=CONTROLLER:65535,clear_actions
+   cookie=0x10000ea6f4b8e, priority=40000, arp        actions=CONTROLLER:65535,clear_actions
+   cookie=0x100009465555a, priority=40000, dl_type=0x88cc actions=CONTROLLER:65535,clear_actions
+
+dl_type 0x88cc = LLDP, 0x8942 = BDDP. These are ONOS's link-discovery and ARP
+punt rules, installed by the controller (not by us).
+
+===== ONOS-SIDE DEVICE DISCOVERY (REST /onos/v1/devices) =====
+{"devices":[{"id":"of:0000000000000001","type":"SWITCH","available":true,
+"role":"MASTER","mfr":"Nicira, Inc.","hw":"Open vSwitch","sw":"3.3.9",
+"serial":"None","driver":"default","chassisId":"1",
+"humanReadableLastUpdate":"connected 21s ago",
+"annotations":{"channelId":"172.17.0.1:36622","datapathDescription":"s1",
+"managementAddress":"172.17.0.1","protocol":"OF_13"}}]}
+
+Both sides agree:
+  OVS  -> is_connected: true, [OpenFlow13], OFPT_FEATURES_REPLY (OF1.3)
+  ONOS -> of:0000000000000001 available=true, protocol=OF_13
+
+===== PORTS ENDPOINT =====
+GET /onos/v1/devices/of:0000000000000001/ports returned the device with a
+populated "ports" array (truncated in capture).
+
+===== CLEANUP =====
+exit
+sudo mn -c
+*** Cleanup complete.
+
+===== ONOS HEALTH AFTER TEST =====
+container status: Up
+GET /onos/v1/devices -> HTTP 200
+
+ONOS remained healthy after the Mininet network was torn down.

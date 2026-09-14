@@ -1,0 +1,147 @@
+---
+description: Persistent COMS6200 project constraints, architecture, Git workflow, and reporting rules
+alwaysApply: true
+---
+
+# COMS6200 — LLM-Based Network Troubleshooting Agent
+
+Evaluate a tool-using LLM for diagnosis/localisation of controlled SDN faults versus a deterministic scripted baseline.
+
+Research question: How accurately and efficiently can a tool-using LLM agent diagnose and localise common faults in an OpenFlow-controlled Mininet network compared with a deterministic scripted troubleshooting baseline?
+
+## Current architecture
+
+```
+Mininet / OVS → OpenFlow 1.3 → ONOS 2.7.0
+  → read-only REST/controller state → Telemetry / Tool Gateway
+       ↙ LLM Agent          Scripted Baseline ↘
+                    Diagnosis → Evaluator / Logger
+                              → optional constrained repair
+```
+
+- Python, Mininet, Open vSwitch, OpenFlow 1.3, Layer 2, `10.0.0.0/24`
+- Controller: ONOS 2.7.0 in the version-pinned Docker image `onosproject/onos:2.7.0`
+- One OpenAI tool-using agent and one deterministic scripted baseline (both planned)
+- Ubuntu 24.04.4 is the **verified reference** Linux environment
+- The UQ-provided Kali VM is a **supported course compatibility target**, not a fully milestone-verified substitute
+
+Docker: prefer current-user `docker` when `docker info` works. `sudo docker` is a fallback only. Setup scripts must not add users to the docker group or change socket permissions. Mininet/`mnexec` typically still require root (`sudo mn ...`).
+
+The LLM must not receive: unrestricted shell; ONOS credentials; unrestricted ONOS REST; fault labels; injector configuration; hidden ground truth. The telemetry gateway is the only agent-facing interface.
+
+## Verified state (do not regress)
+
+M0–M4, **M5 F1**, and **M5B Fault Catalogue v1 (F1–F5)** are **completed / frozen**.
+
+M4 facts (Ubuntu `Aus`, 27 August 2026): six bounded tools; hybrid topology (not `/hosts`); `mnexec` ping/iperf; `verify_telemetry.sh` ALL CHECKS PASSED. Evidence: `evidence/progress/telemetry/structured-telemetry-2026-08-27.txt`.
+
+M5/M5B facts (Ubuntu `Aus`, 27 August 2026): Fault Catalogue **v1 frozen**. F1 link down s3–s1; F2 TBF+bg congestion on s1–s5; F3 selective DROP (`org.coms6200.experiment`); F4 bounded unicast loop s3→s4→s1→s3 + safety TBF; F5 missing s3 baseline unicast for h5. Operator CLI only; ground truth in `/run/coms6200/fault-state.json`; M4 never receives fault metadata. `verify_fault_catalogue.sh` ALL FIVE PASSED. Evidence: `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`.
+
+Raw ONOS REST is not a substitute for the gateway; the gateway is now the agent-facing interface.
+
+Main topology `main6s8h` (`topologies/main_topology.py`): 6 switches, 8 hosts, 10 inter-switch links, 9 host-switch attachments, 19 physical links. Enhancements: s3–s4 access-edge test link; h6 primary `h6-eth0`→s5 with `10.0.0.6/24`; h6 secondary `h6-eth1`→s6 with **no baseline IPv4**.
+
+ONOS facts (enhanced topology, 20 Aug 2026): 6/6 OVS devices connected; OpenFlow 1.3; secure fail mode; 20 directed ONOS links (= 10 physical switch–switch, including s3:5↔s4:5 both ways); REST verified for devices, links, hosts, flows, topology, applications, cluster, device ports, port statistics, and delta port statistics; 18 controller flows (3 per switch: LLDP/BDDP/ARP); `org.onosproject.fwd` **not** active.
+
+M3 forwarding facts: application `org.coms6200.baseline` (numeric id 176); 56 ADDED flows (s1:12, s2:0, s3–s6:11); unicast priority 41000; ARP-tree priority 42000; `pingall` 0% dropped (56/56); no NORMAL/STP/FLOOD; reserved links unused by baseline actions. Provisioner: `forwarding/baseline_forwarding.py`.
+
+## Milestones
+
+- M0 Reproducible Environment Bootstrap — completed
+- M1 Enhanced Main Mininet Topology — completed
+- M2 ONOS + OpenFlow 1.3 Integration — completed
+- M3 Deterministic Loop-Free Forwarding — completed
+- **M4 Structured Telemetry Gateway — completed**
+- **M5 First Automated Fault + Reset — completed (F1)**
+- **M5B Fault Catalogue v1 — completed / frozen (F1–F5)**
+- **M6 First LLM Tool-Calling Diagnosis — current / next**
+
+Do **not** start LLM implementation before catalogue v1 is frozen (already frozen).
+Deterministic baseline and repeated experiments come after the M6 vertical slice.
+
+## M3 forwarding constraints
+
+Active core: s1. Baseline paths: s3/s4/s5/s6 → s1.
+
+Do **not** use in normal baseline forwarding: s2 alternate uplinks; s1–s2; s3–s4; h6–s6 secondary. Those links stay physically present for controlled experiments/failover.
+
+Baseline must remain deterministic and loop-free. Do **not** enable OVS NORMAL, STP, `org.onosproject.fwd`, or uncontrolled L2 flooding to make `pingall` succeed.
+
+## Faults and tools
+
+Mandatory faults only: F1–F5. **Catalogue v1 frozen** — all five implemented (operator `faults/` CLI; not an LLM tool). Use s3–s4 for F4. h6 dual-home is optional advanced work, not a sixth required scenario.
+
+Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `get_port_stats(sw)`, `get_flow_table(sw)`, `iperf(src,dst)` via `telemetry/`. Do not expose arbitrary shell or REST. Do not expose fault CLI/status/ground truth to the LLM.
+
+## Setup and paths
+
+- `setup/setup_ubuntu.sh` — base Mininet/OVS (historical name; apt/Debian-family, including UQ Kali)
+- `setup/setup_onos.sh` — ONOS 2.7.0 (capability-based Docker; sudo docker only as fallback)
+- `setup/verify_environment.sh` — base environment checks
+- `scripts/verify_onos.sh` — ONOS checks
+- `scripts/verify_main_openflow.sh` — running `main6s8h` OpenFlow checks
+- `scripts/verify_telemetry.sh` — live M4 tools (completed on Ubuntu 27 August 2026)
+- `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` / `verify_fault_catalogue.sh` — M5B catalogue (completed 27 August 2026)
+- `forwarding/baseline_forwarding.py` — M3 ONOS baseline provisioner
+- `telemetry/` — bounded agent-facing diagnostic gateway (M4)
+- `faults/` — operator Fault Catalogue v1 injector/reset (not an LLM tool)
+- `docs/decisions/llm-api-gateway.md` — planned OpenAI via Cloudflare AI Gateway (M6)
+
+Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `telemetry/`, `faults/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
+
+Canonical Part A source: `docs/reports/part-a/part-a-source.md`. Bibliography: `docs/reports/part-a/references.bib`. Builder: `docs/reports/part-a/build_report.py`. Use `[@key]` citations; never hard-code IEEE numbers. DOCX/PDF are generated artifacts.
+
+Part A truth: ONOS/OpenFlow, deterministic forwarding, structured telemetry, and Fault Catalogue v1 (F1–F5) completed on Ubuntu 27 August 2026; OpenAI diagnosis not yet evidenced. `.env` is Git-ignored; never commit API keys.
+
+## Hard constraints
+
+Prefer small, reproducible, testable, measurable, resettable work. Build one working vertical slice before optional features. Do not enlarge the topology without experimental need.
+
+Do not: introduce Kubernetes or extra databases; add extra Docker services beyond the existing ONOS container without approval; redesign as Layer 3 without approval; add/benchmark multiple LLM models by default; add a second controller framework; expose unrestricted shell or ONOS REST to the LLM; hard-code credentials or commit `.env`; fabricate results or convert planned work into completed claims; delete teammates' work or rewrite unrelated files.
+
+Before significant changes: inspect existing code; change only necessary files; test the milestone; report observed results; update `docs/user-guide.md` (and `README.md`/setup docs) when commands or operator workflow change. Prefer simple Python modules, useful type hints, and errors that are not silently swallowed. Environment compatibility is capability-based; Ubuntu 24.04.4 is the reference.
+
+## Git and commits
+
+`develop` = integration (primary working branch). `master` = stable / submission-ready. `feature/*` = individual work.
+
+Do not automatically commit, push, merge, or rewrite history. Never force push. Stage only intended files. Do not commit `.env`, credentials, tokens, temporary files, `incoming/`, or Word lock files. Inspect `git status` before every commit.
+
+After meaningful implementation work report: files created/modified; commands; tests; actual observed result; known limitations; next milestone; suggested commit message. Never invent output.
+
+## User manual synchronisation — mandatory
+
+`docs/user-guide.md` is the canonical operational manual. The root `README.md` stays the concise landing page.
+
+For **every** task that changes project code, configuration, runtime behaviour, commands, architecture, or user workflow, inspect `docs/user-guide.md` before finishing.
+
+If the change affects anything a user, operator, or developer must know, update the manual **in the same task**.
+
+Changes that normally require a manual update include:
+
+- setup/install scripts, dependencies, environment verification
+- Docker/ONOS setup, controller version/configuration, ports or endpoints
+- topology nodes/links, host addresses/MACs, switch port mappings
+- forwarding rules/priorities, baseline verification
+- telemetry tools or schemas; tool names, arguments, outputs
+- fault injector behaviour, fault commands/options, reset/cleanup
+- scripted troubleshooter; LLM/model integration; prompts; diagnosis schema
+- evaluation workflow, experiment commands, expected runtime output
+- new errors/troubleshooting steps; safety constraints; milestone status
+
+When a feature moves from planned to implemented:
+
+1. Update its status in the user manual.
+2. Replace conceptual/planned instructions with **actual** commands/API schema.
+3. Include only runtime-verified expected output.
+4. Update troubleshooting/reset instructions if affected.
+
+When implementation changes an existing command, schema, or path, replace the old manual instruction in the same task. Do not leave stale duplicates. Do not fabricate evidence to make documentation look complete.
+
+If a task genuinely has **no** user-facing/manual impact, leave the manual unchanged, but the final task summary **must** state:
+
+`User manual reviewed: no update required`
+
+and briefly explain why.
+
+A code/configuration milestone is **not** documentation-complete until the affected manual sections are updated.

@@ -1,0 +1,32 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M5B F3 ACL/policy DROP — live verification
+
+Git: feature/m5b-complete-fault-catalogue @ 7f377ae
+Catalogue: v1
+ONOS: 2.7.0
+OS: Ubuntu 24.04.4 LTS
+
+Injection:
+  python3 -m faults.cli inject --scenario F3
+  Switch: s3
+  Selector: ETH_SRC=00:00:00:00:00:01 (h1), ETH_DST=00:00:00:00:00:05 (h5)
+  Priority: 50000
+  AppId: org.coms6200.experiment (neutral)
+  Treatment: empty instructions (DROP)
+
+Observed:
+  h1→h5: 100% loss
+  h2→h5: success
+  h1→h6: success
+  Baseline ADDED: 56 unchanged
+  Experiment flows: 1
+  get_flow_table(s3): high-priority rule visible without fault labels
+
+Reset:
+  removed 1 experiment flow
+  experiment count 0
+  pingall 56/56; 20 directed links
+
+Verifier: ./scripts/verify_fault_f3.sh → ALL CHECKS PASSED
+No secrets recorded.

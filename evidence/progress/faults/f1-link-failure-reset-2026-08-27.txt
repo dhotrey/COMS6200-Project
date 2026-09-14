@@ -1,0 +1,143 @@
+Date: 27 August 2026
+Host: Aus (45.63.30.137)
+Purpose: M5 First Automated Fault + Clean Reset — F1 primary s3–s1 link
+         failure injection and deterministic reset on the Ubuntu 24.04.4
+         reference testbed with ONOS 2.7.0 + main6s8h + M3 baseline.
+
+Repository (feature branch at live verification):
+  feature/m5-f1-fault-reset @ 4ed0ce2
+  Implement F1 link-failure injection and reset
+
+Secrets are NOT recorded (no ONOS_PASSWORD, Authorization headers, SSH keys).
+
+=====================================================================
+ENVIRONMENT
+=====================================================================
+hostname: Aus
+OS: Ubuntu 24.04.4 LTS
+kernel: 6.8.0-137-generic
+uname: Linux
+whoami: root
+Docker: docker info OK (current-user / root session; no Docker privilege change)
+
+=====================================================================
+INITIAL HEALTHY STATE (PRECHECK)
+=====================================================================
+ONOS REST: HTTP 200
+Devices: 6 (OF_13)
+Directed ONOS links: 20
+Baseline org.coms6200.baseline ADDED: 56
+System/controller flows: 18 (unchanged by F1; not re-counted during every step)
+Pingall via telemetry gateway: 56/56
+org.onosproject.fwd: INSTALLED (not ACTIVE)
+F1 interfaces before inject:
+  s3-eth1 UP on bridge s3 (ovs-vsctl port-to-br = s3)
+  s1-eth2 UP on bridge s1 (ovs-vsctl port-to-br = s1)
+Active M5 fault state: none (/run/coms6200/ present, no fault-state.json)
+
+=====================================================================
+F1 INJECTION
+=====================================================================
+Command (root; no internal sudo):
+  python3 -m faults.cli inject --scenario F1
+
+Mechanism:
+  ip link set dev <canonical-iface> down
+  for both endpoints derived from topologies/spec.py INTER_SWITCH_LINKS
+  (s1:2 <-> s3:1) => interfaces s1-eth2 and s3-eth1
+  Fixed argv only; shell disabled; interface names not caller-supplied
+
+Resources changed:
+  s1-eth2 DOWN (bridge s1, port 2)
+  s3-eth1 DOWN (bridge s3, port 1)
+  OVS ports retained (not deleted)
+
+Runtime state:
+  /run/coms6200/fault-state.json (dir mode 0700, file mode 0600)
+  status=ACTIVE; includes evaluator-only ground_truth
+
+Local endpoint verification after inject: both operstate down
+
+=====================================================================
+ONOS / M4 OBSERVATIONS DURING F1
+=====================================================================
+Bounded poll (1 s interval, timeout 30 s):
+  directed links 20 -> 18
+  Manual exercise converge: ~2 s
+  verify_fault_f1.sh converge: 1 s (f1_converge_seconds=1)
+
+get_topology() summary during F1:
+  switches: 6
+  observed_switches: 6
+  configured_inter_switch_links: 10   (configured map unchanged)
+  physical_inter_switch_links: 9      (observed ONOS physical links)
+  configured_host_attachments: 9
+  logical_hosts: 8
+  total_physical_links: 19            (configured total)
+
+get_port_status(s3) port 1: enabled=False, name=s3-eth1, peer s1:2
+get_port_status(s1) port 2: enabled=False, name=s1-eth2, peer s3:1
+
+Baseline ADDED during F1: 56 (unchanged; F1 does not mutate flows)
+
+Targeted connectivity (telemetry.cli ping):
+  h1 -> h5: received=0, loss_pct=100.0  (remote path via s1 failed)
+  h1 -> h2: received=3/3, loss_pct=0.0  (local on s3 healthy)
+  h3 -> h5: received=3/3, loss_pct=0.0  (unaffected path healthy)
+
+=====================================================================
+F1 RESET
+=====================================================================
+Command:
+  python3 -m faults.cli reset
+
+Result: status=IDLE; both endpoints operstate up
+Crash-recovery path also available: python3 -m faults.cli reset --force-f1
+  (restores only canonical F1 interfaces after bridge validation)
+
+Bounded recover poll:
+  directed links 18 -> 20
+  Manual recover: 1 s
+  verify_fault_f1.sh recover: 1 s (f1_recover_seconds=1)
+
+=====================================================================
+POSTCHECK AFTER RESET
+=====================================================================
+python3 forwarding/baseline_forwarding.py verify: VERIFY PASS
+Baseline ADDED after reset: 56
+Final pingall via telemetry gateway: 56/56
+Directed ONOS links: 20
+org.onosproject.fwd: INSTALLED (not ACTIVE)
+NORMAL/STP/FLOOD: none found in ovs-ofctl OpenFlow13 dumps
+Active fault state: cleared (status active=false; state_file=null)
+F1 interfaces after reset: s3-eth1 UP, s1-eth2 UP
+
+=====================================================================
+AUTOMATED VERIFICATION
+=====================================================================
+./scripts/verify_fault_f1.sh
+Result: M5 F1 verification: ALL CHECKS PASSED
+Cleanup trap exercised path: reset on EXIT after successful run (INJECTED cleared)
+
+Static tests on implementation host (also run on Darwin before push):
+  python3 tests/test_main_static.py          PASS
+  python3 tests/test_baseline_forwarding.py  PASS
+  python3 tests/test_telemetry.py            PASS
+  python3 tests/test_faults.py               PASS
+  bash -n scripts/verify_fault_f1.sh         PASS
+
+=====================================================================
+BOUNDARY NOTES
+=====================================================================
+- Fault CLI is operator/evaluator only; not an LLM/agent tool
+- Ground truth lives only in fault runtime state / inject response
+- telemetry/ does not import faults; TOOL_SCHEMAS contain no fault tools
+- No --interface / --cmd / --pid / arbitrary link selection
+- Injector does not invoke sudo; requires EUID 0 (ROOT_REQUIRED otherwise)
+
+=====================================================================
+M5 SCOPE
+=====================================================================
+COMPLETE for F1 only.
+F2–F5 not implemented.
+LLM diagnosis / scripted troubleshooter / automatic repair not started.

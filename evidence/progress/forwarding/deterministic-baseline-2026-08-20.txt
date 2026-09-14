@@ -1,0 +1,129 @@
+Date: 20 August 2026
+Purpose: runtime evidence for M3 deterministic loop-free baseline forwarding
+on the enhanced main6s8h topology against ONOS 2.7.0.
+
+Repository HEAD during test: 4700d409bf42529189399865b4bd735690b7b7de
+Server: Ubuntu 24.04.4 LTS, Mininet 2.3.0, Open vSwitch 3.3.9, ONOS 2.7.0
+ONOS image: onosproject/onos:2.7.0
+Reactive forwarding org.onosproject.fwd remained INSTALLED, not ACTIVE.
+No OVS NORMAL. No FLOOD. No STP.
+
+Credentials were supplied via ONOS_USER / ONOS_PASSWORD and are not recorded.
+
+===== LAUNCH COMMAND =====
+sudo mn -c
+sudo mn --custom topologies/main_topology.py \
+  --topo main6s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+
+Mininet: 6 switches, 8 hosts, 19 physical links, all OK.
+s3-eth5<->s4-eth5 present.
+h6 h6-eth0:s5-eth4 h6-eth1:s6-eth5
+
+===== PRE-INSTALL ONOS STATE =====
+devices available: 6
+directed links: 20
+flow_count: 18  (3 per switch)
+org.onosproject.core priority 40000:
+  ETH_TYPE 0x88cc LLDP -> CONTROLLER   x6
+  ETH_TYPE 0x8942 BDDP -> CONTROLLER   x6
+  ETH_TYPE 0x806  ARP  -> CONTROLLER   x6
+fwd: INSTALLED (not ACTIVE)
+
+===== INSTALL =====
+python3 forwarding/baseline_forwarding.py install
+
+Application: org.coms6200.baseline
+Numeric application ID: 176
+Unicast priority: 41000  (above ARP punt 40000 so ARP replies follow dest-MAC)
+ARP-tree priority: 42000 (above ARP punt 40000 for broadcasts)
+Reserved future fault priority: 50000 (not installed)
+
+Expected baseline flows: 56
+Actual baseline flows: 56, all ADDED
+Per-switch baseline flows: s1=12 s2=0 s3=11 s4=11 s5=11 s6=11
+System/control flows: 18
+Total ONOS flows: 74
+
+Multiple OUTPUT instructions in one treatment were accepted by ONOS 2.7.0
+and installed on OVS as actions=output:N,output:M,...  No OpenFlow group
+was required.
+
+===== s2 =====
+s2 has zero org.coms6200.baseline flows.
+OVS dump-flows s2 contains only the three priority-40000 controller rules.
+
+===== RESERVED-LINK ACTION CHECK =====
+No baseline flow OUTPUT uses:
+  s1 port 1 (s1-s2)
+  s3/s4/s5/s6 port 2 (s2 uplinks)
+  s3 port 5 or s4 port 5 (s3-s4)
+  s6 port 5 (h6 secondary)
+Violations: 0
+
+ONOS topology after install remained {devices:6, links:20, clusters:1}
+including s3:5 <-> s4:5 ACTIVE both ways. Discovery != baseline use.
+
+===== REPRESENTATIVE FLOWS =====
+s1 ARP: priority=42000,arp,in_port=2,dl_dst=ff:ff:ff:ff:ff:ff
+        actions=output:3,output:4,output:5
+s1 unicast: priority=41000,dl_dst=00:00:00:00:00:01 actions=output:2
+s5 unicast h6: priority=41000,dl_dst=00:00:00:00:00:06 actions=output:4
+s6 unicast h6: priority=41000,dl_dst=00:00:00:00:00:06 actions=output:1
+s3 ARP in_port=3: actions=output:1,output:4  (not port 2 or 5)
+
+===== PINGS =====
+h1 ping -c 5 h2 : 5/5 received, 0% loss, rtt min/avg/max 0.057/0.178/0.599 ms
+h1 ping -c 5 h3 : 5/5 received, 0% loss, rtt min/avg/max 0.077/0.393/1.632 ms
+h1 ping -c 5 h5 : 5/5 received, 0% loss, rtt min/avg/max 0.079/0.227/0.725 ms
+h1 ping -c 5 h8 : 5/5 received, 0% loss, rtt min/avg/max 0.064/0.163/0.455 ms
+h6 ping -c 5 h7 : 5/5 received, 0% loss, rtt min/avg/max 0.083/0.228/0.777 ms
+  (h6 used primary h6-eth0)
+
+===== PINGALL =====
+*** Ping: testing ping reachability
+h1 -> h2 h3 h4 h5 h6 h7 h8
+h2 -> h1 h3 h4 h5 h6 h7 h8
+h3 -> h1 h2 h4 h5 h6 h7 h8
+h4 -> h1 h2 h3 h5 h6 h7 h8
+h5 -> h1 h2 h3 h4 h6 h7 h8
+h6 -> h1 h2 h3 h4 h5 h7 h8
+h7 -> h1 h2 h3 h4 h5 h6 h8
+h8 -> h1 h2 h3 h4 h5 h6 h7
+*** Results: 0% dropped (56/56 received)
+
+===== ARP / NEIGHBOUR =====
+h1 arp -n resolved all seven peers on h1-eth0 to MACs 00:00:00:00:00:02..08.
+h1 ip neigh: REACHABLE/STALE on h1-eth0 only.
+h6 ip neigh: all seven peers on h6-eth0 (primary); secondary iface unused.
+
+After pingall, ONOS REST reported ARP-tree packets=140 and unicast packets=682
+on org.coms6200.baseline flows.
+
+===== ONOS HOST DISCOVERY =====
+GET /onos/v1/hosts -> HTTP 200, host_count 0.
+
+This is expected: hostprovider is packet-driven, and baseline ARP is forwarded
+in the data plane (priority 42000/41000) so ARP is not punted to the
+controller. It is not a forwarding failure. pingall succeeded on primary
+addresses. h6 secondary was not an IPv4 location.
+
+===== CLEANUP / REPEATABILITY =====
+python3 forwarding/baseline_forwarding.py remove
+  Removed 56 org.coms6200.baseline flows after PENDING_REMOVE settled.
+  Remaining: baseline 0, org.onosproject.core 18, total 18.
+  Topology still {devices:6, links:20}. ONOS remained healthy. fwd still
+  INSTALLED, not ACTIVE.
+
+python3 forwarding/baseline_forwarding.py install
+  56 flows ADDED again. VERIFY PASS.
+
+Second pingall after reinstall:
+*** Results: 0% dropped (56/56 received)
+
+Final testbed state: baseline forwarding installed.
+
+===== STATIC TESTS =====
+python3 tests/test_baseline_forwarding.py
+All 11 checks PASS on workstation and server (no ONOS required).

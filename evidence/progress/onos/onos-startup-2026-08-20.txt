@@ -1,0 +1,110 @@
+Date: 20 August 2026
+Purpose: ONOS 2.7.0 installation and startup evidence.
+
+===== INSTALLATION METHOD =====
+Official pre-built Docker image (no host JDK, no source build).
+
+Command:
+  docker pull onosproject/onos:2.7.0
+
+Result:
+  Status: Downloaded newer image for onosproject/onos:2.7.0
+  docker.io/onosproject/onos:2.7.0
+  exit code 0
+
+Image:
+  REPOSITORY         TAG     IMAGE ID       SIZE
+  onosproject/onos   2.7.0   bc844aaafd64   1.45GB
+  digest sha256:bc844aaafd64e6b3834c7043bad83fa1eecc6afb6984e9b4887c12e1a307a7c2
+  created 2021-12-19T17:32:42Z
+
+Image environment:
+  LANG=en_US.UTF-8
+  JAVA_HOME=/usr/lib/jvm/zulu11-ca-amd64
+
+Disk before/after pull: 13G used (57%) -> 14G used (63%)
+
+===== CONTAINER START COMMAND =====
+docker run -d \
+  --name onos \
+  --memory=640m \
+  --memory-swap=1280m \
+  -p 127.0.0.1:6653:6653 \
+  -p 127.0.0.1:8181:8181 \
+  -p 127.0.0.1:8101:8101 \
+  -e ONOS_APPS="drivers,openflow,gui2" \
+  -e JAVA_OPTS="-Xms64m -Xmx256m -XX:+UseSerialGC" \
+  -e JAVA_TOOL_OPTIONS="-Xms64m -Xmx256m -XX:+UseSerialGC" \
+  onosproject/onos:2.7.0
+
+Container:
+  f86be57e7a00  onosproject/onos:2.7.0  Up
+  Ports: 127.0.0.1:6653->6653/tcp, 127.0.0.1:8101->8101/tcp,
+         127.0.0.1:8181->8181/tcp, 6640/tcp (unpublished), 9876/tcp (unpublished)
+  Memory=671088640  MemorySwap=1342177280  RestartPolicy=no
+
+===== JAVA VERSION (inside container) =====
+Picked up JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:+UseSerialGC
+openjdk version "11.0.8" 2020-07-14 LTS
+OpenJDK Runtime Environment Zulu11.41+23-CA (build 11.0.8+10-LTS)
+OpenJDK 64-Bit Server VM Zulu11.41+23-CA (build 11.0.8+10-LTS, mixed mode)
+
+===== ONOS VERSION =====
+/root/onos/VERSION -> 2.7.0
+CLI summary        -> node=172.17.0.2, version=2.7.0 clusterId=default
+REST /onos/v1/cluster -> {"nodes":[{"id":"172.17.0.2","ip":"172.17.0.2",
+                          "tcpPort":9876,"status":"READY"}]}
+
+===== STARTUP LOG: KEY LINES =====
+INFO [ApplicationManager] Application org.onosproject.drivers has been activated
+INFO [ApplicationManager] Application org.onosproject.gui2 has been activated
+INFO [ApplicationManager] Application org.onosproject.hostprovider has been activated
+INFO [ApplicationManager] Application org.onosproject.lldpprovider has been activated
+INFO [ApplicationManager] Application org.onosproject.optical-model has been activated
+INFO [Controller] OpenFlow TLS Params: TlsParams{tlsMode=disabled, ksLocation=null, tsLocation=null}
+INFO [Controller] Starting OpenFlow IO
+INFO [Controller] Using Nio transport
+INFO [Controller] Listening for OF switch connections on 6633
+INFO [Controller] Listening for OF switch connections on 6653
+INFO [ApplicationManager] Application org.onosproject.openflow-base has been activated
+INFO [ApplicationManager] Application org.onosproject.openflow has been activated
+INFO [OpenFlowClassifierManager] Started Openflow Manager
+INFO [OpenFlowDeviceProvider] Started        (portStatsPollFrequency=5)
+INFO [OpenFlowRuleProvider]   Started        (flowPollFrequency=5, adaptiveFlowSampling=false)
+INFO [OpenFlowGroupProvider]  Started
+INFO [OpenFlowPacketProvider] Started
+INFO [OpenFlowMeterProvider]  Configured
+
+Note: ONOS also listens on 6633 inside the container. Port 6633 was NOT
+published to the host. The project uses 6653 only.
+
+No fatal startup errors. Startup to OpenFlow-listener took roughly 60-90 s
+on this 1 vCPU host.
+
+===== LISTENING PORTS ON THE HOST =====
+LISTEN 127.0.0.1:6653   docker-proxy    # OpenFlow
+LISTEN 127.0.0.1:8181   docker-proxy    # REST API and GUI
+LISTEN 127.0.0.1:8101   docker-proxy    # Karaf CLI over SSH
+
+All bound to loopback. ONOS is not exposed to the public internet and no
+firewall rules were changed.
+
+===== ACTIVE APPLICATIONS (CLI: apps -a -s) =====
+*  14 org.onosproject.drivers              2.7.0    Default Drivers
+*  23 org.onosproject.optical-model        2.7.0    Optical Network Model
+*  34 org.onosproject.hostprovider         2.7.0    Host Location Provider
+*  35 org.onosproject.lldpprovider         2.7.0    LLDP Link Provider
+*  36 org.onosproject.openflow-base        2.7.0    OpenFlow Base Provider
+*  37 org.onosproject.openflow             2.7.0    OpenFlow Provider Suite
+* 149 org.onosproject.gui2                 2.7.0    ONOS GUI2
+
+Total applications known to ONOS: 169. Only the seven above are ACTIVE.
+org.onosproject.fwd (reactive forwarding) is INSTALLED but deliberately
+NOT ACTIVE.
+
+===== CO-EXISTENCE =====
+Pre-existing wg-easy container remained "Up (healthy)" throughout.
+
+===== PEAK RESOURCE USE DURING main6s8h RUN =====
+Mem: 955Mi total, ~891Mi used, ~64Mi available
+Swap: 2.3Gi total, ~1.1Gi used

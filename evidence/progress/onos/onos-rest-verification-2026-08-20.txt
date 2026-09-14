@@ -1,0 +1,115 @@
+Date: 20 August 2026
+Purpose: verify that the ONOS 2.7.0 REST API can serve the diagnostic evidence
+the project's Python tool layer will later require.
+
+CREDENTIAL HANDLING
+All requests used HTTP basic authentication against localhost. Credentials were
+supplied on the command line at test time and are NOT recorded here. No
+authorization headers, passwords or tokens appear in this file or anywhere in
+the repository. Requests are shown in the redacted form:
+
+  curl -sS -u "$ONOS_USER:$ONOS_PASSWORD" http://127.0.0.1:8181/onos/v1/<endpoint>
+
+Base URL: http://127.0.0.1:8181/onos/v1   (loopback only)
+
+=====================================================================
+A. CONTROLLER IDLE (no Mininet network running)
+=====================================================================
+
+GET /onos/v1/devices            -> HTTP 200   {"devices":[]}
+GET /onos/v1/applications       -> HTTP 200   169 applications known
+GET /onos/v1/topology           -> HTTP 200   {"devices":0,"links":0,"clusters":0}
+GET /onos/v1/links              -> HTTP 200   {"links":[]}
+GET /onos/v1/hosts              -> HTTP 200   {"hosts":[]}
+GET /onos/v1/flows              -> HTTP 200   {"flows":[]}
+GET /onos/v1/cluster            -> HTTP 200   node 172.17.0.2, tcpPort 9876, status READY
+GET /onos/v1/topology/overview   -> HTTP 404   {"code":404,"message":"HTTP 404 Not Found"}
+GET /onos/ui                     -> HTTP 302   (GUI login redirect; GUI is served)
+
+Note: /topology/overview does not exist in ONOS 2.7.0. Use /topology.
+
+ACTIVE APPLICATIONS reported by /onos/v1/applications:
+  ACTIVE  org.onosproject.drivers
+  ACTIVE  org.onosproject.optical-model
+  ACTIVE  org.onosproject.hostprovider
+  ACTIVE  org.onosproject.lldpprovider
+  ACTIVE  org.onosproject.openflow-base
+  ACTIVE  org.onosproject.openflow
+  ACTIVE  org.onosproject.gui2
+  INSTALLED (not active)  org.onosproject.fwd
+  INSTALLED (not active)  org.onosproject.openflow-message
+  INSTALLED (not active)  org.onosproject.drivers.polatis.openflow
+
+=====================================================================
+B. SIMPLE TOPOLOGY RUNNING (h1 -- s1 -- h2)
+=====================================================================
+
+GET /onos/v1/devices -> HTTP 200
+{"devices":[{"id":"of:0000000000000001","type":"SWITCH","available":true,
+"role":"MASTER","mfr":"Nicira, Inc.","hw":"Open vSwitch","sw":"3.3.9",
+"serial":"None","driver":"default","chassisId":"1",
+"humanReadableLastUpdate":"connected 21s ago",
+"annotations":{"channelId":"172.17.0.1:36622","datapathDescription":"s1",
+"managementAddress":"172.17.0.1","protocol":"OF_13"}}]}
+
+GET /onos/v1/devices/of:0000000000000001/ports -> HTTP 200
+Returned the device object with a populated "ports" array.
+
+=====================================================================
+C. PROJECT TOPOLOGY RUNNING (main6s8h)
+=====================================================================
+
+GET /onos/v1/topology -> HTTP 200
+  {"devices":6,"links":18,"clusters":1}
+
+GET /onos/v1/devices -> HTTP 200
+  device_count 6
+  of:0000000000000001  s1  OF_13  available=True
+  of:0000000000000002  s2  OF_13  available=True
+  of:0000000000000003  s3  OF_13  available=True
+  of:0000000000000004  s4  OF_13  available=True
+  of:0000000000000005  s5  OF_13  available=True
+  of:0000000000000006  s6  OF_13  available=True
+
+GET /onos/v1/links -> HTTP 200
+  directed_link_count   18
+  undirected_pair_count 9
+  Each link carries src/dst device plus src/dst port, state=ACTIVE, type=DIRECT.
+  Example: {"src":{"device":"of:0000000000000001","port":"2"},
+            "dst":{"device":"of:0000000000000003","port":"1"},
+            "state":"ACTIVE","type":"DIRECT"}
+
+GET /onos/v1/hosts -> HTTP 200
+  host_count 0
+  (No forwarding application is active; host discovery is packet-driven.)
+
+GET /onos/v1/flows -> HTTP 200
+  flow_count 18, evenly distributed 3 per device.
+  Rules are the ONOS lldp / bddp / arp punt-to-controller entries.
+
+=====================================================================
+D. SUITABILITY FOR THE PLANNED ARCHITECTURE
+=====================================================================
+
+Intended data path, now demonstrated end to end:
+
+  Python tool layer
+        |
+        REST      (HTTP 200 on devices, ports, links, hosts, flows, topology)
+        |
+       ONOS 2.7.0
+        |
+   OpenFlow 1.3   (OVS: [OpenFlow13], OFPT_FEATURES_REPLY (OF1.3);
+        |          ONOS: protocol=OF_13)
+ Mininet / OVS    (6 switches, 8 hosts, 17 links)
+
+Conclusion: the read-only endpoints needed for later structured telemetry
+(devices, ports, links, hosts, flows, topology) all respond over localhost
+REST with HTTP 200. No unrestricted shell access to the network is required by
+the future agent.
+
+NOT DONE IN THIS MILESTONE
+  - No write/POST operations were issued to ONOS.
+  - No telemetry abstraction, fault injector, LLM agent or deterministic
+    baseline was implemented.
+  - No credentials were stored in the repository.
