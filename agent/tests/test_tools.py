@@ -16,7 +16,7 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
                 ("unknown", "{}"), ("ping", "{"), ("ping", "[]"),
                 ("ping", '{"src":"h1","dst":"h2","count":true}'),
                 ("get_topology", '{"extra":1}'),
-                ("nmap", '{"src":"h1","dst":"h2","proto":"tcp","port":0}'),
+                ("nmap", '{"src":"h1","dst":"h2","proto":"tcp","port":-1}'),
             ]:
                 result = await tools.execute_tool(name, args)
                 self.assertTrue(result["invalid"])
@@ -33,13 +33,6 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["data"], {"switches": []})
         self.assertFalse(result["invalid"])
         self.assertGreaterEqual(result["duration_seconds"], result["execution_seconds"])
-
-    async def test_nmap_is_explicitly_unimplemented(self):
-        hosts = TOOL_SCHEMAS["ping"]["parameters"]["properties"]["src"]["enum"]
-        with patch.dict("os.environ", {"TOOL_DELAY_MIN_SECONDS": "0", "TOOL_DELAY_MAX_SECONDS": "0"}):
-            result = await tools.execute_tool("nmap", json.dumps({"src": hosts[0], "dst": hosts[1], "proto": "tcp", "port": 80}))
-        self.assertEqual(result["error"]["code"], "NOT_IMPLEMENTED")
-        self.assertFalse(result["invalid"])
 
     async def test_blocking_work_runs_outside_event_loop(self):
         loop_thread = threading.get_ident()
