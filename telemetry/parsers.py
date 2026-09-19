@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+import xml.etree.ElementTree as ET
 
 from topologies.spec import INTER_SWITCH_LINKS, SWITCH_NAMES, peer_of, switch_name
 
@@ -325,6 +326,35 @@ def parse_iperf(text: str) -> dict[str, Any]:
         "mbit_per_sec": (float(bits) / 1_000_000.0) if bits is not None else None,
         "retransmissions": sent.get("retransmits"),
     }
+
+
+def parse_nmapXML(text: str) -> dict[str, Any]:
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        raise ValueError("nmap did not return valid XML") from exc
+    if root.tag != "nmaprun":
+        raise ValueError("nmap XML root element is not nmaprun")
+    host = root.find("host")
+    if host is None:
+        raise ValueError("nmap XML does not contain a host element")
+    ports = host.find("ports")
+    if ports is None:
+        raise ValueError("nmap XML does not contain a ports element")
+    for port in ports.findall("port"):
+        protocol = port.get("protocol")
+        number = _int(port.get("portid"))
+        state_elem = port.find("state")
+        state = _str(state_elem.get("state")) if state_elem is not None else None
+        service_elem = port.find("service")
+        service_name = _str(service_elem.get("name")) if service_elem is not None else None
+        return {
+                "protocol": protocol,
+                "port": number,
+                "state": state,
+                "service": service_name,
+        }
+    raise ValueError("nmap XML does not contain any port elements")
 
 
 # Imported by tests; keep SWITCH_NAMES referenced so mappings stay in sync.

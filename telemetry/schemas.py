@@ -45,6 +45,21 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "additionalProperties": False,
         },
     },
+    "nmap": {
+        "name": "nmap",
+        "description": "Run a port scan between two project hosts using the specified protocol and port.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "src": {"type": "string", "enum": _HOST_ENUM},
+                "dst": {"type": "string", "enum": _HOST_ENUM},
+                "proto": {"type": "string", "enum": ["tcp", "udp"]},
+                "port": {"type": "integer", "minimum": 0, "maximum": 65535},
+            },
+            "required": ["src", "dst", "proto", "port"],
+            "additionalProperties": False,
+        },
+    },
     "get_port_status": {
         "name": "get_port_status",
         "description": "Return ONOS port enabled/name/type state for one switch, with configured peers.",

@@ -17,6 +17,7 @@ from telemetry.parsers import (
     normalize_port_stats,
     normalize_ports,
     parse_iperf,
+    parse_nmapXML,
     parse_ping,
     physical_links_from_onos,
 )
@@ -28,6 +29,8 @@ from telemetry.validate import (
     require_duration,
     require_host,
     require_switch,
+    require_match,
+    require_range,
 )
 
 IPERF_PORT = 5201
@@ -200,6 +203,38 @@ class TelemetryGateway:
             if right is not None:
                 _stop_host_iperf(right)
 
+    def nmap(self, src: object, dst: object, proto: object, port: object) -> dict[str, Any]:
+        tool = "nmap"
+        protos = {
+            "tcp": "-sT",
+            "udp": "-sU",
+        }
+        try:
+            left = require_host(src)
+            right = require_host(dst)
+            proto = require_match(proto, "proto", protos.keys())
+            port = require_range(port, "port", 0, 65535)
+            ip = primary_ip(right)
+            # nmap with xml output to stdout, no ping, host timeout 5s (3 retries default), total timeout 20s
+            completed = run_in_host(
+                left,
+                ["nmap", "-oX", "-", "-Pn", "-p", str(port), protos[proto], ip, "--host-timeout", "5s"],
+                timeout_s=20.0,
+            )
+            output = (completed.stdout or "") + "\n" + (completed.stderr or "")
+            try:
+                parsed = parse_nmapXML(output)
+            except ValueError:
+                return envelope.error(
+                    tool,
+                    "PARSE_ERROR",
+                    "could not parse nmap output",
+                    {"returncode": completed.returncode},
+                )
+            parsed.update({"src": left, "dst": right, "dst_ip": ip})
+            return envelope.ok(tool, parsed)
+        except Exception as exc:  # noqa: BLE001
+            return self._fail(tool, exc)
 
 def _stop_host_iperf(host: str) -> None:
     """Best-effort: stop leftover iperf3 inside one validated host namespace."""

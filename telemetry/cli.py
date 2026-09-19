@@ -49,6 +49,12 @@ def _parser() -> argparse.ArgumentParser:
     iperf.add_argument("--dst", required=True, help="h1-h8")
     iperf.add_argument("--duration", type=int, default=None, help="1-5 seconds, default 2")
 
+    nmap = sub.add_parser("nmap", help="Bounded one-shot nmap TCP test")
+    nmap.add_argument("--src", required=True, help="h1-h8")
+    nmap.add_argument("--dst", required=True, help="h1-h8")
+    nmap.add_argument("--proto", required=True, help="tcp or udp")
+    nmap.add_argument("--port", type=int, required=True, help="0-65535")
+
     sub.add_parser("schemas", help="Print provider-neutral tool schemas as JSON")
     return parser
 
@@ -74,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
         return _emit(gateway.ping(args.src, args.dst, count=args.count))
     if args.command == "iperf":
         return _emit(gateway.iperf(args.src, args.dst, duration=args.duration))
+    if args.command == "nmap":
+        return _emit(gateway.nmap(args.src, args.dst, proto=args.proto, port=args.port))
     parser.error(f"unknown command {args.command}")
     return 2
 
