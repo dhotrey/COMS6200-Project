@@ -77,6 +77,9 @@ nominal OVS speed or fault-injector TC config is used as capacity.
 - ONOS client has no generic `get(path)`
 - no credentials in tool JSON
 - ping/iperf do not change flows, links, addresses, or ONOS applications
+- iperf cleanup stops only the gateway's own port-5201 iperf3 (`pkill -f`);
+  Mininet hosts share the root process table, so an unscoped `pkill -x iperf3`
+  would also stop unrelated iperf3 such as the F2 background load
 
 Host namespaces: discover `/proc/*/cmdline` token `mininet:<host>`, re-validate
 the PID, then `mnexec -a <pid> -- <fixed argv>`.

@@ -182,3 +182,31 @@ def test_load_endpoint_reset_and_unknown_scenario(client, monkeypatch):
     reset = client.post("/api/scenario/reset")
     assert reset.status_code == 200
     assert reset.json()["active"] is False
+
+
+@pytest.mark.parametrize("scenario", ["F1", "F2", "F3", "F4", "F5"])
+def test_load_endpoint_accepts_each_catalogue_scenario(client, monkeypatch, scenario):
+    seen = []
+    monkeypatch.setattr(
+        server.fault_control,
+        "load_scenario",
+        lambda sid: seen.append(sid) or {
+            "ok": True,
+            "active": True,
+            "scenario_id": sid,
+            "runnable": ["F1", "F2", "F3", "F4", "F5"],
+            "error": None,
+        },
+    )
+    for raw in (scenario, scenario.lower()):
+        loaded = client.post("/api/scenario/load", json={"scenario": raw})
+        assert loaded.status_code == 200
+        assert loaded.json()["scenario_id"] == scenario
+    assert seen == [scenario, scenario]
+
+
+def test_picker_offers_every_catalogue_scenario(client):
+    page = client.get("/").text
+    for scenario in ("F1", "F2", "F3", "F4", "F5"):
+        assert f'<option value="{scenario}">' in page
+    assert 'id="load-scenario" disabled' not in page

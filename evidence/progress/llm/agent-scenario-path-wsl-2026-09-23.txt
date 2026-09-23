@@ -1,0 +1,120 @@
+Date: 23 September 2026
+Host: MollysLaptop (Windows 11, WSL2)
+Purpose: Harness fault path for Fault Catalogue v1 (F1–F5) — load through
+         agent.fault_control (UI "Load scenario"), observe through
+         agent.tools.execute_tool (the model's tool adapter), reset through
+         agent.fault_control. No model requests; no API credits used.
+
+NOT the Ubuntu reference host (Aus). WSL2 is a capability-equivalent
+environment only; these results are not reference-host milestone evidence.
+
+Repository: master @ 5877bdc plus uncommitted feature/f2-f5-llm-scenarios
+  changes (scoped gateway iperf cleanup, testbed stop recovery for F1–F5,
+  scripts/verify_agent_scenarios.sh, tests, docs), applied as a patch.
+
+=====================================================================
+ENVIRONMENT
+=====================================================================
+OS: Ubuntu 24.04.4 LTS on WSL2, kernel 6.18.33.2-microsoft-standard-WSL2
+Kernel features: openvswitch (module, loaded), sch_tbf (module), NET_NS, VETH
+Init: systemd (openvswitch-switch active)
+Python: 3.12.3
+Open vSwitch: 3.3.9
+iperf3: 3.16
+Docker: 29.7.2 (current user, no sudo)
+ONOS: 2.7.0 (image onosproject/onos:2.7.0), REST on loopback
+Mininet: version not captured
+Testbed: ./scripts/testbed.sh start (background main6s8h + 56 baseline flows)
+
+=====================================================================
+COMMAND
+=====================================================================
+export ONOS_USER=onos ONOS_PASSWORD=rocks   (values not recorded beyond the
+                                             reference-lab pair)
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD ./scripts/verify_agent_scenarios.sh
+
+=====================================================================
+RUN 1 — F1–F5 (samples /tmp/coms6200-agent.ZPqBjO)
+=====================================================================
+Healthy gates before and after every scenario: 20 directed links,
+  56 baseline ADDED, pingall 56/56, fault state inactive — all PASS.
+
+F1 PASS
+  load: active F1; ONOS directed links 20 -> 18 after 1 s
+  get_topology: 9 of 10 configured inter-switch links observed
+  get_port_status: s3 port 1 (s3-eth1) enabled=False; s1 port 2 (s1-eth2) enabled=False
+  ping: h1->h5 received 0; h1->h2 3/3; h3->h5 3/3
+  reset: links back to 20 after 1 s
+
+F2 PASS
+  healthy iperf h1->h5 (agent tool, 3 s): 25605.6 Mbit/s
+  get_port_stats s1: port 4 present, tx_bits_per_sec=0.0 at the ~1 s sample
+  ping h1->h5: 3/3 received, rtt_avg 321.756 ms
+  iperf h1->h5 under F2: 0.341 Mbit/s (ratio 0.0000; limit 0.25)
+  background iperf3 client (port 5202) still running after the agent iperf
+    call (pid 4650) — scoped gateway cleanup confirmed live
+
+F3 FAIL (verifier assertion, not the fault)
+  ping: h1->h5 received 0; h2->h5 3/3; h1->h6 3/3
+  get_flow_table s3: one priority-50000 org.coms6200.experiment rule matching
+    h1->h5, but ONOS reports its treatment as [{"type": "NOACTION"}];
+    the check expected an empty list
+  reset and post gate PASS
+
+F4 PASS
+  ping: h1->h5 received 0; h1->h2 3/3; h3->h5 3/3
+  get_flow_table: h1->h5 rules s3 -> port 5, s4 -> port 1, s1 -> port 2
+    packets 5982 / 5979 / 5979
+
+F5 PASS
+  ping: h1->h5 and h2->h5 received 0; h1->h6 and h3->h5 3/3
+  get_flow_table: s3 has no priority-41000 baseline rule for h5; s4 has one
+
+All five: no scenario id (F1–F5) or ground-truth keys in any tool
+  observation passed to the model path.
+
+Final: org.onosproject.fwd INSTALLED (not ACTIVE); no NORMAL/STP/FLOOD;
+  baseline_forwarding.py verify PASS (56 ADDED).
+Script result: "Agent scenario verification (F1 F2 F3 F4 F5): FAILED"
+  (F3 check only).
+
+=====================================================================
+FIX AND FOLLOW-UP
+=====================================================================
+verify_agent_scenarios.sh F3 check changed to accept a rule with no OUTPUT
+  instruction (covers ONOS NOACTION).
+Same-day LLM run (llm-diagnosis-f1-f5-wsl-2026-09-23.txt) shows
+  get_flow_table(s3) exposing the NOACTION rule to the model under F3.
+
+=====================================================================
+RUN 2 — F3 only, after the fix (samples /tmp/coms6200-agent.MckIQD)
+=====================================================================
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD ./scripts/verify_agent_scenarios.sh F3
+
+pre-F3 healthy gate PASS: 20 directed links, 56 baseline ADDED,
+  pingall 56/56, fault state inactive
+F3 PASS
+  load: active F3 through agent.fault_control
+  ping: h1->h5 received 0; h2->h5 3/3; h1->h6 3/3
+  get_flow_table s3: priority=50000 h1->h5 rule, treatment=[{'type': 'NOACTION'}]
+  no fault labels in 4 tool observations
+  reset: inactive; directed links 20 after 1 s
+post-F3 healthy gate PASS
+Final: org.onosproject.fwd INSTALLED (not ACTIVE); no NORMAL/STP/FLOOD;
+  baseline_forwarding.py verify PASS (56 ADDED).
+Script result: "Agent scenario verification (F3): ALL CHECKS PASSED"
+
+Combined with run 1, all five scenarios (F1–F5) have passed the harness
+path check on WSL2.
+
+=====================================================================
+EARLIER ATTEMPTS THE SAME DAY (not verification results)
+=====================================================================
+1. Stopped at the pre-F1 healthy gate: F2 was still loaded from the UI
+   (gate requires no active fault). Cleared with ./scripts/testbed.sh reset.
+2. PRECHECK "ONOS REST" failed: the testbed had been stopped
+   (switches disconnected 12:50:32 UTC, ONOS container exit 137 at
+   12:50:42 UTC, consistent with ./scripts/testbed.sh stop). Restarted with
+   ./scripts/testbed.sh start.
+
+No secrets recorded.

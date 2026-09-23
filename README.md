@@ -8,6 +8,7 @@ This project evaluates whether a tool-using LLM can diagnose and localise contro
 
 - **[User Manual](docs/user-guide.md)** — comprehensive setup, operation, fault scenarios, troubleshooting workflow, expected behaviour, reset procedures and experimental usage.
 - **[Part A report](docs/reports/part-a/)** — proposal/progress report (Markdown source, generated Word/PDF).
+- **[LLM diagnosis test results](docs/results/llm-diagnosis.md)** — which fault scenarios each model diagnoses correctly.
 
 ## Chat harness
 
@@ -17,9 +18,11 @@ Configure the root `.env` using `.env.example`; store the OpenAI key in Cloudfla
 BYOK. [Agent setup](agent/README.md) covers credentials, Logfire, tool timings,
 Cloudflare D1 history, and tests. Run
 `uv run --project agent python -m agent.setup_d1` before first launch. Six
-diagnostic tools are reused; nmap is a placeholder.
-Live model/testbed verification is pending. Disable the default artificial tool
-delays before measuring actual research performance.
+diagnostic tools are reused; nmap is a placeholder. The UI loads F1–F5;
+`./scripts/verify_agent_scenarios.sh` checks each scenario's load → tools →
+reset path without model requests. Test results:
+[LLM diagnosis test results](docs/results/llm-diagnosis.md). Disable the default
+artificial tool delays before measuring actual research performance.
 
 ## 1. Project Overview
 
@@ -40,7 +43,7 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M4 | Structured Telemetry Gateway | **Completed** |
 | M5 | First Automated Fault + Reset | **Completed** (F1) |
 | M5B | Complete Fault Catalogue v1 | **Completed** (F1–F5 frozen) |
-| M6 | First LLM Tool-Calling Diagnosis | **Next** |
+| M6 | First LLM Tool-Calling Diagnosis | **In progress** ([results](docs/results/llm-diagnosis.md)) |
 
 The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
 
@@ -54,15 +57,19 @@ Completed so far:
 - structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
 - Fault Catalogue v1 frozen: F1–F5 inject/reset verified (`scripts/verify_fault_catalogue.sh` ALL FIVE PASSED, 27 August 2026)
 
+In progress:
+
+- LLM tool-calling diagnosis through the chat harness (`agent/`): UI loads F1–F5; first tests recorded in [LLM diagnosis test results](docs/results/llm-diagnosis.md)
+
 Not implemented:
 
-- Live end-to-end verification of the OpenAI chat harness (implementation is in `agent/`)
 - scripted troubleshooting baseline
+- structured diagnosis format and automated evaluator (LLM answers are free text; scoring is manual)
 - repeated experiments
 
 ## 3. Architecture
 
-Implemented through M5 (F1 injector is operator-only; diagnosis still planned):
+Implemented (M0–M5B verified on the Ubuntu reference host; LLM agent implemented, M6 in progress):
 
 ```
 Mininet / Open vSwitch
@@ -72,6 +79,8 @@ OpenFlow 1.3
 ONOS 2.7.0
         ↓
 Telemetry / Tool Gateway
+        ↓
+OpenAI LLM agent (agent/ chat harness) → conversational diagnosis
 ```
 
 Operator/evaluator only (not an LLM tool):
@@ -81,18 +90,19 @@ Fault injector (F1–F5) → Mininet/OVS / ONOS experiment flows
 Fault injector → evaluator ground truth (/run/coms6200/fault-state.json)
 ```
 
-Still planned:
+Full comparison pipeline (LLM path implemented; the rest still planned):
 
 ```
 Telemetry / Tool Gateway
-       ↙              ↘
-OpenAI LLM        deterministic baseline
-       ↘              ↙
-          diagnosis
-             ↓
-      evaluator / logger
-             ↓
- optional constrained repair
+       ↙                        ↘
+OpenAI LLM agent             deterministic baseline
+(implemented)                (planned)
+       ↘                        ↙
+   structured diagnosis (planned; LLM answers are free text today)
+                ↓
+   evaluator / logger (planned; scoring is manual today)
+                ↓
+   optional constrained repair (optional extension)
 ```
 
 The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway exposes a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
@@ -261,6 +271,7 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
 | `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` | Live per-scenario fault inject/observe/reset |
 | `scripts/verify_fault_catalogue.sh` | Sequential F1–F5 catalogue verifier |
+| `scripts/verify_agent_scenarios.sh` | F1–F5 through the chat harness path (UI load → agent tools → UI reset); no model requests |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
 | `faults/` | Operator Fault Catalogue v1 injector/reset (not an LLM tool) |
 
@@ -369,7 +380,8 @@ COMS6200-Project/
 │   ├── verify_main_openflow.sh
 │   ├── verify_telemetry.sh
 │   ├── verify_fault_f1.sh … verify_fault_f5.sh
-│   └── verify_fault_catalogue.sh
+│   ├── verify_fault_catalogue.sh
+│   └── verify_agent_scenarios.sh    # F1–F5 through the chat harness path
 │
 ├── topologies/
 │   ├── main_topology.py
@@ -382,7 +394,7 @@ COMS6200-Project/
 │
 ├── telemetry/                      # M4 bounded diagnostic gateway
 │
-├── faults/                         # M5 operator F1 injector/reset
+├── faults/                         # M5B operator F1–F5 injector/reset
 │
 ├── controllers/
 │   └── main_controller.py          # superseded design reference; not used
@@ -399,7 +411,8 @@ COMS6200-Project/
 ├── docs/
 │   ├── setup/
 │   ├── decisions/
-│   └── reports/
+│   ├── reports/
+│   └── results/                    # LLM diagnosis test results summary
 │       └── part-a/
 │
 ├── agent/                         # conversational starter harness
@@ -412,10 +425,14 @@ COMS6200-Project/
 
 ## 14. Current Milestone
 
-**M6 — OpenAI + Cloudflare AI Gateway Integration and First LLM Tool-Calling Diagnosis** (next)
+**M6 — OpenAI + Cloudflare AI Gateway Integration and First LLM Tool-Calling Diagnosis** (in progress)
 
 M5B is complete: Fault Catalogue **v1** is frozen (F1–F5) on the Ubuntu reference
 server (27 August 2026). Evidence: `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`.
+
+M6 status: the chat harness (`agent/`) diagnoses through the telemetry gateway and
+loads F1–F5 from its UI. Test results and remaining runs:
+[LLM diagnosis test results](docs/results/llm-diagnosis.md).
 Do not start formal LLM episodes until gateway caching policy and model freeze
 are applied (`docs/decisions/llm-api-gateway.md`). Do not commit `.env` secrets.
 

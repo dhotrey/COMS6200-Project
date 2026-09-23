@@ -1,0 +1,171 @@
+Date: 23 September 2026 (second session)
+Host: MollysLaptop (Windows 11, WSL2)
+Purpose: Complete the model comparison for Fault Catalogue v1 — gpt-5.6-terra,
+         gpt-5.6-sol and gpt-6-astra on F2–F5, plus gpt-6-astra on F1 (its
+         earlier F1 run was cancelled). One run per scenario and model.
+
+NOT the Ubuntu reference host (Aus). Environment, repository state, harness
+settings, prompts, procedure and scoring are identical to
+llm-diagnosis-f1-f5-wsl-2026-09-23.txt (same running agent process, tool
+delays 0, 10 tool calls / 300 s per turn, reasoning effort medium, system
+prompt sha256 b735ca13...a2ccbc). The gpt-5.6-luna runs and the Terra/Sol F1
+runs are recorded in that file.
+
+Testbed before and after this session: 6 devices, 20 directed links,
+56 baseline ADDED, 0 experiment flows, no TBF on s1-eth4 / s3-eth5.
+13 runs, 0 harness errors, all status "completed", usage complete.
+
+Scoring (provisional, by the AI coding assistant; team review pending):
+  SUCCESS = correct fault type AND location; PARTIAL = one of the two;
+  FAIL = neither. Wrong secondary claims are noted, not scored.
+
+=====================================================================
+F1 link failure (s3:1 <-> s1:2 down)
+=====================================================================
+gpt-6-astra                                                  SUCCESS
+  Answer: s3-eth1 (port 1) <-> s1-eth2 (port 2) down at both ends; s3's h5
+    rule and ARP rule still use the dead uplink.
+  Note: suggested checking why the baseline does not reroute (static by design).
+  Tools 7: get_topology, ping h1->h5, get_port_status s3/s1, get_flow_table s3,
+    ping h1->h2, ping h5->h6
+  Tokens in 33793 (cached 30801), out 531 (reasoning 11); model calls 8
+  Cost ~$0.0873; 42.5 s (first visible token 23.6 s); D1 06e768729165417ebe26cbd90bfd907b
+
+=====================================================================
+F2 congestion (TBF 1 Mbit/s on s1:4 <-> s5:1 + background h3->h6)
+=====================================================================
+gpt-5.6-terra                                                SUCCESS (hedged)
+  Answer: RTT avg 225 ms, 0-byte iperf; h2->h5 and h1->h6 also slow;
+    "severe delay/queueing or traffic contention on the shared s3-s1-s5
+    corridor, most plausibly the s1-s5 segment".
+  Note: part of the localisation relied on ~9.6 GB cumulative traffic on
+    s1:4 <-> s5:1, much of it from earlier iperf tests, not the fault.
+  Tools 10/10: get_topology, ping h1->h5, get_flow_table s3, iperf h1->h5,
+    get_flow_table s1/s5, get_port_stats s1/s5, ping h2->h5, ping h1->h6
+  Tokens in 77974 (cached 65772), out 1408 (reasoning 775); model calls 11
+  Cost ~$0.0545; 69.0 s (first visible token 61.7 s); D1 607788700f2b48fb8af0868eb671440f
+
+gpt-5.6-sol                                                  PARTIAL
+  Answer: "flow-specific policer/queue, traffic shaping, or congestion"
+    localised to the h1<->h5 traffic combination (type right, location wrong).
+  Note: its h1->h6 and h2->h5 control pings (~70 ms) and all iperf tests
+    (0 bytes) cross the same s1-s5 link, so they could not isolate it.
+  Tools 10/10: get_topology, ping h1->h5, iperf h1->h5, get_flow_table
+    s3/s1/s5, ping h1->h6, ping h2->h5, iperf h1->h6, iperf h2->h5
+  Tokens in 70722 (cached 60007), out 1498 (reasoning 841); model calls 11
+  Cost ~$0.0968; 83.5 s (first visible token 76.0 s); D1 ecb08dc0cf1c4284b7d11b6d9fc6ae2e
+
+gpt-6-astra                                                  FAIL
+  Answer: leading suspects "the s1-s5 link, the s5-h5 access link, or h5
+    itself"; "not enough evidence to distinguish them or claim congestion".
+  Note: proposed the right isolating test (h1->h6 vs h6->h5) but had used
+    the 10-call budget.
+  Tools 10/10: get_topology, ping h1->h5, iperf h1->h5, get_flow_table
+    s3/s1/s5, get_port_stats s1/s5, ping h1->h2, ping h1->h3
+  Tokens in 73631 (cached 61879), out 671 (reasoning 26); model calls 11
+  Cost ~$0.2129; 53.4 s (first visible token 36.9 s); D1 d9b8404ce6414c77a71cdf2623e4022e
+
+=====================================================================
+F3 ACL/policy drop (s3, h1->h5, priority 50000)
+=====================================================================
+gpt-5.6-terra                                                SUCCESS
+  Answer: priority-50000 org.coms6200.experiment rule on s3, ETH_SRC h1 /
+    ETH_DST h5, NOACTION, overriding the priority-41000 h5 rule.
+  Tools 10/10: get_topology, ping h1->h5/h1->h2/h5->h6/h2->h5/h1->h3/h1->h6/
+    h5->h1, get_flow_table s3/s5
+  Tokens in 45761 (cached 36561), out 1109 (reasoning 451); model calls 11
+  Cost ~$0.0390; 51.5 s (first visible token 45.6 s); D1 12231c98e1ab46de89cb55f351c0eb17
+
+gpt-5.6-sol                                                  SUCCESS
+  Answer: same rule; also explained h5->h1 failing because the replies are
+    h1->h5 traffic dropped by the same rule.
+  Tools 9: get_topology, ping h1->h5/h1->h2/h1->h6/h6->h5/h5->h1/h2->h5,
+    get_flow_table s3/s5
+  Tokens in 40910 (cached 32074), out 838 (reasoning 291); model calls 10
+  Cost ~$0.0649; 68.6 s (first visible token 63.4 s); D1 446c353e7bf94f83964bac2b84d5f2c8
+
+gpt-6-astra                                                  SUCCESS
+  Answer: same rule; confirmed by re-pinging and watching its counter rise
+    6 -> 9 while the normal h5 rule stayed at 287.
+  Tools 9: get_topology, ping h1->h5, get_port_status s3/s5, ping h1->h2,
+    ping h6->h5, get_flow_table s3, ping h1->h5, get_flow_table s3
+  Tokens in 45912 (cached 36567), out 571 (reasoning 0); model calls 10
+  Cost ~$0.1586; 45.8 s (first visible token 30.2 s); D1 e1e2434500cf4800993d77c95417d088
+
+=====================================================================
+F4 forwarding loop (h1->h5 via s3:5 -> s4:1 -> s1:2 -> s3)
+=====================================================================
+gpt-5.6-terra                                                SUCCESS
+  Answer: priority-50000 h1->h5 rules s3->5, s4->1, s1->2 form the loop;
+    counters ~82k-99k packets.
+  Note: wrongly said s3 port 1 leads to s2 (it leads to s1).
+  Tools 8: get_topology, ping h1->h5/h2->h5/h1->h2/h5->h1,
+    get_flow_table s3/s4/s1
+  Tokens in 42342 (cached 31489), out 1481 (reasoning 747); model calls 9
+  Cost ~$0.0458; 55.2 s (first visible token 47.9 s); D1 f08e9047bbde499d9826b70195bc1d12
+
+gpt-5.6-sol                                                  SUCCESS
+  Answer: loop s3 -> s4 -> s1 -> s3 from the three priority-50000 rules.
+  Note: blamed only the s1 rule and proposed fixing it alone, which would
+    leave the s3/s4 experiment rules detouring traffic.
+  Tools 7: get_topology, ping h1->h5/h1->h6/h2->h5, get_flow_table s3/s4/s1
+  Tokens in 37608 (cached 27078), out 1032 (reasoning 462); model calls 8
+  Cost ~$0.0736; 50.4 s (first visible token 44.4 s); D1 8aff68414ac0410384609796fc77ecea
+
+gpt-6-astra                                                  SUCCESS
+  Answer: loop s3 -> s4 -> s1 -> s3; all three rules need correcting;
+    counters ~87k-105k; normal route s3 -> s1 -> s5.
+  Tools 10/10: get_topology, ping h1->h5, get_port_status s3/s5,
+    ping h1->h2, ping h6->h5, get_flow_table s3/s4/s1, ping h2->h5
+  Tokens in 59917 (cached 52723), out 624 (reasoning 15); model calls 11
+  Cost ~$0.1559; 38.9 s (first visible token 31.0 s); D1 5e99cd6e733c4b43bfa25b16cc734a53
+
+=====================================================================
+F5 missing baseline flow (s3, destination h5)
+=====================================================================
+gpt-5.6-terra                                                PARTIAL
+  Answer: fault domain is "s3's forwarding treatment for traffic destined
+    to h5" (location right); never read s3's flow table, so the missing rule
+    was not established (type not identified).
+  Tools 10/10: get_topology, ping h1->h5/h2->h5/h6->h5/h1->h3/h1->h6,
+    get_port_status s5, get_flow_table s5, get_port_stats s5, ping h3->h5
+  Tokens in 48936 (cached 40083), out 1946 (reasoning 1392); model calls 11
+  Cost ~$0.0491; 61.7 s (first visible token 57.5 s); D1 006446b64fd2459aba198af8d75bd3a3
+
+gpt-5.6-sol                                                  SUCCESS
+  Answer: s3 has rules for every host except h5's MAC; correction
+    ETH_DST=00:00:00:00:00:05 -> OUTPUT:1.
+  Tools 9: get_topology, ping h1->h5/h2->h5/h1->h6/h6->h5/h3->h5/h5->h1,
+    get_flow_table s3/s1
+  Tokens in 40779 (cached 31915), out 1299 (reasoning 730); model calls 10
+  Cost ~$0.0742; 80.1 s (first visible token 74.2 s); D1 0a41d9eed4df42b9b523ee85460ac5bb
+
+gpt-6-astra                                                  SUCCESS
+  Answer: s3's h5 unicast rule is missing; expected rule table 0, priority
+    41000, output s3 port 1; downstream s1 and s5 h5 rules present.
+  Tools 9: get_topology, ping h1->h5/h2->h5/h3->h5/h1->h6, get_flow_table s3,
+    get_port_status s3, get_flow_table s1/s5
+  Tokens in 47202 (cached 36667), out 644 (reasoning 16); model calls 10
+  Cost ~$0.1742; 43.0 s (first visible token 25.0 s); D1 6dc7b9c86e1f45a9beea3b6194b30408
+
+=====================================================================
+SUMMARY (this session)
+=====================================================================
+gpt-5.6-terra  F2 SUCCESS (hedged), F3 SUCCESS, F4 SUCCESS, F5 PARTIAL
+gpt-5.6-sol    F2 PARTIAL,          F3 SUCCESS, F4 SUCCESS, F5 SUCCESS
+gpt-6-astra    F1 SUCCESS, F2 FAIL, F3 SUCCESS, F4 SUCCESS, F5 SUCCESS
+Session cost ~$1.29 (Terra ~$0.19, Sol ~$0.31, Astra ~$0.79); estimates
+from agent/config.py price constants, not a Cloudflare invoice.
+
+=====================================================================
+OBSERVATIONS
+=====================================================================
+- F2 is the hardest scenario: the TBF is invisible to ONOS, agent iperf
+  returns 0 bytes, and every comparison pair tried by Sol and Astra crossed
+  the same s1-s5 link. All three F2 runs used the full 10-call budget.
+- Cumulative port counters include traffic from earlier iperf tests on the
+  same testbed; one model used them as evidence of congestion.
+- gpt-6-astra reported almost no reasoning tokens (0-26 per run) at medium
+  effort but used the most compact answers and cost the most per run.
+
+No secrets recorded.
