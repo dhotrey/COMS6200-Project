@@ -1,6 +1,7 @@
 """Input allow-lists and topology helpers for telemetry."""
 
 from __future__ import annotations
+from collections.abc import Iterable
 
 from topologies.spec import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES
 
@@ -37,6 +38,18 @@ def require_duration(value: object, default: int = 2) -> int:
         return default
     if not isinstance(value, int) or isinstance(value, bool) or value < 1 or value > 5:
         raise ValidationError("INVALID_ARGUMENT", "duration must be an integer from 1 to 5")
+    return value
+
+
+def require_match(value: object, name: str, valid_values: Iterable[str]) -> str:
+    if not isinstance(value, str) or value not in valid_values:
+        raise ValidationError("INVALID_ARGUMENT", f"{name} must be one of {valid_values}")
+    return value
+
+
+def require_range(value: object, name: str, min: int, max: int) -> int:
+    if not isinstance(value, int) or value < min or value > max:
+        raise ValidationError("INVALID_ARGUMENT", f"{name} must be an integer from {min} to {max}")
     return value
 
 

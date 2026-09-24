@@ -50,7 +50,7 @@ def configured():
 
 
 def ensure_mininet_privileges() -> None:
-    """Re-exec with sudo so ping/iperf can enter Mininet host namespaces."""
+    """Re-exec with sudo so tools can enter Mininet host namespaces."""
     if os.geteuid() == 0:
         return
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("COMS6200_AGENT_NO_SUDO"):
@@ -58,7 +58,7 @@ def ensure_mininet_privileges() -> None:
     pythonpath = os.environ.get("PYTHONPATH", "")
     root = str(REPO_ROOT)
     os.environ["PYTHONPATH"] = root if not pythonpath else f"{root}:{pythonpath}"
-    print("Re-executing with sudo so ping/iperf can enter Mininet host namespaces.", flush=True)
+    print("Re-executing with sudo so tools can enter Mininet host namespaces.", flush=True)
     os.execvp("sudo", [
         "sudo", f"--preserve-env={','.join(_SUDO_ENV)}",
         sys.executable, "-m", "agent",

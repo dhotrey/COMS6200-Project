@@ -24,48 +24,7 @@ for original in TOOL_SCHEMAS.values():
         property_schema.pop("default", None)
     TOOLS.append({"type": "function", "strict": True, **schema})
 
-TOOLS.append({
-    "type": "function",
-    "name": "nmap",
-    "description": "Placeholder for a port probe. Not implemented; returns an explicit error.",
-    "strict": True,
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "src": deepcopy(TOOL_SCHEMAS["ping"]["parameters"]["properties"]["src"]),
-            "dst": deepcopy(TOOL_SCHEMAS["ping"]["parameters"]["properties"]["dst"]),
-            "proto": {"type": "string", "enum": ["tcp", "udp"]},
-            "port": {"type": "integer", "minimum": 1, "maximum": 65535},
-        },
-        "required": ["src", "dst", "proto", "port"],
-        "additionalProperties": False,
-    },
-})
-
 gateway = TelemetryGateway()
-
-
-def nmap(src: str, dst: str, proto: str, port: int) -> dict:
-    """Reserved until the network probe implementation is chosen."""
-    raise NotImplementedError("nmap is not implemented")
-
-
-def _validate(name: str, arguments: dict) -> dict:
-    if not isinstance(arguments, dict):
-        raise ValidationError("INVALID_ARGUMENT", "tool arguments must be an object")
-    if name != "nmap":
-        return validate_arguments(name, arguments)
-    if set(arguments) != {"src", "dst", "proto", "port"}:
-        raise ValidationError("INVALID_ARGUMENT", "nmap requires exactly src, dst, proto and port")
-    require_host(arguments["src"])
-    require_host(arguments["dst"])
-    if arguments["proto"] not in ("tcp", "udp"):
-        raise ValidationError("INVALID_ARGUMENT", "proto must be tcp or udp")
-    port = arguments["port"]
-    if type(port) is not int or not 1 <= port <= 65535:
-        raise ValidationError("INVALID_ARGUMENT", "port must be an integer from 1 to 65535")
-    return arguments
-
 
 def _execute(name: str, arguments: str) -> dict:
     started = time.perf_counter()
@@ -74,7 +33,7 @@ def _execute(name: str, arguments: str) -> dict:
     invalid = False
     try:
         parsed = json.loads(arguments)
-        _validate(name, parsed)
+        validate_arguments(name, parsed)
     except (json.JSONDecodeError, TypeError, ValidationError) as exc:
         invalid = True
         result = envelope.error(name, getattr(exc, "code", "INVALID_ARGUMENT"), str(exc))
@@ -88,7 +47,7 @@ def _execute(name: str, arguments: str) -> dict:
             time.sleep(delay)
             execution_started = time.perf_counter()
             try:
-                result = nmap(**parsed) if name == "nmap" else getattr(gateway, name)(**parsed)
+                result = getattr(gateway, name)(**parsed)
             finally:
                 execution = time.perf_counter() - execution_started
         except NotImplementedError as exc:
