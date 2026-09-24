@@ -255,9 +255,16 @@ stop_mininet() {
 
 reset_fault_best_effort() {
   echo "==> Resetting any active catalogue fault"
-  as_root python3 -m faults.cli reset >/dev/null 2>&1 || \
-    as_root python3 -m faults.cli reset --force-scenario F1 >/dev/null 2>&1 || \
-    true
+  if as_root python3 -m faults.cli reset >/dev/null 2>&1; then
+    return 0
+  fi
+  # Normal reset failed: try each catalogue scenario's canonical recovery.
+  # Every forced reset is a no-op on resources that are already healthy.
+  echo "==> Normal reset failed; recovering F1–F5 canonical resources"
+  local scenario
+  for scenario in F1 F2 F3 F4 F5; do
+    as_root python3 -m faults.cli reset --force-scenario "${scenario}" >/dev/null 2>&1 || true
+  done
 }
 
 cmd_start() {
@@ -272,7 +279,7 @@ cmd_start() {
 Testbed is up: OVS + ONOS + main6s8h + 56 baseline flows.
 
 Next:
-  ./scripts/testbed.sh inject F1
+  ./scripts/testbed.sh inject F1    # or F2 F3 F4 F5
   # then ask the agent a symptom, not the fault name
 
 Stop later with:

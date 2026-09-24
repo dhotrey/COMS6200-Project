@@ -31,7 +31,7 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M5B Fault Catalogue v1 (F1–F5) | ✅ Frozen |
 | Automated fault injection | ✅ F1–F5 verified |
 | Deterministic scripted troubleshooting baseline | 🟡 |
-| LLM tool-calling integration | Harness implemented; live gateway/testbed verification pending |
+| LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5) and runtime-tested on WSL2 with all four models, see [results](results/llm-diagnosis.md); Ubuntu reference-host runs pending |
 | Repeated evaluation experiments | 🟡 |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
@@ -64,7 +64,7 @@ sections must not invent CLIs.
 14. [Structured telemetry gateway](#structured-telemetry-gateway)
 15. [Fault injection](#fault-injection)
 16. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
-17. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis)
+17. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
 18. [Expected diagnostic output](#expected-diagnostic-output)
 19. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
 20. [Resetting the testbed](#resetting-the-testbed)
@@ -98,7 +98,7 @@ Research question: *How accurately and efficiently can a tool-using LLM agent di
 
 ## Architecture overview
 
-Implemented through M5 (Ubuntu live evidence 27 August 2026; F1 operator injector only):
+Implemented through M5B (Ubuntu live evidence 27 August 2026; F1–F5 operator injector):
 
 ```
 Mininet hosts
@@ -109,22 +109,28 @@ ONOS 2.7.0
     ↓ read-only REST (internal to the gateway only)
     + configured Mininet host map (`topologies/spec.py`)
 Structured Telemetry / Tool Gateway
+    ↓
+OpenAI LLM Agent (`agent/` chat harness) → conversational diagnosis
 ```
+
+The LLM agent is implemented and loads F1–F5 from its UI. Test results:
+[LLM diagnosis test results](results/llm-diagnosis.md). Runs on the Ubuntu
+reference host are still pending (🟡).
 
 Still planned:
 
 ```
 Structured Telemetry / Tool Gateway
     ↓
-    ├── OpenAI LLM Agent                    🟡
+    ├── OpenAI LLM Agent (implemented; free-text answers today)
     └── Deterministic Scripted Troubleshooting Baseline  🟡
             ↓
-    Structured Diagnosis
+    Structured Diagnosis  🟡
             ↓
-    Evaluator / Logger
+    Evaluator / Logger  🟡 (scoring is manual today)
 ```
 
-Ground truth path (planned injector; evaluator-only):
+Ground truth path (injector ✅ F1–F5; evaluator 🟡; evaluator-only):
 
 ```
 Fault Injector ── inject faults ──→ Mininet / OVS
@@ -178,6 +184,11 @@ The reference server used during ONOS testing had 1 vCPU and about 955 MiB RAM. 
 | Ubuntu 24.04.4 | **Verified reference environment** | M0–M3 runtime-verified on the team Ubuntu server |
 | UQ-provided Kali VM | **Supported course compatibility target** | `setup/setup_ubuntu.sh` is apt/Debian-family and continues on Kali; individual milestones are **not** claimed fully verified on Kali until evidence exists |
 | Other apt-based Linux | Capability-based only | May work if `./setup/verify_environment.sh` passes; not officially verified |
+| WSL2 Ubuntu 24.04.4 (Windows 11) | Capability-based only | Kernel 6.18 provides `openvswitch`, `sch_tbf`, namespaces and veth; testbed, F1–F5 and the chat harness ran on 23 September 2026 (`evidence/progress/llm/`). Enable systemd; run from a clone in the WSL filesystem, not `/mnt/c` (Windows CRLF checkouts break the bash scripts). Not milestone evidence |
+
+Native Windows cannot run the testbed or fault controls. The harness UI can
+open there, but **Load scenario** / **Reset** return HTTP 500 (`os.geteuid` is
+Linux-only) and host tools cannot reach Mininet.
 
 Do **not** treat Kali as the primary target instead of Ubuntu. Ubuntu remains the reference because it is what M0–M3 evidence was collected on. Kali is supported so the UQ VM is a valid course machine, not because every milestone has been re-run there.
 
@@ -757,8 +768,12 @@ and TC/injector limits are not used).
 Ping destination is the configured primary IPv4 (never a caller-supplied IP).
 iperf uses iperf3 JSON (`-J`), TCP only, duration 1–5 s. The gateway does not
 install a pass/fail throughput threshold. After the test it terminates the
-server process group and best-effort `pkill -x iperf3` in the destination
-namespace.
+server process group and best-effort stops leftover **gateway** iperf3 only
+(`pkill -f` matching its own port 5201). Mininet hosts share the root process
+table, so the earlier unscoped `pkill -x iperf3` also stopped unrelated iperf3,
+including the F2 background load on port 5202. The narrower cleanup is covered
+by an offline test and was verified live on WSL2 (23 September 2026): the F2
+background load survived an agent `iperf` call. Reference-host re-run pending.
 
 ### Host-namespace mechanism
 
@@ -907,6 +922,10 @@ restores the missing rule → 56.
 ./scripts/verify_fault_catalogue.sh   # sequential F1–F5 + healthy gates
 ```
 
+The same five scenarios through the harness path (UI load → agent tools → UI
+reset): `./scripts/verify_agent_scenarios.sh` ✅ (WSL2), see
+[diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5).
+
 Each script traps cleanup. Manual recovery:
 
 ```bash
@@ -1003,7 +1022,7 @@ A separate fault picker can **Load** or **Reset** F1–F5 on the live network.
 That mutation is operator-only: the selected id is not sent in chat requests,
 saved as assistant context, or written into the system prompt. Describe a
 symptom; do not name F1–F5. Start a new conversation after changing the fault.
-`./scripts/testbed.sh inject F1` remains valid.
+`./scripts/testbed.sh inject Fn` (F1–F5) remains valid.
 Conversation history and turn measurements are stored in Cloudflare D1.
 The chat window renders assistant Markdown (lists, emphasis, code). Tool calls
 appear as faint one-line labels until hovered or clicked. The conversation
@@ -1027,6 +1046,87 @@ Example symptom-only prompts:
 - “Determine why traffic between h1 and h3 is failing even though the switches appear connected.”
 
 Describe observable symptoms. Do not name the injector.
+
+### Diagnosis sessions per scenario (F1–F5)
+
+✅ (WSL2) The harness loads all five catalogue faults through the same path
+(**Load scenario** → `POST /api/scenario/load` → `agent/fault_control.py` →
+`faults.injector`). The model receives the same prompt and tools for every
+scenario; there is no per-scenario code path. Test results are kept in
+[LLM diagnosis test results](results/llm-diagnosis.md). The evidence column below is the telemetry signature verified by
+`verify_fault_fN.sh` on 27 August 2026 and by `verify_agent_scenarios.sh` on
+WSL2, not a model answer.
+
+Same procedure for every scenario:
+
+1. `./scripts/testbed.sh start` (or the manual path) and confirm the [healthy network checklist](#healthy-network-checklist).
+2. Set `TOOL_DELAY_MIN_SECONDS=0` and `TOOL_DELAY_MAX_SECONDS=0` in the root `.env` for real timings, then start the harness.
+3. Load one fault: UI **Load scenario**, or `./scripts/testbed.sh inject Fn`.
+4. Start a **new** conversation and send a symptom-only prompt.
+5. Compare the answer with the operator-only localisation below.
+6. UI **Reset** (or `./scripts/testbed.sh reset`); start a new conversation before the next fault.
+
+Operator-only reference. Never paste the last two columns into the chat.
+
+| Load | Symptom-only prompt (example) | Evidence reachable through the agent tools | Correct localisation |
+| --- | --- | --- | --- |
+| F1 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h1→h2 and h3→h5 succeed. `get_topology` observes 9 of 10 configured links. `get_port_status` shows s3 port 1 and s1 port 2 `enabled=false`. | Link failure s3:1 ↔ s1:2 |
+| F2 | “Transfers from h1 to h5 are very slow. Investigate and localise the cause.” | `ping` h1→h5 succeeds with high RTT (~400 ms). `iperf` h1→h5 is far below a healthy pair. All ports enabled; flows unchanged. `get_port_stats(s1)` port 4 counters are available, but the ~1 s rate sample can read 0 (see F2 notes). | Congestion on s1:4 ↔ s5:1 |
+| F3 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h2→h5 and h1→h6 succeed. Links/ports healthy. `get_flow_table(s3)` has a priority-50000 `org.coms6200.experiment` rule matching h1→h5 MACs with no output action (ONOS reports the treatment as `NOACTION`, i.e. drop). | Selective drop rule on s3 for h1→h5 |
+| F4 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h1→h2 and h3→h5 succeed. `get_flow_table` on s3, s4 and s1 shows priority-50000 h1→h5 rules outputting s3:5 → s4:1 → s1:2, a cycle. | Forwarding loop s3 → s4 → s1 → s3 for h1→h5 |
+| F5 | “h1 and h2 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 and h2→h5 fail; h1→h6 and h3→h5 succeed. Links/ports healthy. `get_flow_table(s3)` has no priority-41000 rule for h5's MAC, while s4 does. | Missing baseline rule for h5 on s3 |
+
+`get_topology` returns the host MAC map, so the model can relate flow-rule MACs
+to h1–h8. F1, F3 and F4 intentionally share the same symptom; only the tool
+evidence distinguishes them.
+
+**F2 notes.** The 1 Mbit/s bottleneck is a Linux `tc` qdisc on `s1-eth4`; ONOS
+does not report it, so the model must localise F2 by comparing `iperf`/`ping`
+across paths (for example h1→h5 versus h1→h7) and port counters. The background
+h3→h6 load runs for 120 s after injection (catalogue v1 workload, unchanged);
+the TBF stays until reset. Send the prompt promptly with tool delays at 0, and
+reload F2 for each session. Agent `iperf` calls no longer stop that background
+load (see [Tools](#tools)). In the WSL run on 23 September 2026,
+`get_port_stats(s1)` reported `tx_bits_per_sec=0.0` on port 4 while the
+background load was running; the two-sample rate is taken ~1 s apart and may
+not see a fresh ONOS counter update (not investigated further), so the model
+should not rely on that rate alone.
+
+#### Recording results
+
+Record each scored run in [LLM diagnosis test results](results/llm-diagnosis.md),
+the single results summary. Keep the full per-run detail (answer, tool calls,
+tokens, cost, conversation id) in a dated evidence file under
+`evidence/progress/llm/`. Rename the conversation (for example
+`Test F3 · 5.6-luna · medium`) only after the run completes.
+
+#### Harness path verification ✅ (WSL2)
+
+`scripts/verify_agent_scenarios.sh` checks each scenario through the harness
+path without sending model requests (no API credits). For each scenario it runs
+the healthy gate, loads the fault with `agent.fault_control.load_scenario` (the
+**Load scenario** button), calls `agent.tools.execute_tool` with the arguments
+the model would send and asserts the evidence in the table above, checks that
+tool observations contain no scenario id or ground-truth keys, resets with
+`agent.fault_control.reset_scenario`, and repeats the healthy gate. For F2 it
+also checks the background iperf3 client survives an agent `iperf` call.
+
+Run as root on the testbed host, with no chat turn in progress:
+
+```bash
+export ONOS_USER=onos
+export ONOS_PASSWORD=rocks
+./scripts/verify_agent_scenarios.sh          # F1–F5 in order
+./scripts/verify_agent_scenarios.sh F3 F5    # selected scenarios
+```
+
+Success line: `Agent scenario verification (F1 F2 F3 F4 F5): ALL CHECKS PASSED`.
+Samples, including the exact observations the model would receive
+(`observations_Fn.json`), are written to the printed `/tmp/coms6200-agent.*`
+directory.
+
+Latest run results: [LLM diagnosis test results](results/llm-diagnosis.md#harness-path-check-no-model).
+**Not yet run on the Ubuntu reference host.**
 
 ---
 
@@ -1063,7 +1163,7 @@ Intended order (planned):
 5. Classify and localise the fault
 6. Return the same diagnosis format as the LLM
 
-Both methods will call the same existing `TelemetryGateway` (M6 / scripted baseline still 🟡).
+Both methods will call the same existing `TelemetryGateway`. The LLM agent already does (M6 in progress); the scripted baseline is still 🟡.
 
 ---
 
@@ -1107,18 +1207,35 @@ Stop ONOS if needed:
 docker stop onos
 ```
 
-### After an injected F1 fault ✅
+### After an injected fault (F1–F5) ✅
 
 ```bash
-python3 -m faults.cli reset
-# crash recovery when state file is missing but F1 ifaces are down:
-python3 -m faults.cli reset --force-f1
+./scripts/testbed.sh reset          # or UI Reset, or: python3 -m faults.cli reset
+python3 -m faults.cli status        # expect "active": false
 python3 forwarding/baseline_forwarding.py verify
-# confirm directed links = 20 and pingall 56/56 (see verify_fault_f1.sh)
 ```
 
-F1 does not modify M3 flows, so `install` is not required after a clean F1 reset.
-For future F2–F5 (🟡), additional cleanup may be required.
+`reset` reads `/run/coms6200/fault-state.json` and undoes the active scenario:
+
+| Scenario | Reset restores | Recovery when the state file is missing |
+| --- | --- | --- |
+| F1 | `s3-eth1` / `s1-eth2` UP; ONOS back to 20 directed links | `python3 -m faults.cli reset --force-f1` (same as `--force-scenario F1`) |
+| F2 | TBF removed from `s1-eth4`; background iperf3 stopped | `python3 -m faults.cli reset --force-scenario F2` |
+| F3 | experiment DROP flow removed | `python3 -m faults.cli reset --force-scenario F3` |
+| F4 | loop experiment flows removed; safety TBF removed from `s3-eth5` | `python3 -m faults.cli reset --force-scenario F4` |
+| F5 | missing s3→h5 baseline rule reinstalled (56 ADDED) | `python3 -m faults.cli reset --force-scenario F5` |
+
+Healthy after reset: 20 directed links, 56 baseline ADDED, 0
+`org.coms6200.experiment` flows, no TBF on `s1-eth4` / `s3-eth5`, `pingall`
+56/56 (the gate used by `verify_fault_catalogue.sh`, all five passed on 27
+August 2026). F1–F4 do not modify M3 baseline flows, so `install` is not
+required after a clean reset. F5 reset reinstalls only the missing rule, with a
+full `install` fallback.
+
+`./scripts/testbed.sh stop` resets first. If that normal reset fails, it now
+retries `--force-scenario` for each of F1–F5 (previously F1 only) before
+stopping Mininet. Forced recovery applies only when no state file remains. This
+fallback is 🟡 (static test only; not live-verified).
 
 ---
 
@@ -1201,7 +1318,7 @@ Only `h1`–`h8` and `s1`–`s6` are accepted. IPs such as `127.0.0.1` and extra
 
 ### Telemetry `IPERF_SERVER_FAILED` / leftover iperf3
 
-Confirm iperf3 is installed on the Ubuntu host (`iperf3 -v`). Re-run; the gateway uses one-shot `iperf3 -s -1` and then `pkill -x iperf3` in the destination namespace. If a process remains, `sudo pkill -x iperf3` and investigate, then re-verify baseline flows were not changed.
+Confirm iperf3 is installed on the Ubuntu host (`iperf3 -v`). Re-run; the gateway uses one-shot `iperf3 -s -1` on port 5201 and then stops only its own port-5201 iperf3 (`pkill -f`). If a process remains, `sudo pkill -x iperf3` and investigate, then re-verify baseline flows were not changed. `pkill -x iperf3` also stops an active F2 background load; reload F2 afterwards.
 
 ### Telemetry `COMMAND_TIMEOUT` / `PARSE_ERROR`
 
@@ -1218,6 +1335,27 @@ uv run --project agent python -m agent
 
 Allow the sudo re-exec. You should see `uid=0` and `ONOS REST user=onos`. Then
 start a **new** conversation; old failed tool results stay in the previous thread.
+
+### Harness **Load scenario** works for one fault but not another
+
+The banner shows the injector's error message. Run the same load/observe/reset
+path outside the UI for that scenario to see which step fails:
+
+```bash
+./scripts/verify_agent_scenarios.sh F3
+```
+
+Common causes: the harness is not root (`Fault injection needs root`); ONOS REST
+is down or has different credentials (F3–F5 use ONOS; F1–F2 do not); a
+previous fault left state behind (`FAULT_ALREADY_ACTIVE` or
+`EXPERIMENT_FLOWS_PRESENT`: **Reset**, or `python3 -m faults.cli reset
+--force-scenario Fn`); `s1-eth4` / `s3-eth5` is not UP (F2/F4 `LINK_NOT_UP`).
+
+### F2 session shows no cross-traffic on s1 port 4
+
+The F2 background h3→h6 iperf3 ends 120 s after injection; the TBF bottleneck
+remains until reset. Reload F2 (**Load scenario** or `./scripts/testbed.sh
+inject F2`), start a new conversation, and set tool delays to 0.
 
 ### Agent fails to start because D1 is unavailable
 
@@ -1241,7 +1379,7 @@ The reference container is capped (`--memory=640m`, JVM `-Xmx256m`) for a small 
 - No STP baseline
 - No uncontrolled FLOOD baseline
 - `org.onosproject.fwd` inactive
-- Planned F4: narrow match, timeout/watchdog, low-rate loop traffic
+- F4: narrow h1→h5 match plus safety TBF (2 Mbit/s) on `s3-eth5`; removed on reset
 - Reset between experiments
 - No credentials or unrestricted shell to the LLM
 - No injector ground truth to diagnostic methods
@@ -1279,11 +1417,12 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 5. Baseline flows: `start` already installs them; otherwise `python3 forwarding/baseline_forwarding.py install` then `verify`
 6. Mininet `pingall` → 56/56, 0% dropped (interactive CLI only; background helper has no `mininet>` prompt)
 7. Collect structured telemetry ✅ (`python3 -m telemetry.cli get-topology`; `./scripts/verify_telemetry.sh`)
-8. Inject F1 ✅ (`./scripts/testbed.sh inject F1` or `python3 -m faults.cli inject --scenario F1`)
-9. Observe with telemetry ✅ (targeted pings / topology / ports)
-10. Reset F1 ✅ (`./scripts/testbed.sh reset`; or `python3 -m faults.cli reset`; or `./scripts/verify_fault_f1.sh`)
-11. Verify healthy baseline again ✅ (20 directed links; pingall 56/56)
-12. Session teardown `./scripts/testbed.sh stop`, or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
+8. Inject one fault Fn (F1–F5) ✅ (`./scripts/testbed.sh inject Fn`, harness **Load scenario**, or `python3 -m faults.cli inject --scenario Fn`)
+9. Observe with telemetry ✅ (per-scenario evidence: [verified symptoms](#verified-symptoms-catalogue-v1); `./scripts/verify_fault_fN.sh`)
+10. Ask the harness for a diagnosis ✅ (WSL2; [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5); harness path check `./scripts/verify_agent_scenarios.sh Fn`; record results in [results](results/llm-diagnosis.md))
+11. Reset ✅ (`./scripts/testbed.sh reset`, harness **Reset**, or `python3 -m faults.cli reset`; see [after an injected fault](#after-an-injected-fault-f1f5-))
+12. Verify healthy baseline again ✅ (20 directed links; 56 baseline ADDED; 0 experiment flows; pingall 56/56)
+13. Session teardown `./scripts/testbed.sh stop`, or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
 
 ### B. Full planned experiment workflow 🟡
 
@@ -1295,14 +1434,17 @@ Unfinished steps are marked.
 4. Install baseline forwarding ✅
 5. Verify healthy baseline ✅
 6. Inject one fault ✅ (Fault Catalogue v1: F1–F5)
-7. Present **only a symptom** to the diagnostic method 🟡
+7. Present **only a symptom** to the diagnostic method — LLM ✅ (the harness never sends the scenario id); scripted baseline 🟡
 8. Collect structured telemetry ✅
-9. Obtain LLM or scripted diagnosis 🟡
-10. Log result 🟡
-11. Compare diagnosis to hidden ground truth 🟡
+9. Obtain a diagnosis — LLM ✅ (chat harness; all four models on F1–F5, [results](results/llm-diagnosis.md)); scripted baseline 🟡
+10. Log result — LLM ✅ (Cloudflare D1 stores each answer, tool calls, tokens, cost and timings; scored runs in [results](results/llm-diagnosis.md)); scripted baseline 🟡
+11. Compare diagnosis to hidden ground truth — LLM runs scored manually (provisional, team review pending); automated evaluator 🟡
 12. Reset network ✅ (`python3 -m faults.cli reset`)
 13. Verify healthy state ✅
-14. Repeat 🟡
+14. Repeat 🟡 (one run per scenario and model so far)
+
+The LLM steps were runtime-verified on WSL2 (23 September 2026); runs on the
+Ubuntu reference host are pending.
 
 ---
 
@@ -1311,15 +1453,15 @@ Unfinished steps are marked.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` |
+| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5) |
 | `topologies/` | `main_topology.py`, canonical `spec.py`, plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
 | `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |
-| `faults/` | Operator F1 injector/reset (M5; Ubuntu live evidence 27 August 2026) — not an LLM tool |
+| `faults/` | Operator Fault Catalogue v1 (F1–F5) injector/reset (M5/M5B; Ubuntu live evidence 27 August 2026) — not an LLM tool |
 | `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
 | `tests/` | Static topology, forwarding, telemetry, and fault tests |
-| `evidence/progress/` | Runtime evidence (ONOS, forwarding, telemetry, faults) |
-| `docs/` | This manual, ONOS setup, decisions, Part A report |
+| `evidence/progress/` | Runtime evidence (ONOS, forwarding, telemetry, faults, LLM harness tests) |
+| `docs/` | This manual, ONOS setup, decisions, Part A report, `results/llm-diagnosis.md` (LLM test results) |
 | `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
 | `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
 

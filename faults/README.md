@@ -36,8 +36,12 @@ No `--interface`, `--cmd`, `--rate`, `--pid`, or arbitrary flow IDs.
 
 `reset` clears the active scenario. `--force-scenario Fn` / `--force-f1`
 recover canonical resources when the state file is missing.
+`./scripts/testbed.sh stop` retries `--force-scenario` for each of F1–F5 if the
+normal reset fails.
 
 ## Verification
 
 - `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh`
 - `scripts/verify_fault_catalogue.sh`
+- `scripts/verify_agent_scenarios.sh` — same scenarios through the chat harness
+  load/reset and agent tool path (results in `docs/results/llm-diagnosis.md`)

@@ -435,6 +435,43 @@ def test_host_exec_permission_denied_is_not_parse_error() -> None:
         raise AssertionError("expected HOST_NAMESPACE_DENIED")
 
 
+def test_iperf_cleanup_only_targets_gateway_port() -> None:
+    import re
+    from unittest.mock import patch
+
+    from faults.scenarios import F2
+    from telemetry.gateway import IPERF_PORT, _stop_host_iperf
+
+    calls: list[list[str]] = []
+    with patch(
+        "telemetry.gateway.run_in_host",
+        side_effect=lambda host, argv, timeout_s: calls.append(argv),
+    ):
+        _stop_host_iperf("h6")
+    assert len(calls) == 1
+    argv = calls[0]
+    assert argv[:2] == ["pkill", "-f"], argv
+    assert "-x" not in argv
+    # pkill -f matches the full space-joined command line.
+    pattern = re.compile(argv[2])
+    gateway_cmdlines = (
+        f"iperf3 -s -1 -J -p {IPERF_PORT}",
+        f"iperf3 -c 10.0.0.5 -t 2 -J -p {IPERF_PORT}",
+        f"/usr/bin/iperf3 -s -1 -J -p {IPERF_PORT}",
+    )
+    other_cmdlines = (
+        f"iperf3 -s -1 -p {F2.iperf_port}",
+        f"iperf3 -c 10.0.0.6 -t {F2.background_duration_s} -p {F2.iperf_port}",
+        f"iperf3 -s -p {IPERF_PORT}0",
+        "/usr/bin/mnexec -a 123 -- pkill -f " + argv[2],
+    )
+    assert F2.iperf_port != IPERF_PORT
+    for cmdline in gateway_cmdlines:
+        assert pattern.search(cmdline), cmdline
+    for cmdline in other_cmdlines:
+        assert not pattern.search(cmdline), cmdline
+
+
 def test_tool_schemas_reject_arbitrary_properties() -> None:
     validate_arguments("get_topology", {})
     validate_arguments("ping", {"src": "h1", "dst": "h5"})
@@ -562,6 +599,7 @@ def main() -> int:
         test_gateway_validation_errors_use_envelope,
         test_hybrid_topology_does_not_use_onos_hosts,
         test_host_exec_permission_denied_is_not_parse_error,
+        test_iperf_cleanup_only_targets_gateway_port,
         test_tool_schemas_reject_arbitrary_properties,
         test_onos_client_has_no_generic_or_hosts_path,
         test_no_shell_true_in_telemetry_package,

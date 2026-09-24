@@ -202,9 +202,18 @@ class TelemetryGateway:
 
 
 def _stop_host_iperf(host: str) -> None:
-    """Best-effort: stop leftover iperf3 inside one validated host namespace."""
+    """Best-effort: stop leftover gateway iperf3 (port IPERF_PORT only).
+
+    Mininet hosts share the root PID namespace, so an unscoped ``pkill -x iperf3``
+    would also stop unrelated iperf3 processes on other ports, such as operator
+    cross-traffic that the diagnostic is meant to observe.
+    """
     try:
-        run_in_host(host, ["pkill", "-x", "iperf3"], timeout_s=2.0)
+        run_in_host(
+            host,
+            ["pkill", "-f", f"^(.*/)?iperf3 .*-p {IPERF_PORT}$"],
+            timeout_s=2.0,
+        )
     except HostExecError:
         return
 

@@ -1,0 +1,130 @@
+Date: 23 September 2026
+Host: MollysLaptop (Windows 11, WSL2)
+Purpose: First LLM diagnosis tests of Fault Catalogue v1 (F1–F5) through the
+         chat harness — which scenarios does the model diagnose and localise
+         correctly? One run per scenario.
+
+NOT the Ubuntu reference host (Aus). Environment, repository state and the
+harness-path check are recorded in agent-scenario-path-wsl-2026-09-23.txt.
+Single runs are not a statistical result; repeated experiments remain planned.
+
+=====================================================================
+HARNESS SETTINGS
+=====================================================================
+Model: gpt-5.6-luna (UI default); reasoning effort: medium
+Gateway: Cloudflare AI Gateway /openai/responses, BYOK, response cache bypassed
+System prompt: agent/prompt.md sha256 b735ca13eb2c860122c47a12278baba9ed25b220291d9c547b22defa82d2ccbc
+TOOL_DELAY_MIN_SECONDS=0, TOOL_DELAY_MAX_SECONDS=0
+MAX_TOOL_CALLS=10, MAX_TURN_SECONDS=300 (defaults); MAX_TURN_TOKENS=0
+Tools: get_topology, ping, get_port_status, get_port_stats, get_flow_table,
+       iperf, nmap (placeholder, not called)
+
+=====================================================================
+PROCEDURE (per run)
+=====================================================================
+Driven from the harness page at http://localhost:8000 using the same
+endpoints as the UI buttons:
+  1. POST /api/scenario/load {Fn}  (resets any active fault, then injects)
+  2. wait 3 s; POST /api/conversations (new conversation)
+  3. POST /api/chat with the symptom-only prompt below
+  4. read the stored answer, tool calls and statistics from Cloudflare D1
+  5. rename the conversation "Test Fn · <model> · medium" AFTER completion
+     (titles are never sent to the model)
+Scenario ids were never in the prompt, chat request or system prompt.
+After the last run the network was reset and re-checked: 20 directed links,
+56 baseline ADDED, 0 experiment flows, no TBF on s1-eth4 / s3-eth5.
+
+Prompts:
+  F1, F3, F4: "h1 can no longer reach h5. Diagnose and localise the fault."
+  F2:         "Transfers from h1 to h5 are very slow. Investigate and localise the cause."
+  F5:         "h1 and h2 can no longer reach h5. Diagnose and localise the fault."
+
+Scoring (provisional, by the AI coding assistant against catalogue ground
+truth; team review pending):
+  SUCCESS = correct fault type AND location; PARTIAL = one of the two;
+  FAIL = neither. Wrong secondary claims are noted, not scored.
+
+=====================================================================
+RESULTS — gpt-5.6-luna, medium
+=====================================================================
+F1 link failure (s3:1 <-> s1:2 down)                         SUCCESS
+  Answer: s1 port 2 <-> s3 port 1 link down; both ports disabled; s3's h5
+    rule outputs to the dead port 1.
+  Note: also claimed the baseline flows "did not reconverge" and that s2
+    lacking forwarding entries was a problem — both are by design.
+  Tools 10/10: get_topology, ping h1->h5, get_port_status s1, get_flow_table
+    s3/s2/s5, ping h1->h2, ping h1->h3, get_port_status s2/s3
+  Tokens in 65253 (cached 54840), out 1542 (reasoning 959); model calls 11
+  Cost ~$0.0050; 45.4 s (first visible token 41.3 s); D1 716f1a93e5e54b47b5250e2f8d394517
+
+F2 congestion (TBF 1 Mbit/s on s1:4 <-> s5:1 + background)   FAIL
+  Answer: path s3-s1-s5 up, h1->h5 RTT avg 245 ms, no drops/errors; iperf
+    transferred 0 bytes, treated as an invalid test; "not localized to a
+    specific physical link yet"; suggested a latency condition or an
+    endpoint/test issue.
+  Tools 10/10 (budget exhausted): get_topology, iperf h1->h5 (5 s),
+    ping h1->h5, get_flow_table s3/s2/s5, get_port_stats s2/s3/s5/s1
+  Did not compare a path avoiding s1-s5.
+  Tokens in 68908 (cached 56845), out 1765 (reasoning 1081); model calls 11
+  Cost ~$0.0057; 56.3 s (first visible token 51.3 s); D1 a430c250efc241cb9a7d2d4145a046e7
+
+F3 ACL/policy drop (s3, h1->h5, priority 50000)              SUCCESS
+  Answer: priority-50000 rule on s3 matching ETH_SRC h1 / ETH_DST h5 with
+    treatment NOACTION overrides the baseline rule; not a link/port fault.
+  Tools 9: get_topology, ping h1->h5, get_port_status s3/s5, get_flow_table
+    s3/s5, ping h1->h2, ping h1->h3, ping h5->h1
+  Tokens in 55095 (cached 45695), out 1141 (reasoning 626); model calls 10
+  Cost ~$0.0042; 36.0 s (first visible token 33.4 s); D1 2d82bb5405fe4a5bbe908d6371caa770
+
+F4 forwarding loop (h1->h5 via s3:5 -> s4:1 -> s1:2 -> s3)   SUCCESS
+  Answer: priority-50000 org.coms6200.experiment rules for h1->h5 form the
+    loop s3 port 5 -> s4, s4 port 1 -> s1, s1 port 2 -> s3; matching flow
+    counters increasing on all three switches.
+  Tools 10/10: get_topology, ping h1->h5, get_port_status s3/s5,
+    get_flow_table s3/s5/s4/s1, ping h1->h2, ping h1->h3
+  Tokens in 76233 (cached 62924), out 1061 (reasoning 513); model calls 11
+  Cost ~$0.0052; 31.2 s (first visible token 28.0 s); D1 a4a46a2f71ed47e187fbb1072a66665e
+
+F5 missing baseline flow (s3, destination h5)                SUCCESS
+  Answer: s3 has rules for h1-h4 and h6-h8 but none for h5's MAC
+    00:00:00:00:00:05; s5 has a valid h5 rule; not a link fault.
+  Tools 10/10: get_topology, ping h1->h5, ping h2->h5, get_port_status s3/s5,
+    get_flow_table s3/s5, ping h1->h3, ping h1->h6, ping h2->h3
+  Tokens in 58483 (cached 49108), out 1188 (reasoning 581); model calls 11
+  Cost ~$0.0043; 41.8 s (first visible token 37.9 s); D1 afab8d5514c84ca2a4eb2215fb504a9f
+
+Summary (gpt-5.6-luna, medium, 1 run each): 4 of 5 SUCCESS (F1, F3, F4, F5);
+F2 FAIL.
+
+=====================================================================
+ADDITIONAL F1 RUNS (same prompt and settings, before the plan was narrowed
+to one model per scenario)
+=====================================================================
+gpt-5.6-terra  SUCCESS  s1:2 <-> s3:1 down; no wrong secondary claims
+               9 tool calls; in 44035, out 1090; ~$0.0367; 42.2 s
+               D1 a39cba9dc4464cfc84ae042bb752f579
+gpt-5.6-sol    SUCCESS  s3:1 <-> s1:2 down; also claimed a controller
+               rerouting failure (baseline is static by design)
+               10 tool calls; in 42145, out 1090; ~$0.0657; 53.9 s
+               D1 ab5fd4d0cb53403ea9edadc690c39ae2
+gpt-6-astra    ABORTED — browser request cancelled on purpose; no answer or
+               usage saved; not scored. D1 59b1d749ac3d486fa27ecb008cf26ffb
+
+=====================================================================
+OBSERVATIONS
+=====================================================================
+- Every run used 9-10 of the 10-call tool budget. The F2 run exhausted it
+  before comparing a path that avoids s1-s5.
+- F2: the agent's 5-second iperf h1->h5 reported 0 bytes under the TBF and
+  background load; the model read that as a broken test rather than severe
+  congestion. Port-stat rate samples looked near idle (see the ~1 s sample
+  note in the harness-path evidence).
+- The answer text streams only after the tool rounds; first visible token
+  28-51 s.
+- Costs are estimates from the dated price constants in agent/config.py,
+  not a Cloudflare invoice. The five Luna runs total ~$0.024.
+- Cancelling the Astra request from the browser did not stop the server
+  turn immediately; the server was idle about 80 s later and no message was
+  saved for that conversation.
+
+No secrets recorded.

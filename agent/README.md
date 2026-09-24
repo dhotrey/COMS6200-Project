@@ -71,9 +71,29 @@ catalogue fault on the live network (resetting any active catalogue fault first)
 assistant context, or added to the system prompt. Describe a symptom; do not name
 the scenario. Start a new conversation after changing the fault.
 
+All five scenarios use the same loop, prompt and tools. Example symptom prompts,
+the evidence each fault exposes to the tools, and the operator-only expected
+localisation are in the user manual under
+[diagnosis sessions per scenario](../docs/user-guide.md#diagnosis-sessions-per-scenario-f1f5).
+Test results: [LLM diagnosis test results](../docs/results/llm-diagnosis.md).
+
+Check the load → tools → reset path for F1–F5 without model requests (root,
+testbed running, no chat turn in progress):
+
+```sh
+./scripts/verify_agent_scenarios.sh        # or: ... F2 F4
+```
+
+F2's background load stops 120 s after injection; reload F2 for each session
+and set both tool delays to `0`. Agent `iperf` calls stop only the gateway's own
+port-5201 iperf3, so they no longer end the F2 load.
+
 ## Network access
 
-Run beside the existing Mininet/ONOS installation. Session helper:
+Run on the Linux testbed host, beside the existing Mininet/ONOS installation
+(Ubuntu server, Linux VM, or WSL2 Ubuntu 24.04 from a clone in the WSL
+filesystem). On native Windows the UI opens but **Load scenario** / **Reset**
+return HTTP 500 and the tools cannot reach Mininet. Session helper:
 `./scripts/testbed.sh start`. Load F1–F5 from the UI or `./scripts/testbed.sh inject F1`.
 The six tools directly use `telemetry.TelemetryGateway`; `nmap` returns
 `NOT_IMPLEMENTED`. Inject/reset is operator-only and is not an LLM tool.
