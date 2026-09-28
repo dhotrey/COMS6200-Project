@@ -1,4 +1,4 @@
-"""Provider-neutral JSON schemas for the six M4 diagnostic tools."""
+"""Provider-neutral JSON schemas for the diagnostic tools."""
 
 from __future__ import annotations
 
@@ -87,6 +87,29 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "additionalProperties": False,
         },
     },
+    "get_link_metrics": {
+        "name": "get_link_metrics",
+        "description": (
+            "Return a fixed two-second measurement for one known switch port: "
+            "its peer, whether the port is enabled, packet and byte deltas, "
+            "bit and packet rates, drop and error deltas, instantaneous queue "
+            "backlog, and overlimit and requeue deltas. Unavailable counters are null. "
+            "The sample window cannot be changed."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sw": {"type": "string", "enum": _SWITCH_ENUM},
+                "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                },
+            },
+            "required": ["sw", "port"],
+            "additionalProperties": False,
+        },
+    },
     "get_flow_table": {
         "name": "get_flow_table",
         "description": "Return normalised ONOS flow entries for one switch.",
@@ -102,7 +125,12 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "iperf": {
         "name": "iperf",
         "description": (
-            "Run a bounded one-shot iperf3 TCP throughput test between two project hosts."
+            "Run a bounded one-shot iperf3 TCP throughput test between two project hosts. "
+            "The measurement reports sender_* (bytes, bits per second, and duration transmitted by the client) "
+            "and receiver_* (bytes, bits per second, and duration received by the server) separately, plus retransmits. "
+            "A completed test can have receiver_bytes 0 while sender_bytes is greater than 0; that is a measurement, not a command failure. "
+            "Legacy bytes_transferred, mbit_per_sec, and duration_sec follow the receiver summary when that summary includes the field, otherwise the sender summary. "
+            "Command failures return ok false."
         ),
         "parameters": {
             "type": "object",
@@ -124,15 +152,25 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+CANONICAL_TOOL_NAMES: tuple[str, ...] = (
+    "get_topology",
+    "ping",
+    "nmap",
+    "get_port_status",
+    "get_port_stats",
+    "get_link_metrics",
+    "get_flow_table",
+    "iperf",
+)
+
+
 def schema_list() -> list[dict[str, Any]]:
-    return [TOOL_SCHEMAS[name] for name in (
-        "get_topology",
-        "ping",
-        "get_port_status",
-        "get_port_stats",
-        "get_flow_table",
-        "iperf",
-    )]
+    """Return tool schemas in the model-facing order. Includes every TOOL_SCHEMAS entry."""
+    missing = [name for name in CANONICAL_TOOL_NAMES if name not in TOOL_SCHEMAS]
+    extra = [name for name in TOOL_SCHEMAS if name not in CANONICAL_TOOL_NAMES]
+    if missing or extra:
+        raise RuntimeError(f"tool schema list drifted: missing={missing} extra={extra}")
+    return [TOOL_SCHEMAS[name] for name in CANONICAL_TOOL_NAMES]
 
 
 def validate_arguments(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:

@@ -301,30 +301,56 @@ def parse_ping(text: str) -> dict[str, Any]:
     }
 
 
+def _iperf_field(summary: dict[str, Any], key: str) -> Any:
+    if key not in summary:
+        return None
+    return summary.get(key)
+
+
+def _prefer(primary: dict[str, Any], fallback: dict[str, Any], key: str) -> Any:
+    """Use the receiver summary when it reports the key, including an explicit zero."""
+    if key in primary:
+        return primary.get(key)
+    return _iperf_field(fallback, key)
+
+
 def parse_iperf(text: str) -> dict[str, Any]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError("iperf3 did not return JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("iperf3 JSON was not an object")
     if payload.get("error"):
         raise ValueError(str(payload["error"]))
     end = payload.get("end") or {}
-    received = end.get("sum_received") or {}
+    if not isinstance(end, dict):
+        raise ValueError("iperf3 JSON end summary was not an object")
     sent = end.get("sum_sent") or {}
-    bits = received.get("bits_per_second")
-    if bits is None:
-        bits = sent.get("bits_per_second")
-    bytes_transferred = received.get("bytes")
-    if bytes_transferred is None:
-        bytes_transferred = sent.get("bytes")
-    duration = received.get("seconds")
-    if duration is None:
-        duration = sent.get("seconds")
+    received = end.get("sum_received") or {}
+    if not isinstance(sent, dict) or not isinstance(received, dict):
+        raise ValueError("iperf3 JSON side summary was not an object")
+
+    sender_bytes = _iperf_field(sent, "bytes")
+    sender_bps = _iperf_field(sent, "bits_per_second")
+    sender_seconds = _iperf_field(sent, "seconds")
+    receiver_bytes = _iperf_field(received, "bytes")
+    receiver_bps = _iperf_field(received, "bits_per_second")
+    receiver_seconds = _iperf_field(received, "seconds")
+    bits = _prefer(received, sent, "bits_per_second")
+    retransmits = _iperf_field(sent, "retransmits")
     return {
-        "duration_sec": duration,
-        "bytes_transferred": bytes_transferred,
+        "duration_sec": _prefer(received, sent, "seconds"),
+        "bytes_transferred": _prefer(received, sent, "bytes"),
         "mbit_per_sec": (float(bits) / 1_000_000.0) if bits is not None else None,
-        "retransmissions": sent.get("retransmits"),
+        "retransmissions": retransmits,
+        "retransmits": retransmits,
+        "sender_bytes": sender_bytes,
+        "sender_bits_per_sec": sender_bps,
+        "sender_duration_sec": sender_seconds,
+        "receiver_bytes": receiver_bytes,
+        "receiver_bits_per_sec": receiver_bps,
+        "receiver_duration_sec": receiver_seconds,
     }
 
 

@@ -253,7 +253,8 @@ F2 = CongestionScenario(
     background_dst="h6",
     target_src="h1",
     target_dst="h5",
-    background_duration_s=120,
+    # 0 means the background iperf runs until F2 reset. It is not a 120-second timer.
+    background_duration_s=0,
     iperf_port=5202,
     affected_scope="throughput on paths crossing s1-s5 (e.g. h1→h5)",
     expected_correction="remove TBF qdisc and stop background iperf",

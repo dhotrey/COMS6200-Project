@@ -109,10 +109,15 @@ esac
 
 # --- Wait for the OpenFlow listener ----------------------------------------
 
-info "Waiting for the ONOS OpenFlow listener on ${BIND_ADDR}:${OF_PORT} (up to 180s)"
+info "Waiting for the OpenFlow listener on ${BIND_ADDR}:${OF_PORT} (up to 180s)"
 ready=0
 for _ in $(seq 1 36); do
-  if "${DOCKER[@]}" logs "${ONOS_CONTAINER}" 2>&1 |
+  if ss -ltn 2>/dev/null | grep -q "${BIND_ADDR}:${OF_PORT}"; then
+    ready=1
+    break
+  fi
+  # Bounded: a fresh container only. Never scan the full historical log.
+  if "${DOCKER[@]}" logs --tail 100 --since 5m "${ONOS_CONTAINER}" 2>&1 |
        grep -q "Listening for OF switch connections on ${OF_PORT}"; then
     ready=1
     break
@@ -124,7 +129,7 @@ if [[ "${ready}" -eq 1 ]]; then
   info "ONOS is listening for OpenFlow connections on ${OF_PORT}"
 else
   echo "WARNING: did not observe the OpenFlow listener log line within 180s." >&2
-  echo "         Inspect: docker logs ${ONOS_CONTAINER}" >&2
+  echo "         Inspect: ${DOCKER[*]} logs --tail 100 ${ONOS_CONTAINER}" >&2
 fi
 
 "${DOCKER[@]}" ps --filter "name=${ONOS_CONTAINER}" \
@@ -171,10 +176,18 @@ Next steps:
      After an interactive Mininet CLI:
        sudo mn -c
 
-Stop ONOS with the same Docker access this script selected:
+Normal experiment teardown leaves this container running:
+  ./scripts/testbed.sh stop
+
+Stop the ONOS container only when that is the intended operator action:
+  ./scripts/testbed.sh stop --with-onos
+
+Low-level equivalent, using the Docker access this script selected:
   ${DOCKER[*]} stop ${ONOS_CONTAINER}
-Start it again:
   ${DOCKER[*]} start ${ONOS_CONTAINER}
+
+If a stopped container later answers REST but accepts no switches,
+./scripts/testbed.sh start recreates only the '${ONOS_CONTAINER}' container once.
 
 Reactive forwarding (org.onosproject.fwd) is intentionally NOT activated.
 Host pingall succeeds only after org.coms6200.baseline flows are installed.

@@ -16,9 +16,10 @@ gw = TelemetryGateway()
 gw.get_topology()
 gw.get_port_status("s3")
 gw.get_port_stats("s3")
+gw.get_link_metrics("s1", 4)  # fixed ~2 s window; s1-s6 and a known port only
 gw.get_flow_table("s3")
 gw.ping("h1", "h5")          # optional count=1..10, default 3
-gw.iperf("h1", "h5")         # optional duration=1..5, default 2
+gw.iperf("h1", "h5")         # duration 1..5, default 2; sender_* and receiver_* plus a receiver-preferred legacy summary
 ```
 
 Every method returns the same envelope:
@@ -41,6 +42,7 @@ export ONOS_PASSWORD=rocks
 python3 -m telemetry.cli get-topology
 python3 -m telemetry.cli get-port-status --switch s3
 python3 -m telemetry.cli get-port-stats --switch s3
+python3 -m telemetry.cli get-link-metrics --switch s1 --port 4
 python3 -m telemetry.cli get-flow-table --switch s3
 python3 -m telemetry.cli schemas
 
@@ -60,6 +62,7 @@ will not see credentials.
 | `get_topology` | devices, availability, protocol, inter-switch links | host identities, IPs/MACs, 9 attachments including h6 primary/secondary |
 | `get_port_status` | `/devices/{id}/ports` (`isEnabled`, `portName`, type, speed) | peer names |
 | `get_port_stats` | `/statistics/ports` (two samples) plus optional delta | peer names |
+| `get_link_metrics` | kernel interface counters and filtered queue counters over a fixed ~2 s window | peer from the canonical topology; enabled from ONOS when available |
 | `get_flow_table` | `/flows` | switch → DPID |
 | `ping` / `iperf` | none | host → primary IPv4; namespace via `mininet:<host>` + `mnexec` |
 
@@ -68,6 +71,10 @@ and is not treated as an error.
 
 `utilization_pct` is always `null`. Observed bit rates are returned; no
 nominal OVS speed or fault-injector TC config is used as capacity.
+
+`get_link_metrics` does not accept an interface name or a sample duration.
+Queue configuration text is parsed privately and is not returned. Missing
+queue counters are null.
 
 ## Safety
 

@@ -204,16 +204,54 @@ def test_iperf_json_parser() -> None:
         }
     }
     parsed = parse_iperf(json.dumps(payload))
+    assert parsed["sender_bytes"] == 2_500_000
+    assert parsed["sender_bits_per_sec"] == 10_000_000
+    assert parsed["sender_duration_sec"] == 2.0
+    assert parsed["receiver_bytes"] == 2_400_000
+    assert parsed["receiver_bits_per_sec"] == 9_600_000
+    assert parsed["receiver_duration_sec"] == 2.0
     assert parsed["bytes_transferred"] == 2_400_000
     assert parsed["mbit_per_sec"] == 9.6
     assert parsed["retransmissions"] == 1
+    assert parsed["retransmits"] == 1
     assert parsed["duration_sec"] == 2.0
+
+    stalled = parse_iperf(json.dumps({
+        "end": {
+            "sum_sent": {"bytes": 131072, "bits_per_second": 524288, "retransmits": 11, "seconds": 2.0},
+            "sum_received": {"bytes": 0, "bits_per_second": 0, "seconds": 2.1},
+        }
+    }))
+    assert stalled["sender_bytes"] == 131072
+    assert stalled["sender_bits_per_sec"] == 524288
+    assert stalled["receiver_bytes"] == 0
+    assert stalled["receiver_bits_per_sec"] == 0
+    assert stalled["bytes_transferred"] == 0
+    assert stalled["mbit_per_sec"] == 0.0
+    assert stalled["retransmits"] == 11
+
+    sender_only = parse_iperf(json.dumps({
+        "end": {
+            "sum_sent": {"bytes": 1000, "bits_per_second": 8000, "retransmits": 0, "seconds": 1.0},
+        }
+    }))
+    assert sender_only["sender_bytes"] == 1000
+    assert sender_only["receiver_bytes"] is None
+    assert sender_only["bytes_transferred"] == 1000
+    assert sender_only["mbit_per_sec"] == 0.008
+
     try:
         parse_iperf("not json")
     except ValueError:
         pass
     else:
         raise AssertionError("non-JSON iperf output should fail")
+    try:
+        parse_iperf(json.dumps({"error": "unable to connect to server"}))
+    except ValueError as exc:
+        assert "unable to connect" in str(exc)
+    else:
+        raise AssertionError("iperf command error should fail rather than report zero throughput")
 
 
 def test_flow_normalization_and_order() -> None:
@@ -460,8 +498,8 @@ def test_iperf_cleanup_only_targets_gateway_port() -> None:
         f"/usr/bin/iperf3 -s -1 -J -p {IPERF_PORT}",
     )
     other_cmdlines = (
-        f"iperf3 -s -1 -p {F2.iperf_port}",
-        f"iperf3 -c 10.0.0.6 -t {F2.background_duration_s} -p {F2.iperf_port}",
+        f"iperf3 -s -p {F2.iperf_port}",
+        f"iperf3 -c 10.0.0.6 -t 0 -p {F2.iperf_port}",
         f"iperf3 -s -p {IPERF_PORT}0",
         "/usr/bin/mnexec -a 123 -- pkill -f " + argv[2],
     )
@@ -572,6 +610,28 @@ def test_cli_rejects_injection_hosts() -> None:
     assert "Traceback" not in completed.stdout
 
 
+
+def test_canonical_tool_list_includes_nmap_and_matches_schemas() -> None:
+    from telemetry.gateway import tool_names
+    from telemetry.schemas import CANONICAL_TOOL_NAMES, TOOL_SCHEMAS, schema_list
+
+    expected = (
+        "get_topology",
+        "ping",
+        "nmap",
+        "get_port_status",
+        "get_port_stats",
+        "get_link_metrics",
+        "get_flow_table",
+        "iperf",
+    )
+    assert CANONICAL_TOOL_NAMES == expected
+    assert tool_names() == expected
+    names = tuple(item["name"] for item in schema_list())
+    assert names == expected
+    assert set(names) == set(TOOL_SCHEMAS)
+
+
 def test_device_normalization_sort() -> None:
     rows = normalize_devices(
         [
@@ -580,6 +640,143 @@ def test_device_normalization_sort() -> None:
         ]
     )
     assert [row["name"] for row in rows] == ["s1", "s2"]
+
+
+
+def test_link_metrics_mapping_rates_queue_and_no_config_leak() -> None:
+    import json
+    import subprocess
+
+    from telemetry.link_metrics import (
+        build_link_metrics,
+        interface_name,
+        parse_qdisc_counters,
+        public_peer,
+        read_qdisc_text,
+        require_switch_port,
+    )
+    from telemetry.schemas import TOOL_SCHEMAS
+
+    assert require_switch_port("s1", 4) == ("s1", 4)
+    assert interface_name("s1", 4) == "s1-eth4"
+    assert public_peer("s1", 4) == {"switch": "s5", "port": 1}
+    assert public_peer("s5", 1) == {"switch": "s1", "port": 4}
+    assert public_peer("s3", 3) == {"host": "h1"}
+
+    invalid_switch = TelemetryGateway().get_link_metrics("s9", 4)
+    assert invalid_switch["ok"] is False
+    assert invalid_switch["error"]["code"] == "INVALID_SWITCH"
+    invalid_port = TelemetryGateway().get_link_metrics("s5", 5)
+    assert invalid_port["ok"] is False
+    assert invalid_port["error"]["code"] == "INVALID_PORT"
+    invalid_type = TelemetryGateway().get_link_metrics("s1", "s1-eth4")
+    assert invalid_type["ok"] is False
+    assert invalid_type["error"]["code"] == "INVALID_PORT"
+
+    shaped = """
+qdisc tbf 8008: root refcnt 2 rate 1Mbit burst 4Kb lat 400ms
+ Sent 1000 bytes 10 pkt (dropped 0, overlimits 4 requeues 1)
+ backlog 1500b 2p requeues 1
+"""
+    later = """
+qdisc tbf 8008: root refcnt 2 rate 1Mbit burst 4Kb lat 400ms
+ Sent 2000 bytes 20 pkt (dropped 0, overlimits 9 requeues 3)
+ backlog 0b 0p requeues 3
+"""
+    first = parse_qdisc_counters(shaped)
+    second = parse_qdisc_counters(later)
+    assert first["backlog_bytes"] == 1500
+    assert first["backlog_packets"] == 2
+    assert first["overlimits"] == 4
+    assert first["requeues"] == 1
+    measured = build_link_metrics(
+        "s1",
+        4,
+        True,
+        2.0,
+        {
+            "rx_bytes": 1000, "tx_bytes": 1000,
+            "rx_packets": 10, "tx_packets": 10,
+            "rx_dropped": 1, "tx_dropped": 2,
+            "rx_errors": 3, "tx_errors": 4,
+        },
+        {
+            "rx_bytes": 3000, "tx_bytes": 3500,
+            "rx_packets": 20, "tx_packets": 30,
+            "rx_dropped": 4, "tx_dropped": 2,
+            "rx_errors": 3, "tx_errors": 6,
+        },
+        first,
+        second,
+    )
+    assert measured["tx_bytes_delta"] == 2500
+    assert measured["tx_bits_per_sec"] == 10000.0
+    assert measured["rx_packets_delta"] == 10
+    assert measured["tx_packets_per_sec"] == 10.0
+    assert measured["rx_drops_delta"] == 3
+    assert measured["tx_drops_delta"] == 0
+    assert measured["rx_errors_delta"] == 0
+    assert measured["tx_errors_delta"] == 2
+    assert measured["queue_backlog_bytes"] == 0
+    assert measured["queue_backlog_packets"] == 0
+    assert measured["queue_overlimits_delta"] == 5
+    assert measured["queue_requeues_delta"] == 2
+    assert measured["peer"] == {"switch": "s5", "port": 1}
+
+    unavailable = build_link_metrics(
+        "s1", 4, None, 2.0,
+        {"rx_bytes": 1, "tx_bytes": 1, "rx_packets": 1, "tx_packets": 1,
+         "rx_dropped": 0, "tx_dropped": 0, "rx_errors": 0, "tx_errors": 0},
+        {"rx_bytes": 1, "tx_bytes": 1, "rx_packets": 1, "tx_packets": 1,
+         "rx_dropped": 0, "tx_dropped": 0, "rx_errors": 0, "tx_errors": 0},
+        parse_qdisc_counters(""),
+        parse_qdisc_counters(""),
+    )
+    assert unavailable["queue_backlog_bytes"] is None
+    assert unavailable["queue_overlimits_delta"] is None
+    assert unavailable["queue_requeues_delta"] is None
+    assert unavailable["tx_bits_per_sec"] == 0.0
+
+    blob = json.dumps({"parsed": first, "result": measured}).lower()
+    for forbidden in ("tbf", "1mbit", "400ms", "burst", "qdisc", "noqueue", "f2", "scenario"):
+        assert forbidden not in blob
+
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs.get("shell")))
+        completed = subprocess.CompletedProcess(argv, 0, stdout="backlog 0b 0p\n", stderr="")
+        return completed
+
+    import telemetry.link_metrics as link_metrics
+    original = link_metrics.subprocess.run
+    link_metrics.subprocess.run = fake_run
+    try:
+        read_qdisc_text("s1-eth4")
+        try:
+            read_qdisc_text("eth0")
+        except ValidationError:
+            pass
+        else:
+            raise AssertionError("unchecked interface should be rejected")
+    finally:
+        link_metrics.subprocess.run = original
+    assert calls == [(["tc", "-s", "qdisc", "show", "dev", "s1-eth4"], False)]
+
+    spec = TOOL_SCHEMAS["get_link_metrics"]
+    assert spec["parameters"]["additionalProperties"] is False
+    assert spec["parameters"]["properties"]["port"]["maximum"] == 5
+    description = spec["description"].lower()
+    for forbidden in ("f2", "congestion", "tbf", "bottleneck"):
+        assert forbidden not in description
+    validate_arguments("get_link_metrics", {"sw": "s1", "port": 4})
+    try:
+        validate_arguments("get_link_metrics", {"sw": "s1", "port": 4, "dev": "s1-eth4"})
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("interface argument should be rejected")
+
 
 
 def main() -> int:
@@ -595,6 +792,7 @@ def main() -> int:
         test_flow_normalization_and_order,
         test_port_normalization,
         test_port_stats_rates_and_null_utilization,
+        test_link_metrics_mapping_rates_queue_and_no_config_leak,
         test_error_envelope,
         test_gateway_validation_errors_use_envelope,
         test_hybrid_topology_does_not_use_onos_hosts,
@@ -606,6 +804,7 @@ def main() -> int:
         test_cli_rejects_extra_flags,
         test_cli_rejects_injection_hosts,
         test_device_normalization_sort,
+        test_canonical_tool_list_includes_nmap_and_matches_schemas,
     )
     failed = 0
     for check in checks:

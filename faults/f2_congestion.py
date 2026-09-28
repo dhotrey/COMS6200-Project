@@ -92,7 +92,7 @@ def inject_f2() -> dict[str, Any]:
             "src": scenario.background_src,
             "dst": scenario.background_dst,
             "port": scenario.iperf_port,
-            "duration_s": scenario.background_duration_s,
+            "lifetime": "until_reset",
         },
         "pids": [],
         "ground_truth": scenario.ground_truth(),
@@ -106,7 +106,7 @@ def inject_f2() -> dict[str, Any]:
         tc_replace_tbf(iface, scenario.rate, scenario.burst, scenario.latency)
         server = start_in_host(
             scenario.background_dst,
-            ["iperf3", "-s", "-1", "-p", str(scenario.iperf_port)],
+            ["iperf3", "-s", "-p", str(scenario.iperf_port)],
         )
         time.sleep(0.5)
         if server.poll() is not None:
@@ -119,7 +119,7 @@ def inject_f2() -> dict[str, Any]:
                 "-c",
                 dst_ip,
                 "-t",
-                str(scenario.background_duration_s),
+                "0",
                 "-p",
                 str(scenario.iperf_port),
             ],

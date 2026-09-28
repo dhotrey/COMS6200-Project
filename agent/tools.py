@@ -1,4 +1,4 @@
-"""Seven diagnostic tools, with measured test delay around the existing gateway."""
+"""Diagnostic tools, with measured test delay around the existing gateway."""
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -11,12 +11,13 @@ import time
 
 from telemetry import envelope
 from telemetry.gateway import TelemetryGateway
-from telemetry.schemas import TOOL_SCHEMAS, validate_arguments
+from agent.limits import runtime_limits
+from telemetry.schemas import TOOL_SCHEMAS, schema_list, validate_arguments
 from telemetry.validate import ValidationError, require_host
 
 
 TOOLS = []
-for original in TOOL_SCHEMAS.values():
+for original in schema_list():
     schema = deepcopy(original)
     parameters = schema["parameters"]
     parameters["required"] = list(parameters["properties"])
@@ -39,8 +40,9 @@ def _execute(name: str, arguments: str) -> dict:
         result = envelope.error(name, getattr(exc, "code", "INVALID_ARGUMENT"), str(exc))
     else:
         try:
-            minimum = float(os.getenv("TOOL_DELAY_MIN_SECONDS", "1"))
-            maximum = float(os.getenv("TOOL_DELAY_MAX_SECONDS", "10"))
+            limits = runtime_limits()
+            minimum = float(limits["tool_delay_min_seconds"])
+            maximum = float(limits["tool_delay_max_seconds"])
             if not (math.isfinite(minimum) and math.isfinite(maximum) and 0 <= minimum <= maximum):
                 raise ValueError("tool delay must be finite and 0 <= minimum <= maximum")
             delay = random.uniform(minimum, maximum)

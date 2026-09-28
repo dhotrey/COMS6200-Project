@@ -5,6 +5,6 @@ implement fault injection, a scripted troubleshooter, or an LLM agent.
 """
 
 from telemetry.gateway import TelemetryGateway
-from telemetry.schemas import TOOL_SCHEMAS, schema_list, validate_arguments
+from telemetry.schemas import CANONICAL_TOOL_NAMES, TOOL_SCHEMAS, schema_list, validate_arguments
 
-__all__ = ["TOOL_SCHEMAS", "TelemetryGateway", "schema_list", "validate_arguments"]
+__all__ = ["CANONICAL_TOOL_NAMES", "TOOL_SCHEMAS", "TelemetryGateway", "schema_list", "validate_arguments"]

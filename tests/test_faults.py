@@ -210,12 +210,45 @@ def test_f2_fixed_tc_argv_mocked() -> None:
                                     client = mock.Mock()
                                     client.pid = 102
                                     client.poll.return_value = None
-                                    with mock.patch.object(
-                                        f2, "start_in_host", side_effect=[server, client]
-                                    ):
+                                    started: list[list[str]] = []
+
+                                    def _start(_host, argv):
+                                        started.append(list(argv))
+                                        return server if len(started) == 1 else client
+
+                                    with mock.patch.object(f2, "start_in_host", side_effect=_start):
                                         result = f2.inject_f2()
                 assert result["status"] == "ACTIVE"
                 tc.assert_called_once_with("s1-eth4", "1mbit", "32kbit", "400ms")
+                assert started[0] == ["iperf3", "-s", "-p", "5202"]
+                assert started[1] == ["iperf3", "-c", "10.0.0.6", "-t", "0", "-p", "5202"]
+                assert "120" not in started[0] + started[1]
+                assert F2.background_duration_s == 0
+                assert "F2" not in " ".join(started[0] + started[1])
+
+
+
+def test_f2_reset_stops_background_and_tbf() -> None:
+    from faults import f2_congestion as f2
+
+    with mock.patch.object(f2, "require_root"):
+        with mock.patch.object(
+            f2,
+            "validate_iface_bridge",
+            return_value={"interface": "s1-eth4", "bridge": "s1", "operstate": "up"},
+        ):
+            with mock.patch.object(f2, "_kill_tracked") as kill:
+                with mock.patch.object(f2, "_stop_host_iperf") as stop:
+                    with mock.patch.object(f2, "tc_del_root") as tc:
+                        with mock.patch.object(f2, "tc_show", return_value="qdisc pfifo_fast"):
+                            with mock.patch.object(f2, "clear_state") as clear:
+                                result = f2.reset_f2(force=True, payload={"pids": [11, 12]})
+    assert result["status"] == "IDLE"
+    kill.assert_called_once_with([11, 12])
+    assert [call.args[0] for call in stop.call_args_list] == ["h3", "h6"]
+    tc.assert_called_once_with("s1-eth4")
+    clear.assert_called_once()
+    assert "tbf" not in result["tc_show"]
 
 
 def test_f3_drop_treatment_mocked() -> None:
@@ -317,6 +350,7 @@ def main() -> int:
         test_root_guard_f1,
         test_envelope,
         test_f2_fixed_tc_argv_mocked,
+        test_f2_reset_stops_background_and_tbf,
         test_f3_drop_treatment_mocked,
         test_f4_requires_safety_qdisc_mocked,
         test_f5_ambiguous_rejected,

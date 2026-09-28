@@ -44,8 +44,8 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["delay_seconds"], 4.5)
         self.assertNotEqual(worker_threads[0], loop_thread)
 
-    def test_seven_strict_schemas_do_not_mutate_originals(self):
-        self.assertEqual(len(tools.TOOLS), 7)
+    def test_strict_schemas_do_not_mutate_originals(self):
+        self.assertEqual(len(tools.TOOLS), 8)
         for schema in tools.TOOLS:
             self.assertTrue(schema["strict"])
             params = schema["parameters"]

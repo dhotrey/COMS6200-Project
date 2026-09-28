@@ -72,7 +72,14 @@ def body(cid):
 
 
 def test_missing_credentials_and_conversation_crud(client):
-    assert client.get("/api/config").json()["configured"] is False
+    cfg = client.get("/api/config").json()
+    assert cfg["configured"] is False
+    assert cfg["default_model"] == "gpt-5.6-sol"
+    assert cfg["default_effort"] == "medium"
+    assert cfg["max_tool_calls"] == 14
+    assert cfg["max_turn_seconds"] == 300
+    assert cfg["tool_delay_min_seconds"] == 0
+    assert cfg["tool_delay_max_seconds"] == 0
     cid = client.post("/api/conversations").json()["id"]
     assert client.post("/api/chat", json=body(cid)).status_code == 503
     assert store.get(cid)["messages"] == []

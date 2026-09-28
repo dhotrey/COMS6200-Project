@@ -84,8 +84,8 @@ testbed running, no chat turn in progress):
 ./scripts/verify_agent_scenarios.sh        # or: ... F2 F4
 ```
 
-F2's background load stops 120 s after injection; reload F2 for each session
-and set both tool delays to `0`. Agent `iperf` calls stop only the gateway's own
+F2's background load stays up until reset. Tool delays default to `0` and
+`MAX_TOOL_CALLS` defaults to 14. Agent `iperf` calls stop only the gateway's own
 port-5201 iperf3, so they no longer end the F2 load.
 
 ## Network access
@@ -95,8 +95,7 @@ Run on the Linux testbed host, beside the existing Mininet/ONOS installation
 filesystem). On native Windows the UI opens but **Load scenario** / **Reset**
 return HTTP 500 and the tools cannot reach Mininet. Session helper:
 `./scripts/testbed.sh start`. Load F1–F5 from the UI or `./scripts/testbed.sh inject F1`.
-The six tools directly use `telemetry.TelemetryGateway`; `nmap` returns
-`NOT_IMPLEMENTED`. Inject/reset is operator-only and is not an LLM tool.
+The diagnostic tools, including `nmap` and `get_link_metrics`, call `telemetry.TelemetryGateway`. `get_link_metrics(sw, port)` returns a fixed two-second port measurement: rates, drop and error deltas, instantaneous queue backlog, and overlimit and requeue deltas. It does not return queue configuration. `nmap` scans one TCP or UDP port between two project hosts (primary IPv4, no host discovery, 5 s host timeout, 20 s limit) and returns protocol, state, and service name. Inject/reset is operator-only and is not an LLM tool.
 Start a new conversation after changing the fault.
 
 Host probes require access to Mininet namespaces, usually root. `python -m agent`
@@ -116,14 +115,14 @@ constants in `config.py`, not a Cloudflare invoice. Failed/cancelled requests ma
 have unreported usage and are marked incomplete.
 
 Each tool records arguments, result/error, execution time, artificial delay and
-end-to-end time. `time.sleep(random.uniform(1,10))` runs in a worker thread by
-default. Set both `TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0`
-before collecting actual research timings. The delay is excluded from observations
+end-to-end time. The default delay range is 0–0 seconds. Research runs keep
+both `TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` at `0`. The delay is excluded from observations
 sent to the model. One turn runs at a time to avoid overlapping network probes.
 Stop closes model streaming; an already-running bounded diagnostic finishes its
 cleanup before another turn can start.
 
-Defaults: 10 tool calls and 300 seconds per turn. The per-turn token stop is
+Defaults: 14 tool calls and 300 seconds per turn. The UI model default is
+`gpt-5.6-sol` at reasoning effort `medium`. The per-turn token stop is
 off (`MAX_TURN_TOKENS=0`). Set a positive value to restore it. A per-request
 output cap of 8,192 tokens remains. This is not a billing cap; set gateway spend
 limits for a financial cap. A final answer is requested after the tool budget is
@@ -138,7 +137,7 @@ observations may be exported to that Logfire project.
 - `server.py`: routes and streamed turn lifecycle.
 - `fault_control.py`: operator F1–F5 load/reset for the UI (not an LLM tool).
 - `loop.py`: complete model/tool loop and measurements.
-- `tools.py`: existing tool adapter and nmap placeholder.
+- `tools.py`: tool adapter around `TelemetryGateway`, including `nmap`.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.
 - `setup_d1.py`: explicit D1 schema setup and verification command.
 - `config.py`, `prompt.md`: settings and editable system instructions.

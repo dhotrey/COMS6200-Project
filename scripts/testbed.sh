@@ -8,7 +8,8 @@
 #   ./scripts/testbed.sh start
 #   ./scripts/testbed.sh inject F1
 #   ./scripts/testbed.sh reset
-#   ./scripts/testbed.sh stop
+#   ./scripts/testbed.sh stop                 # Mininet down; ONOS stays up
+#   ./scripts/testbed.sh stop --with-onos     # also stop the ONOS container
 
 set -euo pipefail
 
@@ -32,24 +33,33 @@ RUN_DIR="${COMS6200_FAULT_STATE_DIR:-/run/coms6200}"
 PID_FILE="${RUN_DIR}/mininet.pid"
 READY_FILE="${RUN_DIR}/mininet.ready"
 LOG_FILE="${RUN_DIR}/mininet.log"
+ONOS_RECOVERY_USED=0
 
 usage() {
   cat <<'EOF'
 Usage:
   ./scripts/testbed.sh start
   ./scripts/testbed.sh stop
+  ./scripts/testbed.sh stop --with-onos
   ./scripts/testbed.sh inject F1|F2|F3|F4|F5
   ./scripts/testbed.sh reset
   ./scripts/testbed.sh status
 
-start  Open vSwitch, ONOS, background main6s8h, then install baseline flows.
-stop   Reset any active fault, stop Mininet, clear OVS Mininet state, stop ONOS.
+start  Open vSwitch, a healthy ONOS, background main6s8h, then baseline flows.
+       Reuses an already-healthy ONOS. If REST is up but the six switches do
+       not attach, recreates only the ONOS container once and retries.
+stop   Reset any active fault, stop Mininet, clear OVS Mininet state.
+       Leaves the ONOS container running.
+stop --with-onos
+       Same as stop, then stop the ONOS container. Operator action, not the
+       normal experiment reset.
 inject Reset an active catalogue fault if needed, then inject F1–F5.
 reset  Clear the active catalogue fault only (Mininet/ONOS stay up).
 status Show ONOS, Mininet, and fault-injector state.
 
 ONOS REST defaults to onos/rocks. Override with ONOS_USER / ONOS_PASSWORD.
-The ONOS container must already exist (./setup/setup_onos.sh).
+A missing ONOS container is created with ./setup/setup_onos.sh.
+Catalogue v1 has no F6+.
 EOF
 }
 
@@ -112,16 +122,25 @@ start_ovs() {
   die "started Open vSwitch but ovs-vsctl still cannot contact the database"
 }
 
-start_onos() {
+onos_container_state() {
+  "${DOCKER[@]}" inspect -f '{{.State.Status}}' "${ONOS_CONTAINER}" 2>/dev/null || true
+}
+
+onos_openflow_listening() {
+  ss -ltn 2>/dev/null | grep -q "${ONOS_HOST}:${ONOS_OF_PORT}"
+}
+
+ensure_onos_container() {
   detect_docker required || exit 1
   local state
-  state="$("${DOCKER[@]}" inspect -f '{{.State.Status}}' "${ONOS_CONTAINER}" 2>/dev/null || true)"
+  state="$(onos_container_state)"
   case "${state}" in
     running)
-      echo "==> ONOS container '${ONOS_CONTAINER}' is already running"
+      echo "==> ONOS container '${ONOS_CONTAINER}' is already running; reusing it"
       ;;
     "")
-      die "ONOS container '${ONOS_CONTAINER}' was not found. Run ./setup/setup_onos.sh once, then re-run start."
+      echo "==> ONOS container '${ONOS_CONTAINER}' is missing; running ./setup/setup_onos.sh"
+      "${ROOT}/setup/setup_onos.sh"
       ;;
     *)
       echo "==> Starting ONOS container '${ONOS_CONTAINER}' (was ${state})"
@@ -130,22 +149,23 @@ start_onos() {
   esac
 }
 
-wait_onos_rest() {
-  echo "==> Waiting for ONOS REST on ${ONOS_API} (up to 180s)"
+wait_onos_service() {
+  echo "==> Waiting for ONOS REST and the OpenFlow listener (up to 180s)"
   local i
   for i in $(seq 1 60); do
-    if curl -sS -f -u "${ONOS_USER}:${ONOS_PASSWORD}" "${ONOS_API}/devices" >/dev/null 2>&1; then
-      echo "==> ONOS REST is up"
+    if curl -sS -f -u "${ONOS_USER}:${ONOS_PASSWORD}" "${ONOS_API}/devices" >/dev/null 2>&1 \
+        && onos_openflow_listening; then
+      echo "==> ONOS service is ready (REST and OpenFlow port ${ONOS_OF_PORT})"
       return 0
     fi
     sleep 3
   done
-  die "ONOS REST did not become ready. Check: ${DOCKER[*]} logs ${ONOS_CONTAINER}"
+  die "ONOS service did not become ready (REST or OpenFlow listener). Recent logs: ${DOCKER[*]} logs --tail 100 ${ONOS_CONTAINER}"
 }
 
 available_device_count() {
   python3 - <<'PY'
-import json, os, sys, urllib.error, urllib.request, base64
+import json, os, sys, urllib.request, base64
 
 url = os.environ.get("ONOS_API", "http://127.0.0.1:8181/onos/v1") + "/devices"
 user = os.environ["ONOS_USER"]
@@ -169,19 +189,78 @@ print(len(ids & expected))
 PY
 }
 
-wait_six_devices() {
-  echo "==> Waiting for ONOS to see s1–s6 (up to 60s)"
-  export ONOS_API
-  local n i
+integration_ready() {
+  python3 - <<'PY'
+import base64, json, os, urllib.request
+
+api = os.environ.get("ONOS_API", "http://127.0.0.1:8181/onos/v1")
+token = base64.b64encode(
+    f"{os.environ['ONOS_USER']}:{os.environ['ONOS_PASSWORD']}".encode()
+).decode()
+
+def get(path):
+    req = urllib.request.Request(api + path)
+    req.add_header("Authorization", f"Basic {token}")
+    with urllib.request.urlopen(req, timeout=5) as response:
+        return json.load(response)
+
+try:
+    devices = get("/devices").get("devices") or []
+    links = get("/links").get("links") or []
+except Exception:
+    raise SystemExit(1)
+expected = {f"of:000000000000000{i}" for i in range(1, 7)}
+ready = {
+    item.get("id")
+    for item in devices
+    if item.get("available")
+    and item.get("id") in expected
+    and (item.get("annotations") or {}).get("protocol") == "OF_13"
+}
+raise SystemExit(0 if len(ready) == 6 and len(links) == 20 else 1)
+PY
+}
+
+wait_integration() {
+  echo "==> Waiting for 6 OF_13 switches and 20 directed links (up to 60s)"
+  local i
   for i in $(seq 1 30); do
-    n="$(available_device_count)"
-    if [[ "${n}" == "6" ]]; then
-      echo "==> ONOS has 6/6 main6s8h devices"
+    if integration_ready; then
+      echo "==> ONOS has 6/6 OF_13 devices and 20 directed links"
       return 0
     fi
     sleep 2
   done
-  die "ONOS still does not have all six switches (last count ${n:-0}). Is Mininet up?"
+  echo "ERROR: ONOS REST is up but the expected switches did not attach." >&2
+  return 1
+}
+
+show_recent_onos_logs() {
+  echo "==> Recent ONOS logs (bounded; not the full container history)"
+  "${DOCKER[@]}" logs --tail 80 --since 15m "${ONOS_CONTAINER}" 2>&1 \
+    | grep -E 'Leadership|not registered|Listening for OF|ERROR' \
+    | tail -n 20 || true
+}
+
+recreate_onos_container() {
+  detect_docker required || exit 1
+  echo "==> Recreating only container '${ONOS_CONTAINER}'"
+  "${DOCKER[@]}" rm -f "${ONOS_CONTAINER}" >/dev/null
+  "${ROOT}/setup/setup_onos.sh"
+}
+
+recover_onos_once() {
+  if [[ "${ONOS_RECOVERY_USED}" -eq 1 ]]; then
+    die "ONOS still did not accept 6 OF_13 switches and 20 directed links after one container recreation."
+  fi
+  ONOS_RECOVERY_USED=1
+  echo "==> Integration failed. Recreating the ONOS container once, then retrying Mininet."
+  show_recent_onos_logs
+  stop_mininet
+  recreate_onos_container
+  wait_onos_service
+  start_mininet
+  wait_integration || die "ONOS still did not accept 6 OF_13 switches and 20 directed links after one container recreation."
 }
 
 mininet_started_by_us() {
@@ -269,10 +348,12 @@ reset_fault_best_effort() {
 
 cmd_start() {
   start_ovs
-  start_onos
-  wait_onos_rest
+  ensure_onos_container
+  wait_onos_service
   start_mininet
-  wait_six_devices
+  if ! wait_integration; then
+    recover_onos_once
+  fi
   install_baseline
   cat <<EOF
 
@@ -288,12 +369,16 @@ EOF
 }
 
 cmd_stop() {
+  local with_onos="${1:-0}"
   detect_docker optional || true
   reset_fault_best_effort
   stop_mininet
-  if [[ "${#DOCKER[@]}" -gt 0 ]]; then
-    echo "==> Stopping ONOS container '${ONOS_CONTAINER}'"
+  if [[ "${with_onos}" -eq 1 ]]; then
+    [[ "${#DOCKER[@]}" -gt 0 ]] || die "cannot stop ONOS: docker is not usable"
+    echo "==> Stopping ONOS container '${ONOS_CONTAINER}' (--with-onos)"
     "${DOCKER[@]}" stop "${ONOS_CONTAINER}" >/dev/null 2>&1 || true
+  else
+    echo "==> Leaving ONOS container '${ONOS_CONTAINER}' running"
   fi
   echo "==> Testbed stopped (Open vSwitch left running)"
 }
@@ -348,18 +433,44 @@ cmd_status() {
   as_root python3 -m faults.cli status || true
 }
 
+reject_extra() {
+  [[ "${#}" -eq 0 ]] || die "unexpected argument '${1}'"
+}
+
 main() {
   local cmd="${1:-}"
   shift || true
   case "${cmd}" in
-    start) cmd_start ;;
-    stop) cmd_stop ;;
+    start)
+      reject_extra "$@"
+      cmd_start
+      ;;
+    stop)
+      local with_onos=0
+      while [[ "${#}" -gt 0 ]]; do
+        case "$1" in
+          --with-onos) with_onos=1 ;;
+          *) die "unknown argument '$1'. Normal stop leaves ONOS running. Use: ./scripts/testbed.sh stop --with-onos" ;;
+        esac
+        shift
+      done
+      cmd_stop "${with_onos}"
+      ;;
     inject)
       [[ "${#}" -ge 1 ]] || die "inject requires a scenario (F1–F5)"
-      cmd_inject "$1"
+      local scenario="$1"
+      shift
+      reject_extra "$@"
+      cmd_inject "${scenario}"
       ;;
-    reset) cmd_reset ;;
-    status) cmd_status ;;
+    reset)
+      reject_extra "$@"
+      cmd_reset
+      ;;
+    status)
+      reject_extra "$@"
+      cmd_status
+      ;;
     -h|--help|help|"") usage ;;
     *)
       usage >&2
