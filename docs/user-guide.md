@@ -30,9 +30,12 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M5 First Automated Fault + Reset | ✅ |
 | M5B Fault Catalogue v1 (F1–F5) | ✅ Frozen |
 | Automated fault injection | ✅ F1–F5 verified |
-| Deterministic scripted troubleshooting baseline | 🟡 |
-| LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5) and runtime-tested on WSL2 with all four models, see [results](results/llm-diagnosis.md); Ubuntu reference-host runs pending |
-| Repeated evaluation experiments | 🟡 |
+| Deterministic scripted troubleshooting baseline | ✅ Implemented ([baseline](../baseline/README.md)). Non-formal F1–F5 dry runs only. |
+| Diagnosis evaluator | ✅ Protocol v1 rubric ([experiments](../experiments/README.md)). |
+| Experiment runner | ✅ Dry-run mode only. Formal mode is refused. |
+| LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5). WSL2 F1–F5 and Ubuntu F2 runs are pilots, not the formal dataset. See [results](results/llm-diagnosis.md), [F2 observability pilot](results/f2-observability-pilot.md), and [F2 link-metrics pilot](results/f2-link-metrics-pilot.md). |
+| Experimental Protocol v1 | 🟡 Frozen candidate ([protocol](experiments/protocol-v1.md)). Primary model `gpt-5.6-sol` / `medium` is approved. Formal trials have not been collected. |
+| Repeated evaluation experiments | 🟡 Not started. Formal collection is blocked. |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
 
@@ -42,7 +45,7 @@ sections must not invent CLIs.
 **Two different “baseline” terms**
 
 - **Baseline forwarding** ✅ — ONOS application `org.coms6200.baseline`. Network datapath for healthy host connectivity.
-- **Scripted troubleshooting baseline** 🟡 — future diagnostic comparator that will use the same telemetry as the LLM. Not implemented.
+- **Scripted troubleshooting baseline** ✅ — diagnostic comparator in `baseline/`. Uses the same telemetry as the LLM. Formal trials have not been run.
 
 ---
 
@@ -464,8 +467,11 @@ Operator convenience for bringing a **previously installed** testbed up and down
 ./scripts/testbed.sh inject F1       # or F2 F3 F4 F5 (also accepted: f1 or 1)
 ./scripts/testbed.sh reset           # clear the active catalogue fault
 ./scripts/testbed.sh status
-./scripts/testbed.sh stop            # reset fault, stop Mininet, stop ONOS (OVS stays up)
+./scripts/testbed.sh stop            # reset fault, stop Mininet; ONOS stays up
+./scripts/testbed.sh stop --with-onos  # also stop the ONOS container
 ```
+
+Normal experiment cycle is `start`, the run, `reset` or `stop`. `stop` does not stop a healthy ONOS container. `stop --with-onos` is the explicit operator shutdown. `start` reuses an ONOS that is already answering REST with its OpenFlow port listening. It does not treat REST alone as a finished testbed: after Mininet starts it waits for 6 OF_13 switches and 20 directed links. If that attach fails, it stops the temporary Mininet session, recreates only the `onos` container once, and retries. A second failure exits with an error.
 
 `start` leaves Mininet running in the background (no `mininet>` prompt). Host `ping`/`iperf` through the telemetry gateway still work. `inject` resets any already-active catalogue fault first, then injects the requested scenario. Do not tell the LLM the scenario id.
 
@@ -698,6 +704,7 @@ gw = TelemetryGateway()
 gw.get_topology()
 gw.get_port_status("s3")
 gw.get_port_stats("s3")
+gw.get_link_metrics("s1", 4)       # fixed 2 s window; known switch port only
 gw.get_flow_table("s3")
 gw.ping("h1", "h5")                 # count 1–10, default 3
 gw.iperf("h1", "h5")                # duration 1–5 s, default 2
@@ -710,6 +717,7 @@ gw.iperf("h1", "h5")                # duration 1–5 s, default 2
 | `python3 -m telemetry.cli get-topology` | `get_topology()` |
 | `python3 -m telemetry.cli get-port-status --switch s3` | `get_port_status(s3)` |
 | `python3 -m telemetry.cli get-port-stats --switch s3` | `get_port_stats(s3)` |
+| `python3 -m telemetry.cli get-link-metrics --switch s1 --port 4` | `get_link_metrics(s1, 4)` |
 | `python3 -m telemetry.cli get-flow-table --switch s3` | `get_flow_table(s3)` |
 | `python3 -m telemetry.cli ping --src h1 --dst h5` | `ping(h1, h5)` |
 | `python3 -m telemetry.cli ping --src h1 --dst h5 --count 3` | bounded extra count |
@@ -747,8 +755,9 @@ timeout, or parse failure.
 | `ping(src, dst)` | `mnexec` + `ping` in src namespace | sent/received, loss %, RTT min/avg/max | ✅ |
 | `get_port_status(sw)` | ONOS `/devices/{id}/ports` | port, name, `isEnabled`, type, speed, configured peer | ✅ |
 | `get_port_stats(sw)` | two `/statistics/ports` samples (~1 s); optional delta | packets/bytes, drops/errors, bit rates; `utilization_pct` is always `null` | ✅ |
+| `get_link_metrics(sw, port)` | kernel interface counters and filtered queue counters over a fixed 2 s window | peer, enabled, packet/byte deltas, bit and packet rates, drop/error deltas, end-of-window queue backlog, overlimit and requeue deltas; unavailable counters are null | ✅ |
 | `get_flow_table(sw)` | ONOS `/flows` | id, table, state, priority, app_id, selector, treatment, packets/bytes, life | ✅ |
-| `iperf(src, dst)` | one-shot `iperf3 -s -1` in dst, client in src | duration, bytes, Mbit/s, retransmits | ✅ |
+| `iperf(src, dst)` | one-shot `iperf3 -s -1` in dst, client in src | sender and receiver bytes, bit rate, and duration, plus retransmits; legacy bytes/Mbit/s/duration follow the receiver when that side reports the field | ✅ |
 
 `get_topology()` does **not** use ONOS `/hosts`. Healthy summary targets:
 
@@ -765,9 +774,18 @@ Port rates use a two-sample byte delta. `utilization_pct` is `null` because
 there is no trustworthy non-ground-truth link capacity (OVS advertised speed
 and TC/injector limits are not used).
 
+`get_link_metrics(sw, port)` accepts only `s1`–`s6` and a port that exists on
+that switch in the canonical topology. The gateway maps the pair to the switch
+interface itself. The sample window is fixed at about 2 seconds and cannot be
+chosen by the caller. Byte, packet, drop, and error deltas, plus the derived
+rates, come from kernel interface counters. Queue backlog is the instantaneous
+sample at the end of the window. Overlimit and requeue values are deltas across
+the same window. If those queue counters cannot be read, the fields are null and
+the rest of the measurement is still returned. The result does not include queue
+configuration, a configured rate, latency, burst, or a fault label.
+
 Ping destination is the configured primary IPv4 (never a caller-supplied IP).
-iperf uses iperf3 JSON (`-J`), TCP only, duration 1–5 s. The gateway does not
-install a pass/fail throughput threshold. After the test it terminates the
+iperf uses iperf3 JSON (`-J`), TCP only, duration 1–5 s. The result includes `sender_bytes`, `sender_bits_per_sec`, `sender_duration_sec`, `receiver_bytes`, `receiver_bits_per_sec`, `receiver_duration_sec`, and `retransmits`. Legacy `bytes_transferred`, `mbit_per_sec`, and `duration_sec` follow the receiver summary when that summary includes the field, including an explicit zero, and otherwise follow the sender summary. A receiver value of 0 with sender progress is a completed measurement. An iperf3 error string is `ok: false`, not a zero-throughput result. The gateway does not install a pass/fail throughput threshold and does not label a fault. After the test it terminates the
 server process group and best-effort stops leftover **gateway** iperf3 only
 (`pkill -f` matching its own port 5201). Mininet hosts share the root process
 table, so the earlier unscoped `pkill -x iperf3` also stopped unrelated iperf3,
@@ -1010,14 +1028,14 @@ Live D1 verification (13 September 2026): schema setup returned `ok: true`,
 the create/save/read/delete smoke test passed, and cleanup restored
 `conversation_count` to `0`.
 
-Six existing telemetry tools are reused on the same machine; `nmap` is a
-placeholder returning `NOT_IMPLEMENTED`. Host probes retain Mininet namespace
+The telemetry tools are reused on the same machine. `nmap` runs one TCP-connect or UDP scan of a single port (0–65535) between two project hosts, using each destination's primary IPv4 address, with host discovery disabled, a 5 s host timeout, and a 20 s limit. It returns that port's protocol, state, and service name. Host probes retain Mininet namespace
 privilege requirements. Follow [agent setup](../agent/README.md) for launch,
 privileges, limits, Logfire, and offline tests. Run one server worker. Bring
 the testbed up with `./scripts/testbed.sh start` (or interactive `mn`) before
 sending diagnosis prompts.
 
-The model picker offers Luna, Terra, Sol and Astra with supported thinking levels.
+The model picker offers Luna, Terra, Sol and Astra. The default selection is Sol
+(`gpt-5.6-sol`) at thinking level `medium`.
 A separate fault picker can **Load** or **Reset** F1–F5 on the live network.
 That mutation is operator-only: the selected id is not sent in chat requests,
 saved as assistant context, or written into the system prompt. Describe a
@@ -1028,8 +1046,8 @@ The chat window renders assistant Markdown (lists, emphasis, code). Tool calls
 appear as faint one-line labels until hovered or clicked. The conversation
 sidebar is drag-resizable; double-click a title or use the pencil control to
 rename it (`PATCH /api/conversations/{id}`).
-Tool delays default to a random 1–10 seconds for telemetry testing; set both
-`TOOL_DELAY_MIN_SECONDS` and `TOOL_DELAY_MAX_SECONDS` to `0` for research runs.
+Tool delays default to 0. Protocol v1 keeps `TOOL_DELAY_MIN_SECONDS` and
+`TOOL_DELAY_MAX_SECONDS` at 0, `MAX_TOOL_CALLS` at 14, and `MAX_TURN_SECONDS` at 300.
 Execution and artificial-delay timings are recorded separately. Stop cancels
 model generation; an in-flight bounded probe must finish cleanup before another
 turn. Follow-up questions in the same conversation are supported: each send
@@ -1048,6 +1066,11 @@ Example symptom-only prompts:
 Describe observable symptoms. Do not name the injector.
 
 ### Diagnosis sessions per scenario (F1–F5)
+
+Formal prompts, repetition count, run order, and scoring are specified in
+[Experimental Protocol v1](experiments/protocol-v1.md). That document is
+pre-collection. The table below remains the operator reference for symptom
+prompts. Do not paste the evidence or localisation columns into the chat.
 
 ✅ (WSL2) The harness loads all five catalogue faults through the same path
 (**Load scenario** → `POST /api/scenario/load` → `agent/fault_control.py` →
@@ -1071,7 +1094,7 @@ Operator-only reference. Never paste the last two columns into the chat.
 | Load | Symptom-only prompt (example) | Evidence reachable through the agent tools | Correct localisation |
 | --- | --- | --- | --- |
 | F1 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h1→h2 and h3→h5 succeed. `get_topology` observes 9 of 10 configured links. `get_port_status` shows s3 port 1 and s1 port 2 `enabled=false`. | Link failure s3:1 ↔ s1:2 |
-| F2 | “Transfers from h1 to h5 are very slow. Investigate and localise the cause.” | `ping` h1→h5 succeeds with high RTT (~400 ms). `iperf` h1→h5 is far below a healthy pair. All ports enabled; flows unchanged. `get_port_stats(s1)` port 4 counters are available, but the ~1 s rate sample can read 0 (see F2 notes). | Congestion on s1:4 ↔ s5:1 |
+| F2 | “Transfers from h1 to h5 are very slow. Investigate and localise the cause.” | `ping` h1→h5 succeeds with high RTT (~400 ms). `iperf` h1→h5 can show sender progress while `receiver_bytes` is 0; legacy bytes and Mbit/s follow the receiver. All ports enabled; flows unchanged. `get_port_stats(s1)` port 4 counters are available, but the ~1 s rate sample can read 0 (see F2 notes). `get_link_metrics(s1, 4)` adds a fixed 2 s port sample, end-of-window queue backlog, and overlimit/requeue deltas when the kernel provides them. | Congestion on s1:4 ↔ s5:1 |
 | F3 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h2→h5 and h1→h6 succeed. Links/ports healthy. `get_flow_table(s3)` has a priority-50000 `org.coms6200.experiment` rule matching h1→h5 MACs with no output action (ONOS reports the treatment as `NOACTION`, i.e. drop). | Selective drop rule on s3 for h1→h5 |
 | F4 | “h1 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 fails; h1→h2 and h3→h5 succeed. `get_flow_table` on s3, s4 and s1 shows priority-50000 h1→h5 rules outputting s3:5 → s4:1 → s1:2, a cycle. | Forwarding loop s3 → s4 → s1 → s3 for h1→h5 |
 | F5 | “h1 and h2 can no longer reach h5. Diagnose and localise the fault.” | `ping` h1→h5 and h2→h5 fail; h1→h6 and h3→h5 succeed. Links/ports healthy. `get_flow_table(s3)` has no priority-41000 rule for h5's MAC, while s4 does. | Missing baseline rule for h5 on s3 |
@@ -1083,14 +1106,18 @@ evidence distinguishes them.
 **F2 notes.** The 1 Mbit/s bottleneck is a Linux `tc` qdisc on `s1-eth4`; ONOS
 does not report it, so the model must localise F2 by comparing `iperf`/`ping`
 across paths (for example h1→h5 versus h1→h7) and port counters. The background
-h3→h6 load runs for 120 s after injection (catalogue v1 workload, unchanged);
-the TBF stays until reset. Send the prompt promptly with tool delays at 0, and
-reload F2 for each session. Agent `iperf` calls no longer stop that background
+h3→h6 load stays up until F2 is reset (iperf3 `-t 0` on port 5202); the TBF
+stays until the same reset. Tool delays for measurement runs are 0. The agent
+tool cap default is 14. Agent `iperf` calls no longer stop that background
 load (see [Tools](#tools)). In the WSL run on 23 September 2026,
 `get_port_stats(s1)` reported `tx_bits_per_sec=0.0` on port 4 while the
 background load was running; the two-sample rate is taken ~1 s apart and may
 not see a fresh ONOS counter update (not investigated further), so the model
-should not rely on that rate alone.
+should not rely on that rate alone. The iperf tool now reports `sender_*` and
+`receiver_*` separately. A completed test can have `receiver_bytes` 0 while
+`sender_bytes` is greater than 0; legacy `bytes_transferred` and `mbit_per_sec`
+follow that receiver value, including zero. That result is a measurement, not a
+command failure.
 
 #### Recording results
 
@@ -1147,23 +1174,22 @@ evaluator remains planned; no automated diagnosis scoring is implemented.
 
 ## Scripted troubleshooting baseline
 
-🟡 Planned. **This is not `org.coms6200.baseline`.**
+✅ Implemented. **This is not `org.coms6200.baseline`.**
 
 | Term | What it is | Status |
 | --- | --- | --- |
 | Baseline forwarding | Datapath flows installed by `forwarding/baseline_forwarding.py` | ✅ |
-| Scripted troubleshooting baseline | Deterministic diagnostic comparator | 🟡 |
+| Scripted troubleshooting baseline | Deterministic diagnostic comparator in `baseline/` | ✅ Dry-run only |
 
-Intended order (planned):
+The procedure reads the symptom, then uses topology, ping, port state, flow rules, and, when the complaint is slowness, iperf plus `get_link_metrics`. It stops at 14 gateway calls or 300 seconds. It does not receive a scenario id.
 
-1. Test endpoint reachability
-2. Inspect link/port state
-3. Inspect traffic performance / counters
-4. Inspect flow rules
-5. Classify and localise the fault
-6. Return the same diagnosis format as the LLM
+```bash
+python3 -m baseline --prompt "h1 can no longer reach h5. Diagnose and localise the fault."
+python3 -m experiments dry-run --method baseline --scenario F1
+python3 -m experiments formal   # refused
+```
 
-Both methods will call the same existing `TelemetryGateway`. The LLM agent already does (M6 in progress); the scripted baseline is still 🟡.
+`formal` does not start the 80-trial matrix. Details and the scoring rules are in [Experimental Protocol v1](experiments/protocol-v1.md) and [experiments/README.md](../experiments/README.md).
 
 ---
 
@@ -1173,10 +1199,11 @@ Both methods will call the same existing `TelemetryGateway`. The LLM agent alrea
 
 ```bash
 ./scripts/testbed.sh reset    # clear F1–F5, leave Mininet/ONOS up
-./scripts/testbed.sh stop     # reset fault, stop Mininet, stop ONOS
+./scripts/testbed.sh stop     # reset fault, stop Mininet; ONOS stays up
+./scripts/testbed.sh stop --with-onos
 ```
 
-`stop` leaves the Open vSwitch service running. The next session is `./scripts/testbed.sh start`.
+`stop` leaves the Open vSwitch service and the ONOS container running. The next session is `./scripts/testbed.sh start`. `stop --with-onos` is how an operator intentionally stops the controller.
 
 ### Available today ✅
 
@@ -1201,10 +1228,10 @@ python3 forwarding/baseline_forwarding.py install
 python3 forwarding/baseline_forwarding.py verify
 ```
 
-Stop ONOS if needed:
+Stop ONOS only when shutting the controller down:
 
 ```bash
-docker stop onos
+./scripts/testbed.sh stop --with-onos
 ```
 
 ### After an injected fault (F1–F5) ✅
@@ -1235,7 +1262,7 @@ full `install` fallback.
 `./scripts/testbed.sh stop` resets first. If that normal reset fails, it now
 retries `--force-scenario` for each of F1–F5 (previously F1 only) before
 stopping Mininet. Forced recovery applies only when no state file remains. This
-fallback is 🟡 (static test only; not live-verified).
+normal reset path was live-checked on the Ubuntu server on 28 September 2026: stop after each of F1–F5 returned a clean baseline with ONOS left running. The force-scenario fallback, used only when that normal reset fails, remains a static test.
 
 ---
 
@@ -1247,7 +1274,7 @@ fallback is 🟡 (static test only; not live-verified).
 
 **Checks:** `./scripts/verify_onos.sh`, `docker ps --filter name=onos` (no sudo if `docker info` works).
 
-**Action:** `./setup/setup_onos.sh` or `docker start onos`. Wait for the OpenFlow listener.
+**Action:** `./setup/setup_onos.sh` or `./scripts/testbed.sh start` (it starts a stopped container). Wait for REST and the OpenFlow port. A container that answers REST but never accepts switches is recreated once by `start`.
 
 ### ONOS REST unavailable
 
@@ -1353,9 +1380,10 @@ previous fault left state behind (`FAULT_ALREADY_ACTIVE` or
 
 ### F2 session shows no cross-traffic on s1 port 4
 
-The F2 background h3→h6 iperf3 ends 120 s after injection; the TBF bottleneck
-remains until reset. Reload F2 (**Load scenario** or `./scripts/testbed.sh
-inject F2`), start a new conversation, and set tool delays to 0.
+The F2 background h3→h6 iperf3 and the TBF on `s1-eth4` both remain until
+reset. If port 4 shows no cross-traffic, confirm F2 is still the active fault
+(`python3 -m faults.cli status`) and that reset has not already run. Measurement
+turns use tool delay 0 and a 14-call cap.
 
 ### Agent fails to start because D1 is unavailable
 
@@ -1422,7 +1450,7 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 10. Ask the harness for a diagnosis ✅ (WSL2; [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5); harness path check `./scripts/verify_agent_scenarios.sh Fn`; record results in [results](results/llm-diagnosis.md))
 11. Reset ✅ (`./scripts/testbed.sh reset`, harness **Reset**, or `python3 -m faults.cli reset`; see [after an injected fault](#after-an-injected-fault-f1f5-))
 12. Verify healthy baseline again ✅ (20 directed links; 56 baseline ADDED; 0 experiment flows; pingall 56/56)
-13. Session teardown `./scripts/testbed.sh stop`, or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `docker stop onos` if shutting down the controller
+13. Session teardown `./scripts/testbed.sh stop` (ONOS stays up), or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `./scripts/testbed.sh stop --with-onos` if shutting down the controller
 
 ### B. Full planned experiment workflow 🟡
 
@@ -1434,17 +1462,17 @@ Unfinished steps are marked.
 4. Install baseline forwarding ✅
 5. Verify healthy baseline ✅
 6. Inject one fault ✅ (Fault Catalogue v1: F1–F5)
-7. Present **only a symptom** to the diagnostic method — LLM ✅ (the harness never sends the scenario id); scripted baseline 🟡
+7. Present **only a symptom** to the diagnostic method — LLM ✅ (the harness never sends the scenario id); scripted baseline ✅ (symptom text only; dry runs)
 8. Collect structured telemetry ✅
-9. Obtain a diagnosis — LLM ✅ (chat harness; all four models on F1–F5, [results](results/llm-diagnosis.md)); scripted baseline 🟡
-10. Log result — LLM ✅ (Cloudflare D1 stores each answer, tool calls, tokens, cost and timings; scored runs in [results](results/llm-diagnosis.md)); scripted baseline 🟡
-11. Compare diagnosis to hidden ground truth — LLM runs scored manually (provisional, team review pending); automated evaluator 🟡
+9. Obtain a diagnosis — LLM ✅ (chat harness; pilots in [results](results/llm-diagnosis.md)); scripted baseline ✅ (non-formal F1–F5 dry runs)
+10. Log result — LLM ✅ (Cloudflare D1 for harness chats); dry-run records ✅ (`evidence/experiments/protocol-v1/dry-runs.jsonl`, labelled not formal)
+11. Compare diagnosis to hidden ground truth — evaluator ✅ for dry runs. Formal scores have not been collected.
 12. Reset network ✅ (`python3 -m faults.cli reset`)
 13. Verify healthy state ✅
-14. Repeat 🟡 (one run per scenario and model so far)
+14. Repeat 🟡 Formal 8×2 matrix not started. One non-formal baseline pass per F1–F5 and one paired F2 dry run exist.
 
-The LLM steps were runtime-verified on WSL2 (23 September 2026); runs on the
-Ubuntu reference host are pending.
+Harness pilots and the Phase 6–7 dry runs were exercised on the Ubuntu
+reference host. Those records are not the formal dataset.
 
 ---
 
@@ -1467,7 +1495,7 @@ Ubuntu reference host are pending.
 
 **Implemented starter:** `agent/` (chat harness, tools, Cloudflare D1, UI).
 
-**Planned, not present:** `baseline/` (scripted troubleshooter), `experiments/`.
+**Implemented, dry-run only:** `baseline/` (scripted troubleshooter), `experiments/` (evaluator and runner). Formal `runs.jsonl` is not present.
 
 Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
 

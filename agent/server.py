@@ -44,8 +44,10 @@ def index():
 
 @app.get("/api/config")
 def settings():
-    return {"configured": config.configured(), "models": config.MODELS,
-            "default_model": "gpt-5.6-luna", "default_effort": "medium"}
+    payload = {"configured": config.configured(), "models": config.MODELS,
+               "default_model": "gpt-5.6-sol", "default_effort": "medium"}
+    payload.update(config.runtime_limits())
+    return payload
 
 
 @app.get("/api/conversations")

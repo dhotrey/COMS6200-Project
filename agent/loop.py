@@ -8,6 +8,7 @@ import time
 import logfire
 
 from .config import PRICES, ROOT
+from .limits import runtime_limits
 from .tools import TOOLS, execute_tool
 
 
@@ -19,10 +20,11 @@ async def run(client, history, model, effort, state):
                  input_tokens=0, output_tokens=0, cached_tokens=0, reasoning_tokens=0,
                  total_tokens=0, model_calls=0, tool_calls=0, invalid_tool_calls=0,
                  cost_usd=0.0, first_token_seconds=None, requests=[], usage_complete=True)
-    max_calls = int(os.getenv("MAX_TOOL_CALLS", "10"))
+    limits = runtime_limits()
+    max_calls = int(limits["max_tool_calls"])
     max_tokens = int(os.getenv("MAX_TURN_TOKENS", "0"))
     try:
-        async with asyncio.timeout(float(os.getenv("MAX_TURN_SECONDS", "300"))):
+        async with asyncio.timeout(float(limits["max_turn_seconds"])):
             while True:
                 if stats["model_calls"] >= max_calls + 2:
                     raise RuntimeError("Model request limit reached.")

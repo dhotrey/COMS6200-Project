@@ -10,6 +10,15 @@ from topologies.spec import DEVICE_IDS, HOSTS, SWITCHES
 from telemetry import envelope
 from telemetry.host_exec import HostExecError, run_in_host, start_in_host, terminate
 from telemetry.onos_client import OnosClient, OnosError
+from telemetry.link_metrics import (
+    LINK_SAMPLE_SEC,
+    build_link_metrics,
+    interface_name,
+    parse_qdisc_counters,
+    read_iface_counters,
+    read_qdisc_text,
+    require_switch_port,
+)
 from telemetry.parsers import (
     configured_inter_switch_links,
     normalize_devices,
@@ -44,9 +53,11 @@ class TelemetryGateway:
         self,
         client: OnosClient | None = None,
         stats_interval_sec: float = STATS_INTERVAL_SEC,
+        link_sample_sec: float = LINK_SAMPLE_SEC,
     ) -> None:
         self._client = client
         self.stats_interval_sec = stats_interval_sec
+        self.link_sample_sec = link_sample_sec
 
     def _onos(self) -> OnosClient:
         if self._client is None:
@@ -122,6 +133,46 @@ class TelemetryGateway:
             return envelope.ok(tool, data)
         except Exception as exc:  # noqa: BLE001
             return self._fail(tool, exc)
+
+
+    def get_link_metrics(self, sw: object, port: object) -> dict[str, Any]:
+        tool = "get_link_metrics"
+        try:
+            switch, number = require_switch_port(sw, port)
+            iface = interface_name(switch, number)
+            enabled = self._port_enabled(switch, number)
+            before_iface = read_iface_counters(iface)
+            before_queue = parse_qdisc_counters(read_qdisc_text(iface) or "")
+            started = time.perf_counter()
+            time.sleep(self.link_sample_sec)
+            interval = round(time.perf_counter() - started, 3)
+            after_iface = read_iface_counters(iface)
+            after_queue = parse_qdisc_counters(read_qdisc_text(iface) or "")
+            data = build_link_metrics(
+                switch,
+                number,
+                enabled,
+                interval,
+                before_iface,
+                after_iface,
+                before_queue,
+                after_queue,
+            )
+            return envelope.ok(tool, data)
+        except Exception as exc:  # noqa: BLE001
+            return self._fail(tool, exc)
+
+    def _port_enabled(self, switch: str, port: int) -> bool | None:
+        try:
+            rows = normalize_ports(switch, self._onos().device_ports(DEVICE_IDS[switch]))
+        except OnosError:
+            return None
+        for row in rows:
+            if row.get("port") != port:
+                continue
+            enabled = row.get("enabled")
+            return enabled if isinstance(enabled, bool) else None
+        return None
 
     def get_flow_table(self, sw: object) -> dict[str, Any]:
         tool = "get_flow_table"
@@ -254,11 +305,6 @@ def _stop_host_iperf(host: str) -> None:
 
 
 def tool_names() -> tuple[str, ...]:
-    return (
-        "get_topology",
-        "ping",
-        "get_port_status",
-        "get_port_stats",
-        "get_flow_table",
-        "iperf",
-    )
+    from telemetry.schemas import CANONICAL_TOOL_NAMES
+
+    return CANONICAL_TOOL_NAMES

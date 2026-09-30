@@ -17,8 +17,7 @@ From the repository root, run `uv sync --project agent`, then
 Configure the root `.env` using `.env.example`; store the OpenAI key in Cloudflare
 BYOK. [Agent setup](agent/README.md) covers credentials, Logfire, tool timings,
 Cloudflare D1 history, and tests. Run
-`uv run --project agent python -m agent.setup_d1` before first launch. Six
-diagnostic tools are reused; nmap is a placeholder. The UI loads F1–F5;
+`uv run --project agent python -m agent.setup_d1` before first launch. The telemetry tools are reused, including a bounded one-port `nmap` scan. The UI loads F1–F5;
 `./scripts/verify_agent_scenarios.sh` checks each scenario's load → tools →
 reset path without model requests. Test results:
 [LLM diagnosis test results](docs/results/llm-diagnosis.md). Disable the default
@@ -45,7 +44,7 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M5B | Complete Fault Catalogue v1 | **Completed** (F1–F5 frozen) |
 | M6 | First LLM Tool-Calling Diagnosis | **In progress** ([results](docs/results/llm-diagnosis.md)) |
 
-The deterministic scripted baseline and repeated experiments come after this initial vertical slice (M4–M6).
+The scripted baseline, evaluator, and dry-run runner are implemented. The 80-trial formal comparison has not started.
 
 Completed so far:
 
@@ -61,11 +60,16 @@ In progress:
 
 - LLM tool-calling diagnosis through the chat harness (`agent/`): UI loads F1–F5; first tests recorded in [LLM diagnosis test results](docs/results/llm-diagnosis.md)
 
-Not implemented:
+Implemented, not yet used for formal results:
 
-- scripted troubleshooting baseline
-- structured diagnosis format and automated evaluator (LLM answers are free text; scoring is manual)
-- repeated experiments
+- scripted troubleshooting baseline (`baseline/`)
+- protocol v1 evaluator and dry-run runner (`experiments/`)
+
+Not started:
+
+- the 80-trial formal comparison
+
+[Experimental Protocol v1](docs/experiments/protocol-v1.md) is still pre-collection. Formal mode refuses to run. The approved primary model is `gpt-5.6-sol` at effort `medium`. Formal trials have not been collected.
 
 ## 3. Architecture
 
@@ -105,7 +109,7 @@ OpenAI LLM agent             deterministic baseline
    optional constrained repair (optional extension)
 ```
 
-The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway exposes a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
+The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway exposes a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_link_metrics()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
@@ -227,8 +231,13 @@ Wait until ONOS is listening on `127.0.0.1:6653` (typically 60–90 seconds on t
 ```bash
 ./scripts/testbed.sh start
 ./scripts/testbed.sh inject F1    # F1–F5; also accepted: f1 or 1
-./scripts/testbed.sh stop
+./scripts/testbed.sh stop         # Mininet down; ONOS stays up
 ```
+
+`stop` is the normal experiment reset. It clears an active F1–F5 fault and
+Mininet, and leaves the ONOS container running. Stop ONOS itself with
+`./scripts/testbed.sh stop --with-onos`. If REST is up but the six switches
+never attach, `start` recreates only the `onos` container once and retries.
 
 Or launch the main topology interactively:
 

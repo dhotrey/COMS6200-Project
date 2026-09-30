@@ -36,6 +36,13 @@ def _parser() -> argparse.ArgumentParser:
     port_stats = sub.add_parser("get-port-stats", help="ONOS port counters and short bit-rate sample")
     port_stats.add_argument("--switch", required=True, help="s1-s6")
 
+    link = sub.add_parser(
+        "get-link-metrics",
+        help="Fixed two-second port and queue measurement for one known switch port",
+    )
+    link.add_argument("--switch", required=True, help="s1-s6")
+    link.add_argument("--port", required=True, type=int, help="known port on that switch")
+
     flows = sub.add_parser("get-flow-table", help="Normalised ONOS flows for one switch")
     flows.add_argument("--switch", required=True, help="s1-s6")
 
@@ -74,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         return _emit(gateway.get_port_status(args.switch))
     if args.command == "get-port-stats":
         return _emit(gateway.get_port_stats(args.switch))
+    if args.command == "get-link-metrics":
+        return _emit(gateway.get_link_metrics(args.switch, args.port))
     if args.command == "get-flow-table":
         return _emit(gateway.get_flow_table(args.switch))
     if args.command == "ping":

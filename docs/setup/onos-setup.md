@@ -97,6 +97,20 @@ ready. Wait for the REST API to answer before starting Mininet.
 
 ## Stopping ONOS
 
+The normal experiment cycle does not stop ONOS:
+
+```bash
+./scripts/testbed.sh stop
+```
+
+Stop the container when that is the intended operator action:
+
+```bash
+./scripts/testbed.sh stop --with-onos
+```
+
+Low-level equivalent:
+
 ```bash
 docker stop onos
 ```
@@ -108,7 +122,10 @@ docker stop onos && docker rm onos
 ```
 
 The container has `RestartPolicy=no`, so it does not come back automatically
-after a reboot. Start it explicitly with `docker start onos`.
+after a reboot. `./scripts/testbed.sh start` starts a stopped container, and
+recreates only the `onos` container once if REST is up but the six switches
+do not attach. `docker logs` checks in setup are limited to recent output
+(`--tail` / `--since`), not the full container history.
 
 ## Verifying ONOS
 
