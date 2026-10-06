@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from topologies.spec import DEVICE_IDS, HOSTS, SWITCHES
+from topologies.active import DEVICE_IDS, HOSTS, SWITCHES
 
 from telemetry import envelope
 from telemetry.host_exec import HostExecError, run_in_host, start_in_host, terminate

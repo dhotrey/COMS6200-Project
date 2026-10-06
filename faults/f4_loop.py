@@ -1,4 +1,4 @@
-"""F4 narrow unicast forwarding loop with safety TBF on s3–s4."""
+"""F4 narrow unicast forwarding loop with a safety TBF on a non-baseline link."""
 
 from __future__ import annotations
 
@@ -19,13 +19,12 @@ from faults.onos_experiment import (
     list_experiment_flows,
     remove_experiment_flows,
 )
-from faults.scenarios import F4, host_mac
+from faults.scenarios import LoopScenario, host_mac
 from faults.state import clear_state, utc_now, write_state
 
 
-def inject_f4() -> dict[str, Any]:
+def inject_f4(scenario: LoopScenario) -> dict[str, Any]:
     require_root()
-    scenario = F4
     if list_experiment_flows():
         raise FaultError(
             "EXPERIMENT_FLOWS_PRESENT",
@@ -95,9 +94,13 @@ def inject_f4() -> dict[str, Any]:
     }
 
 
-def reset_f4(*, force: bool = False, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def reset_f4(
+    scenario: LoopScenario,
+    *,
+    force: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     require_root()
-    scenario = F4
     iface = scenario.safety_iface
     try:
         validate_iface_bridge(iface, scenario.safety_shape_switch)

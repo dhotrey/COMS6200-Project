@@ -7,7 +7,7 @@ import re
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from topologies.spec import INTER_SWITCH_LINKS, SWITCH_NAMES, peer_of, switch_name
+from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS, SWITCH_NAMES, peer_of, switch_name
 
 _PING_COUNTS = re.compile(
     r"(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets\s+)?received",
@@ -384,4 +384,4 @@ def parse_nmapXML(text: str) -> dict[str, Any]:
 
 
 # Imported by tests; keep SWITCH_NAMES referenced so mappings stay in sync.
-assert SWITCH_NAMES["of:0000000000000001"] == "s1"
+assert SWITCH_NAMES[DEVICE_IDS["s1"]] == "s1"

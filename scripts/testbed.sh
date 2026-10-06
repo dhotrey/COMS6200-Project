@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Session helper: start/stop main6s8h + ONOS, and inject/reset F1–F5.
+# Session helper: start/stop a topology + ONOS, and inject/reset F1–F5.
 #
 # Does not replace setup_ubuntu.sh / setup_onos.sh. Those still install the
 # environment. This script only brings a previously installed testbed up and
 # down. It is not an LLM tool and does not send scenario IDs to the agent.
 #
+# COMS6200_TOPOLOGY selects the topology (default main6s8h; or ring5s5h) and
+# with it the fault catalogue (main6s8h: frozen v1; ring5s5h: ring5s5h-v1).
+#
 #   ./scripts/testbed.sh start
+#   COMS6200_TOPOLOGY=ring5s5h ./scripts/testbed.sh start
 #   ./scripts/testbed.sh inject F1
 #   ./scripts/testbed.sh reset
 #   ./scripts/testbed.sh stop                 # Mininet down; ONOS stays up
@@ -45,10 +49,11 @@ Usage:
   ./scripts/testbed.sh reset
   ./scripts/testbed.sh status
 
-start  Open vSwitch, a healthy ONOS, background main6s8h, then baseline flows.
-       Reuses an already-healthy ONOS. If REST is up but the six switches do
-       not attach, recreates only the ONOS container once and retries.
+start  Open vSwitch, a healthy ONOS, the background topology, then baseline
+       flows. Reuses an already-healthy ONOS. If REST is up but the switches
+       do not attach, recreates only the ONOS container once and retries.
 stop   Reset any active fault, stop Mininet, clear OVS Mininet state.
+       Topologies other than main6s8h also remove their baseline flows first.
        Leaves the ONOS container running.
 stop --with-onos
        Same as stop, then stop the ONOS container. Operator action, not the
@@ -59,17 +64,27 @@ status Show ONOS, Mininet, and fault-injector state.
 
 ONOS REST defaults to onos/rocks. Override with ONOS_USER / ONOS_PASSWORD.
 A missing ONOS container is created with ./setup/setup_onos.sh.
+COMS6200_TOPOLOGY selects main6s8h (default) or ring5s5h. Use the same
+value for every command in a session. F1–F5 come from that topology's
+fault catalogue.
 Catalogue v1 has no F6+.
 EOF
 }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+TOPOLOGY="${COMS6200_TOPOLOGY:-main6s8h}"
+export COMS6200_TOPOLOGY="${TOPOLOGY}"
+# Expected ONOS view of the selected topology: "<switches> <directed links>".
+TOPOLOGY_COUNTS="$(python3 -c 'from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS; print(len(DEVICE_IDS), 2 * len(INTER_SWITCH_LINKS))')" \
+  || die "cannot load topology '${TOPOLOGY}'. COMS6200_TOPOLOGY must be main6s8h or ring5s5h."
+read -r EXPECTED_SWITCHES EXPECTED_LINKS <<<"${TOPOLOGY_COUNTS}"
+
 as_root() {
   if [[ "${EUID}" -eq 0 ]]; then
     "$@"
   else
-    sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,ONOS_URL,ONOS_HOST,ONOS_OF_PORT,PYTHONPATH "$@"
+    sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,ONOS_URL,ONOS_HOST,ONOS_OF_PORT,PYTHONPATH,COMS6200_TOPOLOGY "$@"
   fi
 }
 
@@ -166,11 +181,12 @@ wait_onos_service() {
 available_device_count() {
   python3 - <<'PY'
 import json, os, sys, urllib.request, base64
+from topologies.active import DEVICE_IDS
 
 url = os.environ.get("ONOS_API", "http://127.0.0.1:8181/onos/v1") + "/devices"
 user = os.environ["ONOS_USER"]
 password = os.environ["ONOS_PASSWORD"]
-expected = {f"of:000000000000000{i}" for i in range(1, 7)}
+expected = set(DEVICE_IDS.values())
 req = urllib.request.Request(url)
 token = base64.b64encode(f"{user}:{password}".encode()).decode()
 req.add_header("Authorization", f"Basic {token}")
@@ -192,6 +208,7 @@ PY
 integration_ready() {
   python3 - <<'PY'
 import base64, json, os, urllib.request
+from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS
 
 api = os.environ.get("ONOS_API", "http://127.0.0.1:8181/onos/v1")
 token = base64.b64encode(
@@ -209,7 +226,7 @@ try:
     links = get("/links").get("links") or []
 except Exception:
     raise SystemExit(1)
-expected = {f"of:000000000000000{i}" for i in range(1, 7)}
+expected = set(DEVICE_IDS.values())
 ready = {
     item.get("id")
     for item in devices
@@ -217,16 +234,18 @@ ready = {
     and item.get("id") in expected
     and (item.get("annotations") or {}).get("protocol") == "OF_13"
 }
-raise SystemExit(0 if len(ready) == 6 and len(links) == 20 else 1)
+raise SystemExit(
+    0 if len(ready) == len(expected) and len(links) == 2 * len(INTER_SWITCH_LINKS) else 1
+)
 PY
 }
 
 wait_integration() {
-  echo "==> Waiting for 6 OF_13 switches and 20 directed links (up to 60s)"
+  echo "==> Waiting for ${EXPECTED_SWITCHES} OF_13 switches and ${EXPECTED_LINKS} directed links (up to 60s)"
   local i
   for i in $(seq 1 30); do
     if integration_ready; then
-      echo "==> ONOS has 6/6 OF_13 devices and 20 directed links"
+      echo "==> ONOS has ${EXPECTED_SWITCHES}/${EXPECTED_SWITCHES} OF_13 devices and ${EXPECTED_LINKS} directed links"
       return 0
     fi
     sleep 2
@@ -251,7 +270,7 @@ recreate_onos_container() {
 
 recover_onos_once() {
   if [[ "${ONOS_RECOVERY_USED}" -eq 1 ]]; then
-    die "ONOS still did not accept 6 OF_13 switches and 20 directed links after one container recreation."
+    die "ONOS still did not accept ${EXPECTED_SWITCHES} OF_13 switches and ${EXPECTED_LINKS} directed links after one container recreation."
   fi
   ONOS_RECOVERY_USED=1
   echo "==> Integration failed. Recreating the ONOS container once, then retrying Mininet."
@@ -260,7 +279,7 @@ recover_onos_once() {
   recreate_onos_container
   wait_onos_service
   start_mininet
-  wait_integration || die "ONOS still did not accept 6 OF_13 switches and 20 directed links after one container recreation."
+  wait_integration || die "ONOS still did not accept ${EXPECTED_SWITCHES} OF_13 switches and ${EXPECTED_LINKS} directed links after one container recreation."
 }
 
 mininet_started_by_us() {
@@ -271,7 +290,7 @@ mininet_started_by_us() {
 
 start_mininet() {
   if mininet_started_by_us; then
-    echo "==> main6s8h is already running (pid $(read_pid))"
+    echo "==> ${TOPOLOGY} is already running (pid $(read_pid))"
     return 0
   fi
   if as_root ovs-vsctl br-exists s1 2>/dev/null; then
@@ -281,7 +300,7 @@ start_mininet() {
   as_root mn -c >/dev/null
   as_root mkdir -p "${RUN_DIR}"
   as_root chmod 700 "${RUN_DIR}"
-  echo "==> Starting background main6s8h"
+  echo "==> Starting background ${TOPOLOGY}"
   as_root python3 "${ROOT}/scripts/run_main6s8h.py" \
     --pid-file "${PID_FILE}" \
     --ready-file "${READY_FILE}" \
@@ -292,7 +311,7 @@ start_mininet() {
   for i in $(seq 1 60); do
     if as_root test -f "${READY_FILE}"; then
       pid="$(read_pid || true)"
-      echo "==> main6s8h is up (pid ${pid:-unknown})"
+      echo "==> ${TOPOLOGY} is up (pid ${pid:-unknown})"
       return 0
     fi
     pid="$(read_pid || true)"
@@ -315,7 +334,7 @@ stop_mininet() {
   local pid
   pid="$(read_pid || true)"
   if [[ -n "${pid}" ]] && pid_alive "${pid}"; then
-    echo "==> Stopping background main6s8h (pid ${pid})"
+    echo "==> Stopping background ${TOPOLOGY} (pid ${pid})"
     as_root kill -TERM "${pid}" 2>/dev/null || true
     local i
     for i in $(seq 1 20); do
@@ -346,6 +365,18 @@ reset_fault_best_effort() {
   done
 }
 
+remove_baseline_best_effort() {
+  # main6s8h keeps its frozen protocol-v1 stop procedure. Other topologies
+  # remove their rules while the switches are still connected: ONOS keeps
+  # rules for disconnected DPIDs, and the main6s8h healthy gate counts every
+  # org.coms6200.baseline flow, whichever device it is on.
+  [[ "${TOPOLOGY}" != main6s8h ]] || return 0
+  mininet_started_by_us || as_root ovs-vsctl br-exists s1 2>/dev/null || return 0
+  echo "==> Removing ${TOPOLOGY} baseline flows"
+  python3 "${ROOT}/forwarding/baseline_forwarding.py" remove >/dev/null 2>&1 \
+    || echo "==> Baseline flow removal failed (is ONOS up?); continuing"
+}
+
 cmd_start() {
   start_ovs
   ensure_onos_container
@@ -355,16 +386,21 @@ cmd_start() {
     recover_onos_once
   fi
   install_baseline
-  cat <<EOF
-
-Testbed is up: OVS + ONOS + main6s8h + 56 baseline flows.
-
+  local flows stop_cmd="./scripts/testbed.sh stop"
+  flows="$(python3 -c 'from forwarding.baseline_forwarding import expected_flow_count; print(expected_flow_count())')"
+  [[ "${TOPOLOGY}" == main6s8h ]] || stop_cmd="COMS6200_TOPOLOGY=${TOPOLOGY} ${stop_cmd}"
+  echo
+  echo "Testbed is up: OVS + ONOS + ${TOPOLOGY} + ${flows} baseline flows."
+  echo
+  cat <<'EOF'
 Next:
   ./scripts/testbed.sh inject F1    # or F2 F3 F4 F5
   # then ask the agent a symptom, not the fault name
 
+EOF
+  cat <<EOF
 Stop later with:
-  ./scripts/testbed.sh stop
+  ${stop_cmd}
 EOF
 }
 
@@ -372,6 +408,7 @@ cmd_stop() {
   local with_onos="${1:-0}"
   detect_docker optional || true
   reset_fault_best_effort
+  remove_baseline_best_effort
   stop_mininet
   if [[ "${with_onos}" -eq 1 ]]; then
     [[ "${#DOCKER[@]}" -gt 0 ]] || die "cannot stop ONOS: docker is not usable"
@@ -388,7 +425,7 @@ cmd_inject() {
   scenario="$(normalize_scenario "${1:-}" || true)"
   [[ -n "${scenario}" ]] || die "scenario must be F1–F5 (also accepted: f1 or 1). Catalogue v1 has no F6+."
   mininet_started_by_us || as_root ovs-vsctl br-exists s1 2>/dev/null || \
-    die "main6s8h is not running. Start it with: ./scripts/testbed.sh start"
+    die "${TOPOLOGY} is not running. Start it with: ./scripts/testbed.sh start"
   echo "==> Resetting any active fault before inject ${scenario}"
   as_root python3 -m faults.cli reset || true
   echo "==> Injecting ${scenario}"
@@ -403,6 +440,7 @@ cmd_reset() {
 
 cmd_status() {
   echo "===== testbed status ====="
+  echo "Topology: ${TOPOLOGY}"
   if ovs-vsctl show >/dev/null 2>&1 || as_root ovs-vsctl show >/dev/null 2>&1; then
     echo "OVS: up"
   else
@@ -425,7 +463,7 @@ cmd_status() {
   fi
   if curl -sS -f -u "${ONOS_USER}:${ONOS_PASSWORD}" "${ONOS_API}/devices" >/dev/null 2>&1; then
     export ONOS_API
-    echo "ONOS devices available: $(available_device_count)/6"
+    echo "ONOS devices available: $(available_device_count)/${EXPECTED_SWITCHES}"
   else
     echo "ONOS REST: not ready"
   fi

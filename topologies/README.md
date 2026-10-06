@@ -191,6 +191,162 @@ discovered 6 devices (`of:0000000000000001` through `of:0000000000000006`) and
 sudo mn -c
 ```
 
+## Five-switch ring topology
+
+A second ONOS topology for running fault scenarios on a different shape. It
+does not replace `main6s8h`.
+
+Configured identities and the port map live in `ring_spec.py`.
+`ring_topology.py` builds the Mininet topology directly from that spec, so
+there is no second port map to keep in sync.
+
+Registered Mininet topo name: `ring5s5h`
+
+**Status:** implemented and covered by static tests; **not yet run against
+ONOS**. Selected with `COMS6200_TOPOLOGY=ring5s5h` (`topologies/active.py`),
+which switches baseline forwarding, the telemetry gateway and
+`scripts/testbed.sh` to this topology, and the fault catalogue to the draft
+`ring5s5h-v1` (F1–F5 at ring locations; see `faults/README.md`).
+
+```
+              h1
+              |
+              s1
+            /    \
+     h5 - s5      s2 - h2
+           |      |
+     h4 - s4 ---- s3 - h3
+```
+
+The ring is a physical loop and STP is not enabled. This topology **MUST** be
+run with the project controller. It is not intended for `ovsbr` standalone
+bridge mode.
+
+All hosts are in `10.0.0.0/24` with deterministic MACs `00:00:00:00:00:0N`.
+All switches request OpenFlow 1.3 and `failMode=secure`.
+
+### Counts
+
+| Class | Count |
+|-------|------:|
+| Switches | 5 |
+| Hosts | 5 |
+| Inter-switch physical links | 5 |
+| Host-switch physical links | 5 |
+| Total physical links | 10 |
+
+### Port map
+
+Every switch `sN` uses the same convention: port 1 goes to the next switch
+clockwise, port 2 to the previous switch, and port 3 to host `hN`.
+
+| Link | Port A | Port B |
+|------|--------|--------|
+| s1-s2 | s1:1 | s2:2 |
+| s2-s3 | s2:1 | s3:2 |
+| s3-s4 | s3:1 | s4:2 |
+| s4-s5 | s4:1 | s5:2 |
+| s5-s1 | s5:1 | s1:2 |
+| s1-h1 | s1:3 | h1-eth0 |
+| s2-h2 | s2:3 | h2-eth0 |
+| s3-h3 | s3:3 | h3-eth0 |
+| s4-h4 | s4:3 | h4-eth0 |
+| s5-h5 | s5:3 | h5-eth0 |
+
+### DPIDs
+
+| Switch | ONOS device ID |
+|--------|----------------|
+| s1 | `of:0000000000000101` |
+| s2 | `of:0000000000000102` |
+| s3 | `of:0000000000000103` |
+| s4 | `of:0000000000000104` |
+| s5 | `of:0000000000000105` |
+
+These deliberately differ from `main6s8h` (`of:0000000000000001` …
+`of:0000000000000006`). ONOS keeps flow rules for a device ID across
+disconnects and can re-push them when that ID reconnects. Separate IDs stop
+stale `main6s8h` rules from landing on ring switches when both topologies are
+used against the same ONOS instance.
+
+### Launch workflow
+
+Only one topology can run at a time, because both use the switch names
+`s1`–`s5`. Stop the running one first with `./scripts/testbed.sh stop` (or
+exit Mininet and run `sudo mn -c`), using the same `COMS6200_TOPOLOGY` it was
+started with.
+
+Session helper (ONOS, background Mininet and the 38 ring baseline flows):
+
+```bash
+export COMS6200_TOPOLOGY=ring5s5h
+./scripts/testbed.sh start
+./scripts/testbed.sh status
+./scripts/testbed.sh stop     # also removes the ring baseline flows
+```
+
+Keep `COMS6200_TOPOLOGY` exported for every command in the session, including
+`telemetry.cli` and the agent server. Root commands need
+`sudo --preserve-env=COMS6200_TOPOLOGY,...`, because `sudo` drops it otherwise.
+
+Manual equivalent: start ONOS as in STEP 1 above, then from the repository root:
+
+```bash
+sudo mn \
+  --custom topologies/ring_topology.py \
+  --topo ring5s5h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+Inside Mininet:
+
+```
+nodes
+net
+links
+```
+
+From another shell, inspect the switches and controller state. Do not use
+`verify_main_openflow.sh` here; it checks `main6s8h` bridges s1–s6.
+
+```bash
+sudo ovs-vsctl show
+sudo ovs-ofctl -O OpenFlow13 show s1
+./scripts/verify_onos.sh
+```
+
+`pingall` fails until the ring baseline flows are installed. From another
+shell:
+
+```bash
+export COMS6200_TOPOLOGY=ring5s5h ONOS_USER=onos ONOS_PASSWORD=rocks
+python3 forwarding/baseline_forwarding.py install
+```
+
+Baseline forwarding leaves the s5–s1 link unused, so traffic follows the chain
+s1–s2–s3–s4–s5 (`forwarding/README.md`). ONOS reactive forwarding
+(`org.onosproject.fwd`) must stay disabled. Before exiting Mininet, run
+`python3 forwarding/baseline_forwarding.py remove` with the same setting.
+
+Runtime verification still to do: ONOS should list five OF_13 devices
+`of:0000000000000101` … `of:0000000000000105` and 10 directed links (the five
+ring links in both directions), `verify` should pass with 38 flows, and
+`pingall` should succeed. Record the result under `evidence/progress/` once
+observed.
+
+Static checks (no Mininet required):
+
+```bash
+python3 tests/test_ring_static.py
+```
+
+### Cleanup after exiting Mininet
+
+```bash
+sudo mn -c
+```
+
 ## Custom progress topology
 
 This topology reproduces the early five-switch/two-host Mininet progress

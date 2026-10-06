@@ -1,4 +1,4 @@
-"""F1 primary s3–s1 link failure."""
+"""F1 link failure (main6s8h: primary s3–s1; ring5s5h: s3–s4)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from faults.common import (
     set_link,
     validate_iface_bridge,
 )
-from faults.scenarios import F1, LinkFailureScenario
+from faults.scenarios import LinkFailureScenario
 from faults.state import clear_state, utc_now, write_state
 
 
@@ -31,9 +31,8 @@ def validate_endpoints(scenario: LinkFailureScenario) -> list[dict[str, Any]]:
     return rows
 
 
-def inject_f1() -> dict[str, Any]:
+def inject_f1(scenario: LinkFailureScenario) -> dict[str, Any]:
     require_root()
-    scenario = F1
     rows = validate_endpoints(scenario)
     down = [row["interface"] for row in rows if row["operstate"] != "up"]
     if down:
@@ -85,9 +84,13 @@ def inject_f1() -> dict[str, Any]:
     }
 
 
-def reset_f1(*, force: bool = False, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def reset_f1(
+    scenario: LinkFailureScenario,
+    *,
+    force: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     require_root()
-    scenario = F1
     if payload is None:
         rows = validate_endpoints(scenario)
         down = [row for row in rows if row["operstate"] != "up"]
@@ -134,8 +137,8 @@ def reset_f1(*, force: bool = False, payload: dict[str, Any] | None = None) -> d
     }
 
 
-def observe_f1_ifaces() -> dict[str, str]:
+def observe_f1_ifaces(scenario: LinkFailureScenario) -> dict[str, str]:
     try:
-        return {iface: iface_operstate(iface) for iface in F1.interfaces}
+        return {iface: iface_operstate(iface) for iface in scenario.interfaces}
     except FaultError:
         return {}

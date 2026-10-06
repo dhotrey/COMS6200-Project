@@ -1,6 +1,7 @@
 """Allow-listed Mininet host-namespace execution.
 
-Host names are validated against h1-h8. The gateway never accepts a PID,
+Host names are validated against the selected topology's hosts
+(topologies.active; h1-h8 for main6s8h). The gateway never accepts a PID,
 executable, or command string from the caller.
 
 Discovery uses the Mininet host-shell marker `mininet:<host>` in

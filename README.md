@@ -280,9 +280,10 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
 | `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` | Live per-scenario fault inject/observe/reset |
 | `scripts/verify_fault_catalogue.sh` | Sequential F1–F5 catalogue verifier |
+| `scripts/verify_faults.py` | Data-driven F1–F5 verifier for the selected topology's catalogue (ring5s5h draft) |
 | `scripts/verify_agent_scenarios.sh` | F1–F5 through the chat harness path (UI load → agent tools → UI reset); no model requests |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
-| `faults/` | Operator Fault Catalogue v1 injector/reset (not an LLM tool) |
+| `faults/` | Operator Fault Catalogue v1 injector/reset, plus draft ring5s5h-v1 catalogue (not an LLM tool) |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
 
@@ -390,11 +391,15 @@ COMS6200-Project/
 │   ├── verify_telemetry.sh
 │   ├── verify_fault_f1.sh … verify_fault_f5.sh
 │   ├── verify_fault_catalogue.sh
+│   ├── verify_faults.py             # data-driven verifier for the selected catalogue
 │   └── verify_agent_scenarios.sh    # F1–F5 through the chat harness path
 │
 ├── topologies/
 │   ├── main_topology.py
 │   ├── spec.py                     # shared host/switch/port identities
+│   ├── ring_topology.py            # ring5s5h (in development; not in protocol v1)
+│   ├── ring_spec.py                # ring5s5h identities and port map
+│   ├── active.py                   # COMS6200_TOPOLOGY selection (default main6s8h)
 │   ├── progress_custom_topology.py
 │   └── progress_tc_topology.py
 │

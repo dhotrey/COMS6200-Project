@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from topologies.active import TOPOLOGY
+
 
 class FaultError(RuntimeError):
     def __init__(self, code: str, message: str, details: dict[str, Any] | None = None) -> None:
@@ -105,7 +107,7 @@ def validate_iface_bridge(iface: str, expected_bridge: str) -> dict[str, str]:
     if not iface_exists(iface):
         raise FaultError(
             "TOPOLOGY_NOT_RUNNING",
-            f"expected interface {iface} is missing; is main6s8h running?",
+            f"expected interface {iface} is missing; is {TOPOLOGY} running?",
         )
     bridge = port_to_br(iface)
     if bridge != expected_bridge:

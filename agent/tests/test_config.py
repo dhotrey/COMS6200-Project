@@ -16,3 +16,15 @@ class ConfigTests(unittest.TestCase):
         with patch.object(os, "geteuid", return_value=1000), patch.object(os, "execvp") as execvp:
             config.ensure_mininet_privileges()
         execvp.assert_not_called()
+
+    def test_sudo_reexec_keeps_topology_selection(self):
+        from agent import config
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_CURRENT_TEST", "COMS6200_AGENT_NO_SUDO")}
+        with patch.dict(os.environ, env, clear=True), \
+                patch.object(os, "geteuid", return_value=1000, create=True), \
+                patch.object(os, "execvp") as execvp, \
+                patch("builtins.print"):
+            config.ensure_mininet_privileges()
+        preserve = execvp.call_args.args[1][1]
+        self.assertTrue(preserve.startswith("--preserve-env="), preserve)
+        self.assertIn("COMS6200_TOPOLOGY", preserve.split("=", 1)[1].split(","))

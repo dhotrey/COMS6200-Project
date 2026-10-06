@@ -1,4 +1,6 @@
-"""Operator CLI for Fault Catalogue v1 (F1–F5).
+"""Operator CLI for the selected fault catalogue (F1–F5).
+
+main6s8h: Fault Catalogue v1. ring5s5h: its own catalogue (faults/registry.py).
 
 This is NOT an LLM/agent tool. Do not expose it through telemetry schemas.
 """
@@ -10,9 +12,11 @@ import json
 import sys
 from typing import Any
 
-from faults.catalogue import FAULT_CATALOGUE_VERSION
 from faults.injector import inject, reset, status
-from faults.scenarios import RUNNABLE
+from faults.registry import ACTIVE
+
+_VERSION = ACTIVE.version if ACTIVE else "none"
+_RUNNABLE = sorted(ACTIVE.runnable) if ACTIVE else []
 
 
 def _emit(result: dict[str, Any]) -> int:
@@ -25,8 +29,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m faults.cli",
         description=(
-            f"Operator-only fault injector for COMS6200 Fault Catalogue "
-            f"{FAULT_CATALOGUE_VERSION}. Runnable: {', '.join(sorted(RUNNABLE))}. "
+            f"Operator-only fault injector for COMS6200 fault catalogue "
+            f"{_VERSION}. Runnable: {', '.join(_RUNNABLE)}. "
             "Does not accept interfaces, commands, PIDs, rates, or REST paths. "
             "Not an LLM tool."
         ),
@@ -37,7 +41,7 @@ def _parser() -> argparse.ArgumentParser:
     inject_p.add_argument(
         "--scenario",
         required=True,
-        choices=sorted(RUNNABLE),
+        choices=_RUNNABLE,
         help="Allow-listed scenario ID only",
     )
 
@@ -51,7 +55,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     reset_p.add_argument(
         "--force-scenario",
-        choices=sorted(RUNNABLE),
+        choices=_RUNNABLE,
         default=None,
         help="Recover a named scenario's canonical resources when state is missing",
     )

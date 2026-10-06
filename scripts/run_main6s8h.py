@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Keep main6s8h running without an interactive Mininet CLI.
+"""Keep the selected topology running without an interactive Mininet CLI.
+
+Runs COMS6200_TOPOLOGY (topologies/active.py; default main6s8h). The file
+keeps its historical name because testbed.sh and the docs refer to it.
 
 Operator helper for scripts/testbed.sh. Host shells still use the standard
 Mininet marker mininet:<host> so telemetry ping/iperf keep working.
@@ -20,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from topologies.active import TOPOLOGY  # noqa: E402
 from topologies.main_topology import MainProjectTopology  # noqa: E402
+from topologies.ring_topology import RingTopology  # noqa: E402
+
+TOPOLOGIES = {"main6s8h": MainProjectTopology, "ring5s5h": RingTopology}
 
 RUN_DIR = Path(os.environ.get("COMS6200_FAULT_STATE_DIR", "/run/coms6200"))
 DEFAULT_PID = RUN_DIR / "mininet.pid"
@@ -54,7 +61,7 @@ def _ensure_run_dir(path: Path) -> None:
 def _clear_stale(pid_path: Path, ready_path: Path) -> None:
     pid = _read_pid(pid_path)
     if pid is not None and _pid_alive(pid):
-        raise SystemExit(f"main6s8h already running as pid {pid}")
+        raise SystemExit(f"topology already running as pid {pid}")
     for stale in (pid_path, ready_path):
         try:
             stale.unlink()
@@ -93,7 +100,7 @@ def _build_net(controller_ip: str, controller_port: int):
 
     setLogLevel("info")
     return Mininet(
-        topo=MainProjectTopology(),
+        topo=TOPOLOGIES[TOPOLOGY](),
         switch=OVSKernelSwitch,
         controller=lambda name: RemoteController(
             name, ip=controller_ip, port=controller_port
@@ -106,7 +113,7 @@ def _build_net(controller_ip: str, controller_port: int):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run main6s8h in the background for session start/stop."
+        description=f"Run {TOPOLOGY} in the background for session start/stop."
     )
     parser.add_argument("--pid-file", type=Path, default=DEFAULT_PID)
     parser.add_argument("--ready-file", type=Path, default=DEFAULT_READY)
@@ -141,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     def _request_stop(signum: int, _frame: object) -> None:
         nonlocal stop
         stop = True
-        print(f"received signal {signum}; stopping main6s8h")
+        print(f"received signal {signum}; stopping {TOPOLOGY}")
 
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
@@ -150,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         net = _build_net(args.controller_ip, args.controller_port)
         net.start()
         _write_text(args.ready_file, "ready\n")
-        print("main6s8h started; waiting for stop signal")
+        print(f"{TOPOLOGY} started; waiting for stop signal")
         while not stop:
             time.sleep(0.5)
     finally:
@@ -164,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
                 path.unlink()
             except OSError:
                 pass
-        print("main6s8h stopped")
+        print(f"{TOPOLOGY} stopped")
     return 0
 
 

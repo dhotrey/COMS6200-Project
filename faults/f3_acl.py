@@ -1,4 +1,4 @@
-"""F3 ACL/policy error: high-priority selective DROP on s3 for h1→h5."""
+"""F3 ACL/policy error: high-priority selective DROP for h1→h5 (main6s8h: s3; ring5s5h: s4)."""
 
 from __future__ import annotations
 
@@ -12,13 +12,12 @@ from faults.onos_experiment import (
     list_experiment_flows,
     remove_experiment_flows,
 )
-from faults.scenarios import F3, host_mac
+from faults.scenarios import AclScenario, host_mac
 from faults.state import clear_state, utc_now, write_state
 
 
-def inject_f3() -> dict[str, Any]:
+def inject_f3(scenario: AclScenario) -> dict[str, Any]:
     require_root()
-    scenario = F3
     if list_experiment_flows():
         raise FaultError(
             "EXPERIMENT_FLOWS_PRESENT",
@@ -66,7 +65,12 @@ def inject_f3() -> dict[str, Any]:
     }
 
 
-def reset_f3(*, force: bool = False, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def reset_f3(
+    scenario: AclScenario,
+    *,
+    force: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     require_root()
     removed = remove_experiment_flows()
     clear_state()

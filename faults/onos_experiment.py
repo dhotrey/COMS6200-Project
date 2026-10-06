@@ -12,7 +12,7 @@ from typing import Any
 from forwarding.baseline_forwarding import OnosClient, credentials_from_env, list_all_flows
 from faults.common import FaultError
 from faults.scenarios import EXPERIMENT_APP_ID
-from topologies.spec import DEVICE_IDS
+from topologies.active import DEVICE_IDS
 
 
 def onos_client() -> OnosClient:
@@ -53,11 +53,17 @@ def eth_src_dst_criteria(eth_src: str, eth_dst: str) -> list[dict[str, str]]:
 
 
 def list_experiment_flows(client: OnosClient | None = None) -> list[dict[str, Any]]:
+    """Experiment flows on the selected topology's devices only.
+
+    ONOS keeps rules for disconnected switches (the other topology's DPIDs),
+    and cannot remove them until those devices return.
+    """
     client = client or onos_client()
+    devices = set(DEVICE_IDS.values())
     return [
         flow
         for flow in list_all_flows(client)
-        if str(flow.get("appId", "")) == EXPERIMENT_APP_ID
+        if str(flow.get("appId", "")) == EXPERIMENT_APP_ID and flow.get("deviceId") in devices
     ]
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 from collections.abc import Iterable
 
-from topologies.spec import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES
+from topologies.active import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES
 
 
 class ValidationError(ValueError):

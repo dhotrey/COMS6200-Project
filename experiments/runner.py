@@ -25,6 +25,7 @@ from experiments.health import ensure_healthy
 from experiments.order import BASELINE_SEED, LLM_SEED, order_mismatch
 from experiments.prompts import FAMILIES, PROMPTS
 from telemetry.schemas import CANONICAL_TOOL_NAMES
+from topologies.active import TOPOLOGY
 
 ROOT = Path(__file__).resolve().parents[1]
 DRY_RUN_PATH = ROOT / "evidence" / "experiments" / "protocol-v1" / "dry-runs.jsonl"
@@ -62,6 +63,13 @@ def toolset_error() -> str | None:
         return "schema_list does not match the protocol eight"
     if agent_names != PROTOCOL_TOOLS:
         return "agent tool registry does not match the protocol eight"
+    return None
+
+
+def topology_error() -> str | None:
+    """Protocol v1 prompts, scoring and healthy gate are defined on main6s8h."""
+    if TOPOLOGY != "main6s8h":
+        return f"protocol v1 runs on main6s8h; COMS6200_TOPOLOGY is {TOPOLOGY}"
     return None
 
 
@@ -104,6 +112,8 @@ def formal_blockers(metadata: dict[str, Any] | None = None) -> list[str]:
         blockers.append(mismatch)
     if toolset_error():
         blockers.append(toolset_error())
+    if topology_error():
+        blockers.append(topology_error())
     payload = metadata if metadata is not None else _read_metadata()
     if payload is None:
         blockers.append("metadata.json is absent")
@@ -186,6 +196,8 @@ def run_dry_trial(
         raise RuntimeError(mismatch)
     if toolset_error():
         raise RuntimeError(toolset_error())
+    if topology_error():
+        raise RuntimeError(topology_error())
     _ensure_lab_credentials()
     prompt = PROMPTS[scenario]
     health = health_fn or ensure_healthy

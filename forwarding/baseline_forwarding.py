@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic loop-free Layer-2 baseline forwarding for main6s8h.
+"""Deterministic loop-free Layer-2 baseline forwarding.
 
-Installs explicit ONOS flow rules over the s1 active tree. Redundant and
-test links stay physically present but are unused by baseline forwarding.
+Installs explicit ONOS flow rules over an active tree for the topology chosen
+by COMS6200_TOPOLOGY (topologies/active.py). main6s8h uses the verified M3
+s1 tree. ring5s5h leaves the s5-s1 ring link unused, giving the chain
+s1-s2-s3-s4-s5. Redundant and test links stay physically present but are
+unused by baseline forwarding.
 
 This module is the M3 provisioner. It is not the telemetry gateway, fault
 injector, scripted troubleshooter, or LLM agent.
@@ -19,8 +22,19 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
+
+# Also run as a script (python3 forwarding/baseline_forwarding.py), where only
+# forwarding/ is on sys.path.
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from topologies import active  # noqa: E402
+from topologies.spec import HostAttachment, InterSwitchLink  # noqa: E402
 
 APP_NAME = "org.coms6200.baseline"
 DEFAULT_ONOS_URL = "http://127.0.0.1:8181/onos/v1"
@@ -87,6 +101,101 @@ RESERVED_PORTS: dict[str, frozenset[int]] = {
     "s5": frozenset({2}),  # s2 uplink
     "s6": frozenset({2, 5}),  # s2 uplink, h6-eth1
 }
+
+# Ring link left physically present but unused by baseline forwarding.
+# Leaving s5-s1 out gives the loop-free active chain s1-s2-s3-s4-s5.
+RING_RESERVED_LINKS: tuple[InterSwitchLink, ...] = (InterSwitchLink("s5", 1, "s1", 2),)
+
+
+def tree_forwarding(
+    switches: Iterable[str],
+    links: Iterable[InterSwitchLink],
+    attachments: Iterable[HostAttachment],
+    reserved_links: Iterable[InterSwitchLink],
+) -> tuple[dict[str, dict[str, int]], dict[str, tuple[int, ...]], dict[str, frozenset[int]]]:
+    """Derive UNICAST_EGRESS, ARP_ACTIVE_PORTS and RESERVED_PORTS for one tree.
+
+    Active links are the configured links minus ``reserved_links``. They must
+    form one loop-free tree that reaches every primary host attachment.
+    Switches outside that tree get no host forwarding. Reserved links and
+    non-primary host attachments become reserved ports.
+    """
+    switches = tuple(switches)
+    links = tuple(links)
+    reserved = set(reserved_links)
+    unknown = reserved - set(links)
+    if unknown:
+        raise ValueError(f"reserved links are not configured links: {sorted(map(str, unknown))}")
+    hosts = [item for item in attachments if item.role == "primary"]
+    if not hosts:
+        raise ValueError("no primary host attachments")
+
+    # switch -> [(local port, peer switch, peer port)] over active links only
+    neighbours: dict[str, list[tuple[int, str, int]]] = {switch: [] for switch in switches}
+    active_links = [link for link in links if link not in reserved]
+    for link in active_links:
+        neighbours[link.a].append((link.a_port, link.b, link.b_port))
+        neighbours[link.b].append((link.b_port, link.a, link.a_port))
+
+    def ports_toward(target: str) -> dict[str, int]:
+        """For each other tree switch, the port whose next hop leads toward target."""
+        toward: dict[str, int] = {}
+        seen = {target}
+        queue = deque([target])
+        while queue:
+            current = queue.popleft()
+            for _port, peer, peer_port in neighbours[current]:
+                if peer not in seen:
+                    seen.add(peer)
+                    toward[peer] = peer_port
+                    queue.append(peer)
+        return toward
+
+    tree = {hosts[0].switch, *ports_toward(hosts[0].switch)}
+    off_tree = sorted({item.switch for item in hosts} - tree)
+    if off_tree:
+        raise ValueError(f"primary hosts on {off_tree} are not on the active tree")
+    if sum(1 for link in active_links if link.a in tree) != len(tree) - 1:
+        raise ValueError("active links contain a loop")
+
+    unicast: dict[str, dict[str, int]] = {switch: {} for switch in switches if switch in tree}
+    for item in hosts:
+        toward = ports_toward(item.switch)
+        for switch, egress in unicast.items():
+            egress[item.host] = item.switch_port if switch == item.switch else toward[switch]
+
+    arp_ports: dict[str, tuple[int, ...]] = {}
+    for switch in switches:
+        if switch not in tree:
+            arp_ports[switch] = ()
+            continue
+        ports = [port for port, _peer, _peer_port in neighbours[switch]]
+        ports += [item.switch_port for item in hosts if item.switch == switch]
+        arp_ports[switch] = tuple(sorted(ports))
+
+    reserved_ports: dict[str, set[int]] = {switch: set() for switch in switches}
+    for link in reserved:
+        reserved_ports[link.a].add(link.a_port)
+        reserved_ports[link.b].add(link.b_port)
+    for item in attachments:
+        if item.role != "primary":
+            reserved_ports[item.switch].add(item.switch_port)
+    return unicast, arp_ports, {switch: frozenset(ports) for switch, ports in reserved_ports.items()}
+
+
+# The main6s8h tables above are the verified M3 literals. Other topologies
+# derive theirs from the selected spec and their reserved links.
+if active.TOPOLOGY == "ring5s5h":
+    HOST_MACS = dict(active.HOST_MACS)
+    DEVICE_IDS = dict(active.DEVICE_IDS)
+    UNICAST_EGRESS, ARP_ACTIVE_PORTS, RESERVED_PORTS = tree_forwarding(
+        active.SWITCHES,
+        active.INTER_SWITCH_LINKS,
+        active.HOST_ATTACHMENTS,
+        RING_RESERVED_LINKS,
+    )
+elif active.TOPOLOGY != "main6s8h":
+    raise RuntimeError(f"no baseline forwarding plan for {active.TOPOLOGY}")
 
 SWITCH_NAMES = {device_id: name for name, device_id in DEVICE_IDS.items()}
 
@@ -321,21 +430,32 @@ def list_all_flows(client: OnosClient) -> list[dict[str, Any]]:
 
 
 def list_baseline_flows(client: OnosClient) -> list[dict[str, Any]]:
-    return [flow for flow in list_all_flows(client) if is_baseline_flow(flow)]
+    """Baseline flows on this topology's devices only.
+
+    ONOS keeps rules for switches that have disconnected, such as the other
+    topology's DPIDs after a switch-over. Those are not this topology's flows
+    and cannot be removed until their devices reconnect.
+    """
+    devices = set(DEVICE_IDS.values())
+    return [
+        flow
+        for flow in list_all_flows(client)
+        if is_baseline_flow(flow) and flow.get("deviceId") in devices
+    ]
 
 
 def list_devices(client: OnosClient) -> list[dict[str, Any]]:
     return list(client.get("devices").get("devices") or [])
 
 
-def require_main_topology(client: OnosClient) -> None:
+def require_topology(client: OnosClient) -> None:
     devices = {item.get("id"): item for item in list_devices(client)}
     missing = [name for name, device_id in DEVICE_IDS.items() if device_id not in devices]
     if missing:
         raise RuntimeError(
-            "ONOS does not currently have the main6s8h devices: "
+            f"ONOS does not currently have the {active.TOPOLOGY} devices: "
             + ", ".join(missing)
-            + ". Launch Mininet with --topo main6s8h and a remote ONOS controller first."
+            + f". Launch Mininet with --topo {active.TOPOLOGY} and a remote ONOS controller first."
         )
     unavailable = [
         name
@@ -347,7 +467,7 @@ def require_main_topology(client: OnosClient) -> None:
 
 
 def install_flows(client: OnosClient, timeout_s: float = 20.0) -> list[dict[str, Any]]:
-    require_main_topology(client)
+    require_topology(client)
     existing = list_baseline_flows(client)
     if existing:
         print(f"Removing {len(existing)} stale {APP_NAME} flow(s) before install")
@@ -413,7 +533,9 @@ def _count_by_device(flows: Iterable[dict[str, Any]]) -> dict[str, int]:
 def status_report(client: OnosClient, verbose: bool = False) -> dict[str, Any]:
     app = application_entry(client)
     all_flows = list_all_flows(client)
-    ours = [flow for flow in all_flows if is_baseline_flow(flow)]
+    devices = set(DEVICE_IDS.values())
+    ours = [flow for flow in all_flows if is_baseline_flow(flow) and flow.get("deviceId") in devices]
+    other = [flow for flow in all_flows if is_baseline_flow(flow) and flow.get("deviceId") not in devices]
     system = [flow for flow in all_flows if not is_baseline_flow(flow)]
     states: dict[str, int] = {}
     for flow in ours:
@@ -423,6 +545,8 @@ def status_report(client: OnosClient, verbose: bool = False) -> dict[str, Any]:
     matched = [spec for spec in expected if any(flow_matches_spec(flow, spec) for flow in ours)]
     report = {
         "appId": APP_NAME,
+        "topology": active.TOPOLOGY,
+        "otherDeviceAppFlows": len(other),
         "numericId": None if app is None else app.get("id"),
         "expectedFlowCount": len(expected),
         "actualAppFlowCount": len(ours),
@@ -463,9 +587,12 @@ def verify_flows(client: OnosClient) -> int:
                 f"missing {spec.kind} on {spec.switch} selector={dict(spec.selector)} outs={spec.outputs}"
             )
 
-    s2_flows = [flow for flow in ours if flow.get("deviceId") == DEVICE_IDS["s2"]]
-    if s2_flows:
-        failures.append(f"s2 has {len(s2_flows)} baseline flow(s); expected 0")
+    # Switches off the active tree (main6s8h: s2) must carry no host forwarding.
+    idle = [switch for switch, count in expected_count_by_switch().items() if count == 0]
+    for switch in idle:
+        idle_flows = [flow for flow in ours if flow.get("deviceId") == DEVICE_IDS[switch]]
+        if idle_flows:
+            failures.append(f"{switch} has {len(idle_flows)} baseline flow(s); expected 0")
 
     for flow in ours:
         switch = SWITCH_NAMES.get(str(flow.get("deviceId")))
@@ -498,8 +625,9 @@ def verify_flows(client: OnosClient) -> int:
             print(" -", item)
         return 1
     print("VERIFY PASS")
+    idle_text = "".join(f"{switch} host forwarding=0; " for switch in idle)
     print(
-        f"{APP_NAME}: {len(ours)} ADDED flows; s2 host forwarding=0; "
+        f"{APP_NAME}: {len(ours)} ADDED flows; {idle_text}"
         "no reserved-link outputs; no NORMAL/FLOOD"
     )
     return 0

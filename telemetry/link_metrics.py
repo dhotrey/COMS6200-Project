@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from topologies.spec import peer_of
+from topologies.active import peer_of
 
 from telemetry.validate import ValidationError, require_switch
 
