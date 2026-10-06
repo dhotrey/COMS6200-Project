@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from topologies.spec import HOSTS, SWITCHES
+from topologies.active import HOST_ATTACHMENTS, HOSTS, INTER_SWITCH_LINKS, SWITCHES
 
 _HOST_ENUM = list(HOSTS)
 _SWITCH_ENUM = list(SWITCHES)
+_MAX_SWITCH_PORT = max(
+    [link.a_port for link in INTER_SWITCH_LINKS]
+    + [link.b_port for link in INTER_SWITCH_LINKS]
+    + [item.switch_port for item in HOST_ATTACHMENTS]
+)
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "get_topology": {
@@ -103,7 +108,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "port": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 5,
+                    "maximum": _MAX_SWITCH_PORT,
                 },
             },
             "required": ["sw", "port"],

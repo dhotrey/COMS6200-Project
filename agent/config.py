@@ -24,6 +24,8 @@ _SUDO_ENV = (
     "TOOL_DELAY_MIN_SECONDS", "TOOL_DELAY_MAX_SECONDS",
     "MAX_TOOL_CALLS", "MAX_TURN_SECONDS", "MAX_TURN_TOKENS",
     "PYTHONPATH",
+    # Without it the root server falls back to main6s8h tools on any topology.
+    "COMS6200_TOPOLOGY",
 )
 EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 MODELS = [

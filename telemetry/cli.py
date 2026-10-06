@@ -7,8 +7,13 @@ import json
 import sys
 from typing import Any
 
+from topologies.active import HOSTS, SWITCHES, TOPOLOGY
+
 from telemetry.gateway import TelemetryGateway
 from telemetry.schemas import schema_list
+
+_HOST_RANGE = f"{HOSTS[0]}-{HOSTS[-1]}"
+_SWITCH_RANGE = f"{SWITCHES[0]}-{SWITCHES[-1]}"
 
 
 def _emit(result: dict[str, Any]) -> int:
@@ -21,8 +26,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m telemetry.cli",
         description=(
-            "Bounded structured telemetry for main6s8h. "
-            "Hosts: h1-h8. Switches: s1-s6. "
+            f"Bounded structured telemetry for {TOPOLOGY}. "
+            f"Hosts: {_HOST_RANGE}. Switches: {_SWITCH_RANGE}. "
             "Does not accept IPs, shell strings, or REST paths."
         ),
     )
@@ -31,34 +36,34 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("get-topology", help="ONOS devices/links plus configured host attachments")
 
     port_status = sub.add_parser("get-port-status", help="ONOS port status for one switch")
-    port_status.add_argument("--switch", required=True, help="s1-s6")
+    port_status.add_argument("--switch", required=True, help=_SWITCH_RANGE)
 
     port_stats = sub.add_parser("get-port-stats", help="ONOS port counters and short bit-rate sample")
-    port_stats.add_argument("--switch", required=True, help="s1-s6")
+    port_stats.add_argument("--switch", required=True, help=_SWITCH_RANGE)
 
     link = sub.add_parser(
         "get-link-metrics",
         help="Fixed two-second port and queue measurement for one known switch port",
     )
-    link.add_argument("--switch", required=True, help="s1-s6")
+    link.add_argument("--switch", required=True, help=_SWITCH_RANGE)
     link.add_argument("--port", required=True, type=int, help="known port on that switch")
 
     flows = sub.add_parser("get-flow-table", help="Normalised ONOS flows for one switch")
-    flows.add_argument("--switch", required=True, help="s1-s6")
+    flows.add_argument("--switch", required=True, help=_SWITCH_RANGE)
 
     ping = sub.add_parser("ping", help="Bounded ICMP ping between two project hosts")
-    ping.add_argument("--src", required=True, help="h1-h8")
-    ping.add_argument("--dst", required=True, help="h1-h8")
+    ping.add_argument("--src", required=True, help=_HOST_RANGE)
+    ping.add_argument("--dst", required=True, help=_HOST_RANGE)
     ping.add_argument("--count", type=int, default=None, help="1-10, default 3")
 
     iperf = sub.add_parser("iperf", help="Bounded one-shot iperf3 TCP test")
-    iperf.add_argument("--src", required=True, help="h1-h8")
-    iperf.add_argument("--dst", required=True, help="h1-h8")
+    iperf.add_argument("--src", required=True, help=_HOST_RANGE)
+    iperf.add_argument("--dst", required=True, help=_HOST_RANGE)
     iperf.add_argument("--duration", type=int, default=None, help="1-5 seconds, default 2")
 
     nmap = sub.add_parser("nmap", help="Bounded one-shot nmap TCP test")
-    nmap.add_argument("--src", required=True, help="h1-h8")
-    nmap.add_argument("--dst", required=True, help="h1-h8")
+    nmap.add_argument("--src", required=True, help=_HOST_RANGE)
+    nmap.add_argument("--dst", required=True, help=_HOST_RANGE)
     nmap.add_argument("--proto", required=True, help="tcp or udp")
     nmap.add_argument("--port", type=int, required=True, help="0-65535")
 

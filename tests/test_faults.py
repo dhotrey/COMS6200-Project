@@ -175,8 +175,13 @@ def test_duplicate_injection_rejected() -> None:
 
 
 def test_root_guard_f1() -> None:
-    with mock.patch.object(os, "geteuid", return_value=1000):
-        result = inj.inject("F1")
+    # Temporary state dir: a live testbed leaves /run/coms6200 root-only.
+    with tempfile.TemporaryDirectory() as raw:
+        directory = pathlib.Path(raw)
+        with mock.patch.object(fault_state, "STATE_DIR", directory), \
+                mock.patch.object(fault_state, "STATE_PATH", directory / "fault-state.json"), \
+                mock.patch.object(os, "geteuid", return_value=1000, create=True):
+            result = inj.inject("F1")
     assert result["ok"] is False
     assert result["error"]["code"] == "ROOT_REQUIRED"
 
@@ -217,7 +222,7 @@ def test_f2_fixed_tc_argv_mocked() -> None:
                                         return server if len(started) == 1 else client
 
                                     with mock.patch.object(f2, "start_in_host", side_effect=_start):
-                                        result = f2.inject_f2()
+                                        result = f2.inject_f2(F2)
                 assert result["status"] == "ACTIVE"
                 tc.assert_called_once_with("s1-eth4", "1mbit", "32kbit", "400ms")
                 assert started[0] == ["iperf3", "-s", "-p", "5202"]
@@ -242,7 +247,7 @@ def test_f2_reset_stops_background_and_tbf() -> None:
                     with mock.patch.object(f2, "tc_del_root") as tc:
                         with mock.patch.object(f2, "tc_show", return_value="qdisc pfifo_fast"):
                             with mock.patch.object(f2, "clear_state") as clear:
-                                result = f2.reset_f2(force=True, payload={"pids": [11, 12]})
+                                result = f2.reset_f2(F2, force=True, payload={"pids": [11, 12]})
     assert result["status"] == "IDLE"
     kill.assert_called_once_with([11, 12])
     assert [call.args[0] for call in stop.call_args_list] == ["h3", "h6"]
@@ -266,7 +271,7 @@ def test_f3_drop_treatment_mocked() -> None:
                             "install_experiment_flows",
                             return_value=[{"deviceId": "of:3", "id": "9"}],
                         ) as inst:
-                            result = f3.inject_f3()
+                            result = f3.inject_f3(F3)
                 assert result["status"] == "ACTIVE"
                 flow = inst.call_args[0][0][0]
                 assert flow["treatment"]["instructions"] == []
@@ -299,7 +304,7 @@ def test_f4_requires_safety_qdisc_mocked() -> None:
                                             {"deviceId": "c", "id": "3"},
                                         ],
                                     ) as inst:
-                                        result = f4.inject_f4()
+                                        result = f4.inject_f4(F4)
                 assert result["status"] == "ACTIVE"
                 assert result["flow_count"] == 3
                 tc.assert_called_once()
@@ -318,7 +323,7 @@ def test_f5_ambiguous_rejected() -> None:
     with mock.patch.object(f5, "list_baseline_flows", return_value=[{}, {}]):
         with mock.patch.object(f5, "flow_matches_spec", return_value=True):
             try:
-                f5.resolve_unique_baseline_flow(client=mock.Mock())
+                f5.resolve_unique_baseline_flow(F5, client=mock.Mock())
             except Exception as exc:  # noqa: BLE001
                 assert getattr(exc, "code", "") == "FLOW_AMBIGUOUS"
             else:

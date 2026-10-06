@@ -36,6 +36,7 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5). WSL2 F1–F5 and Ubuntu F2 runs are pilots, not the formal dataset. See [results](results/llm-diagnosis.md), [F2 observability pilot](results/f2-observability-pilot.md), and [F2 link-metrics pilot](results/f2-link-metrics-pilot.md). |
 | Experimental Protocol v1 | 🟡 Frozen candidate ([protocol](experiments/protocol-v1.md)). Primary model `gpt-5.6-sol` / `medium` is approved. Formal trials have not been collected. |
 | Repeated evaluation experiments | 🟡 Not started. Formal collection is blocked. |
+| Ring topology `ring5s5h` | 🟡 Topology, `COMS6200_TOPOLOGY` selection, ring baseline forwarding, and draft fault catalogue `ring5s5h-v1` (F1–F5) implemented with static tests ([ring topology](#ring-topology), [ring faults](#ring-fault-catalogue-ring5s5h-v1)). Not run against ONOS. Not part of protocol v1. |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
 
@@ -59,25 +60,26 @@ sections must not invent CLIs.
 6. [ONOS controller](#onos-controller)
 7. [Main experimental topology](#main-experimental-topology)
 8. [Host addressing](#host-addressing)
-9. [Starting the network](#starting-the-network) (includes [session start / stop / inject](#session-start--stop--inject))
-10. [Verifying controller integration](#verifying-controller-integration)
-11. [ONOS host discovery](#onos-host-discovery)
-12. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
-13. [Healthy network checklist](#healthy-network-checklist)
-14. [Structured telemetry gateway](#structured-telemetry-gateway)
-15. [Fault injection](#fault-injection)
-16. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
-17. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
-18. [Expected diagnostic output](#expected-diagnostic-output)
-19. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
-20. [Resetting the testbed](#resetting-the-testbed)
-21. [Troubleshooting the testbed](#troubleshooting-the-testbed)
-22. [Safety and experimental controls](#safety-and-experimental-controls)
-23. [Optional extensions](#optional-extensions)
-24. [End-to-end workflow](#end-to-end-workflow)
-25. [Repository layout](#repository-layout)
-26. [Development and Git workflow](#development-and-git-workflow)
-27. [Keeping this manual current](#keeping-this-manual-current)
+9. [Ring topology](#ring-topology)
+10. [Starting the network](#starting-the-network) (includes [session start / stop / inject](#session-start--stop--inject))
+11. [Verifying controller integration](#verifying-controller-integration)
+12. [ONOS host discovery](#onos-host-discovery)
+13. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
+14. [Healthy network checklist](#healthy-network-checklist)
+15. [Structured telemetry gateway](#structured-telemetry-gateway)
+16. [Fault injection](#fault-injection)
+17. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
+18. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
+19. [Expected diagnostic output](#expected-diagnostic-output)
+20. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
+21. [Resetting the testbed](#resetting-the-testbed)
+22. [Troubleshooting the testbed](#troubleshooting-the-testbed)
+23. [Safety and experimental controls](#safety-and-experimental-controls)
+24. [Optional extensions](#optional-extensions)
+25. [End-to-end workflow](#end-to-end-workflow)
+26. [Repository layout](#repository-layout)
+27. [Development and Git workflow](#development-and-git-workflow)
+28. [Keeping this manual current](#keeping-this-manual-current)
 
 ---
 
@@ -454,6 +456,86 @@ h6 secondary is unused by baseline forwarding. No bonding, LACP, MLAG, VRRP, or 
 
 ---
 
+## Ring topology
+
+🟡 File: `topologies/ring_topology.py` (built from `topologies/ring_spec.py`)  
+Mininet name: `ring5s5h`  
+Layer 2, `10.0.0.0/24`, OpenFlow 1.3, `failMode=secure`. STP is not enabled.
+
+A second topology for running fault scenarios on a different shape. It does not replace `main6s8h`, and it is **not** part of Experimental Protocol v1.
+
+Five switches in one physical ring `s1–s2–s3–s4–s5–s1`, one host per switch. 5 switches, 5 hosts, 5 inter-switch links, 5 host-switch links, 10 physical links.
+
+**Implemented (static tests only):** topology and spec; topology selection with `COMS6200_TOPOLOGY=ring5s5h`, which switches the telemetry gateway, baseline forwarding, `scripts/testbed.sh`, and the fault catalogue; ring baseline forwarding (38 flows, s5–s1 link unused); draft fault catalogue `ring5s5h-v1` ([ring faults](#ring-fault-catalogue-ring5s5h-v1)).  
+**Not yet done:** run against ONOS and verify the ring faults live (`scripts/verify_faults.py`). The protocol v1 experiment runner refuses the ring.
+
+| Switch | Port 1 | Port 2 | Port 3 | ONOS device ID |
+| --- | --- | --- | --- | --- |
+| s1 | s2 p2 | s5 p1 | h1 | `of:0000000000000101` |
+| s2 | s3 p2 | s1 p1 | h2 | `of:0000000000000102` |
+| s3 | s4 p2 | s2 p1 | h3 | `of:0000000000000103` |
+| s4 | s5 p2 | s3 p1 | h4 | `of:0000000000000104` |
+| s5 | s1 p2 | s4 p1 | h5 | `of:0000000000000105` |
+
+Hosts h1–h5 use `10.0.0.N/24` and MAC `00:00:00:00:00:0N`, all on `hN-eth0`.
+
+The DPIDs deliberately differ from `main6s8h`'s `0x1`–`0x6`, so ONOS does not re-push stale `main6s8h` flow rules onto ring switches that share a device ID.
+
+### Selecting the topology
+
+`COMS6200_TOPOLOGY` picks the topology for every project tool that reads `topologies/active.py`: the telemetry gateway (and so the agent), baseline forwarding, and `scripts/testbed.sh`. Unset or `main6s8h` is the default and leaves all `main6s8h` behaviour unchanged. An unknown value is an error.
+
+| | `main6s8h` (default) | `ring5s5h` |
+| --- | --- | --- |
+| Hosts / switches in tool schemas | h1–h8 / s1–s6 | h1–h5 / s1–s5 |
+| `get_link_metrics` ports | 1–5 | 1–3 |
+| ONOS devices / directed links expected by `testbed.sh` | 6 / 20 | 5 / 10 |
+| Baseline flows | 56 | 38 |
+| Fault catalogue | v1 (frozen) | `ring5s5h-v1` (draft) |
+
+Export it once per shell and use the same value for every command in the session, including the agent server. `sudo` drops it unless passed through, so root commands need `sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD ...`. `testbed.sh` already passes it through.
+
+### Running the ring
+
+Only one topology can run at a time (both use switch names `s1`–`s5`). Stop the running one with `./scripts/testbed.sh stop`, using the `COMS6200_TOPOLOGY` it was started with.
+
+```bash
+export COMS6200_TOPOLOGY=ring5s5h
+./scripts/testbed.sh start    # OVS + ONOS + background ring5s5h + 38 baseline flows
+./scripts/testbed.sh status
+./scripts/testbed.sh stop     # removes the ring baseline flows, then stops Mininet
+```
+
+For `ring5s5h`, `stop` removes the ring's baseline flows while the switches are still connected. ONOS keeps rules for disconnected devices, and the `main6s8h` verification scripts count every `org.coms6200.baseline` flow. The `main6s8h` stop procedure is unchanged.
+
+Manual path, with ONOS up:
+
+```bash
+sudo mn --custom topologies/ring_topology.py \
+  --topo ring5s5h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+Then, from another shell with `COMS6200_TOPOLOGY=ring5s5h` exported, run `python3 forwarding/baseline_forwarding.py install` and `verify`. Run `remove` before exiting Mininet.
+
+The ring is a physical loop. Do not run it with `--controller=none`, `--switch ovsbr`, NORMAL, or `org.onosproject.fwd`. `verify_main_openflow.sh` and `verify_telemetry.sh` check `main6s8h` and do not apply. Use `sudo ovs-vsctl show`, `./scripts/verify_onos.sh`, and `baseline_forwarding.py verify` instead.
+
+Not yet runtime verified. The expected result is 5 OF_13 devices, 10 directed links, `verify` passing with 38 flows, and a working `pingall`.
+
+Static checks (no Mininet required):
+
+```bash
+python3 tests/test_ring_static.py
+python3 tests/test_ring_forwarding.py
+python3 tests/test_topology_selector.py
+python3 tests/test_ring_faults.py
+```
+
+Full port map and launch notes: `topologies/README.md`. Ring forwarding table: `forwarding/README.md`.
+
+---
+
 ## Starting the network
 
 ONOS must be up first. Switches request OpenFlow 1.3 and secure fail mode in the topology. Do not use `--controller=none`, `--switch ovsbr`, NORMAL, STP, or `org.onosproject.fwd`.
@@ -471,7 +553,7 @@ Operator convenience for bringing a **previously installed** testbed up and down
 ./scripts/testbed.sh stop --with-onos  # also stop the ONOS container
 ```
 
-Normal experiment cycle is `start`, the run, `reset` or `stop`. `stop` does not stop a healthy ONOS container. `stop --with-onos` is the explicit operator shutdown. `start` reuses an ONOS that is already answering REST with its OpenFlow port listening. It does not treat REST alone as a finished testbed: after Mininet starts it waits for 6 OF_13 switches and 20 directed links. If that attach fails, it stops the temporary Mininet session, recreates only the `onos` container once, and retries. A second failure exits with an error.
+Normal experiment cycle is `start`, the run, `reset` or `stop`. `stop` does not stop a healthy ONOS container. `stop --with-onos` is the explicit operator shutdown. `start` reuses an ONOS that is already answering REST with its OpenFlow port listening. It does not treat REST alone as a finished testbed: after Mininet starts it waits for 6 OF_13 switches and 20 directed links (counts come from the selected topology; see [ring topology](#selecting-the-topology)). If that attach fails, it stops the temporary Mininet session, recreates only the `onos` container once, and retries. A second failure exits with an error.
 
 `start` leaves Mininet running in the background (no `mininet>` prompt). Host `ping`/`iperf` through the telemetry gateway still work. `inject` resets any already-active catalogue fault first, then injects the requested scenario. Do not tell the LLM the scenario id.
 
@@ -690,8 +772,10 @@ python3 -m telemetry.cli get-topology
 sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH python3 -m telemetry.cli ping --src h1 --dst h5
 ```
 
-Do not use plain `sudo python3 ...` if that drops `ONOS_*`. Passwords must not
-appear in telemetry JSON. CLI writes JSON to stdout; diagnostics may go to
+Do not use plain `sudo python3 ...` if that drops `ONOS_*`. For `ring5s5h`, also
+export `COMS6200_TOPOLOGY=ring5s5h` and add it to `--preserve-env`; otherwise
+the gateway validates against `main6s8h` ([selecting the topology](#selecting-the-topology)).
+Passwords must not appear in telemetry JSON. CLI writes JSON to stdout; diagnostics may go to
 stderr. Docker access is unrelated: do not prefix these commands with
 `sudo docker`.
 
@@ -873,6 +957,37 @@ Evidence:
 | F5 Missing baseline flow | ✅ | Delete s3 baseline unicast for dest h5 | flows, ping |
 
 h6 dual-home is **not** a sixth mandatory fault ([Optional extensions](#optional-extensions)).
+
+Catalogue v1 is defined for `main6s8h`. `COMS6200_TOPOLOGY=ring5s5h` selects the ring's own catalogue instead ([below](#ring-fault-catalogue-ring5s5h-v1)). `inject` returns `TOPOLOGY_MISMATCH` unless the running switch ports are exactly the selected topology's, which covers a `sudo` that dropped the variable. `reset` returns `STATE_CATALOGUE_MISMATCH` for a fault injected under the other topology.
+
+### Ring fault catalogue (`ring5s5h-v1`)
+
+🟡 Draft, static tests only, **not runtime verified**. Not part of protocol v1. The experiment runner refuses non-`main6s8h` topologies.
+
+Same IDs, families, mechanisms, rates and workloads as v1, at ring locations (`faults/ring_scenarios.py`). Every scenario breaks or slows h1→h5, so the v1 symptom prompts still apply. Baseline forwarding leaves s5–s1 unused, so h1→h5 crosses s1–s2–s3–s4–s5 even though s1 and s5 are directly connected.
+
+| ID | Injected concept | Expected symptoms |
+| --- | --- | --- |
+| F1 Link failure | Disable s3–s4 (`s3-eth1`/`s4-eth2`) | {h1,h2,h3} ↔ {h4,h5} fail; ONOS 10 → 8 directed links |
+| F2 Congestion | 1 Mbit/s TBF on `s2-eth1` (s2→s3) + background iperf h2→h4 | h1→h5 reachable, throughput ≤ 25% of healthy |
+| F3 ACL / policy error | High-priority DROP h1→h5 on s4 | h1→h5 fails; h2→h5, h1→h4, h3→h5 work |
+| F4 Forwarding loop | h1→h5 rules on all five switches, all clockwise, + 2 Mbit/s safety TBF on `s5-eth1` | h1→h5 fails; loop traffic on the unused s5–s1 link |
+| F5 Missing baseline flow | Delete s2 baseline unicast for dest h5 | h1→h5, h2→h5 fail; h3→h5, h4→h5 work; 37 baseline flows |
+
+```bash
+export COMS6200_TOPOLOGY=ring5s5h
+./scripts/testbed.sh start
+./scripts/testbed.sh inject F1     # or F2 … F5
+./scripts/testbed.sh reset
+```
+
+Live verification of every scenario (healthy gate, inject, expected symptoms, reset, healthy gate). Counts come from the selected topology:
+
+```bash
+sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD python3 scripts/verify_faults.py   # or: ... F1 F3
+```
+
+`verify_faults.py` also runs on `main6s8h`, which cross-checks the verifier against the frozen catalogue. The frozen v1 record remains `verify_fault_catalogue.sh`.
 
 ### Operator CLI ✅
 
@@ -1341,7 +1456,22 @@ Or by hand: `sudo mn -c`, relaunch `main6s8h`, then `python3 forwarding/baseline
 
 ### Telemetry `INVALID_HOST` / `INVALID_SWITCH`
 
-Only `h1`–`h8` and `s1`–`s6` are accepted. IPs such as `127.0.0.1` and extra flags such as `--cmd` are rejected.
+Only `h1`–`h8` and `s1`–`s6` are accepted (`h1`–`h5` and `s1`–`s5` with `COMS6200_TOPOLOGY=ring5s5h`). IPs such as `127.0.0.1` and extra flags such as `--cmd` are rejected. If valid names are rejected, or `s6` is accepted while the ring runs, the process has a different `COMS6200_TOPOLOGY` from the running network. Check `sudo --preserve-env`.
+
+### Faults `TOPOLOGY_MISMATCH` / `STATE_CATALOGUE_MISMATCH`
+
+`TOPOLOGY_MISMATCH` on `inject`: the running switch ports do not match the selected topology. The error's `missing`/`unexpected` lists show which ports differ. Usually `COMS6200_TOPOLOGY` was dropped by `sudo` or differs from the network you started. Add `--preserve-env=COMS6200_TOPOLOGY` or start the matching topology. Nothing was changed.
+
+`STATE_CATALOGUE_MISMATCH` on `reset`: the active fault was injected under the other topology's catalogue. Re-run `reset` with the `COMS6200_TOPOLOGY` it was injected under. The state file is kept so the fault can still be cleared.
+
+### Switching between `main6s8h` and `ring5s5h`
+
+Stop with the same `COMS6200_TOPOLOGY` the session was started with, then start the other. For `ring5s5h`, `stop` removes the ring baseline flows first. If the ring was stopped some other way (for example `sudo mn -c`), ONOS can keep its rules for the disconnected ring DPIDs. `baseline_forwarding.py status` shows them as `otherDeviceAppFlows`, and the `main6s8h` verification scripts may count them. To clear them, start the ring again and stop it through the helper:
+
+```bash
+COMS6200_TOPOLOGY=ring5s5h ./scripts/testbed.sh start
+COMS6200_TOPOLOGY=ring5s5h ./scripts/testbed.sh stop
+```
 
 ### Telemetry `IPERF_SERVER_FAILED` / leftover iperf3
 
@@ -1481,11 +1611,11 @@ reference host. Those records are not the formal dataset.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5) |
-| `topologies/` | `main_topology.py`, canonical `spec.py`, plus progress-only Mininet tests |
+| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5), `verify_faults.py` (data-driven, any catalogue) |
+| `topologies/` | `main_topology.py`, canonical `spec.py`, `ring_topology.py` + `ring_spec.py` (`ring5s5h`, in development), `active.py` (`COMS6200_TOPOLOGY` selection), plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
 | `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |
-| `faults/` | Operator Fault Catalogue v1 (F1–F5) injector/reset (M5/M5B; Ubuntu live evidence 27 August 2026) — not an LLM tool |
+| `faults/` | Operator Fault Catalogue v1 (F1–F5) injector/reset (M5/M5B; Ubuntu live evidence 27 August 2026), plus the draft `ring5s5h-v1` catalogue — not an LLM tool |
 | `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
 | `tests/` | Static topology, forwarding, telemetry, and fault tests |
 | `evidence/progress/` | Runtime evidence (ONOS, forwarding, telemetry, faults, LLM harness tests) |

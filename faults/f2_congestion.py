@@ -16,7 +16,7 @@ from faults.common import (
     tc_show,
     validate_iface_bridge,
 )
-from faults.scenarios import F2, host_ip
+from faults.scenarios import CongestionScenario, host_ip
 from faults.state import clear_state, utc_now, write_state
 from telemetry.host_exec import HostExecError, find_host_pid, run_in_host, start_in_host, terminate
 
@@ -71,9 +71,8 @@ def _kill_tracked(pids: list[int]) -> None:
             pass
 
 
-def inject_f2() -> dict[str, Any]:
+def inject_f2(scenario: CongestionScenario) -> dict[str, Any]:
     require_root()
-    scenario = F2
     iface = scenario.shape_iface
     row = validate_iface_bridge(iface, scenario.shape_switch)
     if row["operstate"] != "up":
@@ -154,9 +153,13 @@ def inject_f2() -> dict[str, Any]:
         raise
 
 
-def reset_f2(*, force: bool = False, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def reset_f2(
+    scenario: CongestionScenario,
+    *,
+    force: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     require_root()
-    scenario = F2
     iface = scenario.shape_iface
     validate_iface_bridge(iface, scenario.shape_switch)
     pids = list((payload or {}).get("pids") or [])

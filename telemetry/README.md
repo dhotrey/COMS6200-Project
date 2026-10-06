@@ -4,6 +4,12 @@ Bounded, structured diagnostics for `main6s8h`. This is the only agent-facing
 interface. It is used later by both the LLM agent and the scripted
 troubleshooting baseline.
 
+Host, switch and port allow-lists, tool-schema enums and configured peers come
+from `topologies/active.py`. `COMS6200_TOPOLOGY=ring5s5h` switches them to the
+ring (hosts h1–h5, switches s1–s5, ports 1–3). The default is `main6s8h`,
+whose schemas are unchanged. `sudo` drops this variable unless it is passed
+through: `sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD ...`.
+
 This package is not a fault injector, not an LLM client, and not a
 configuration API.
 

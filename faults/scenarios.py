@@ -1,15 +1,18 @@
 """Fault Catalogue v1 scenario registry (operator/evaluator only).
 
-Never imported by telemetry or future LLM tools.
+Never imported by telemetry or future LLM tools. The ring5s5h catalogue reuses
+these scenario types (faults/ring_scenarios.py); faults/registry.py selects
+the catalogue for COMS6200_TOPOLOGY.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from faults.catalogue import FAULT_CATALOGUE_VERSION
-from topologies.spec import HOST_MACS, INTER_SWITCH_LINKS, InterSwitchLink, PRIMARY_IPV4
+from topologies.active import HOST_MACS, PRIMARY_IPV4
+from topologies.spec import INTER_SWITCH_LINKS, InterSwitchLink
 
 
 @dataclass(frozen=True)
@@ -22,8 +25,14 @@ class LinkEndpoint:
         return f"{self.switch}-eth{self.port}"
 
 
-def _link(a: str, a_port: int, b: str, b_port: int) -> InterSwitchLink:
-    for item in INTER_SWITCH_LINKS:
+def _link(
+    a: str,
+    a_port: int,
+    b: str,
+    b_port: int,
+    links: tuple[InterSwitchLink, ...] = INTER_SWITCH_LINKS,
+) -> InterSwitchLink:
+    for item in links:
         if (
             item.a == a
             and item.a_port == a_port
@@ -55,6 +64,7 @@ class Scenario:
     description: str
     affected_scope: str
     expected_correction: str
+    catalogue_version: str = field(default=FAULT_CATALOGUE_VERSION, kw_only=True)
 
     def ground_truth(self) -> dict[str, Any]:
         raise NotImplementedError
@@ -76,7 +86,7 @@ class LinkFailureScenario(Scenario):
     def ground_truth(self) -> dict[str, Any]:
         left, right = self.endpoints
         return {
-            "catalogue_version": FAULT_CATALOGUE_VERSION,
+            "catalogue_version": self.catalogue_version,
             "scenario_id": self.scenario_id,
             "fault_family": self.fault_family,
             "location": {
@@ -117,7 +127,7 @@ class CongestionScenario(Scenario):
     def ground_truth(self) -> dict[str, Any]:
         left, right = self.endpoints
         return {
-            "catalogue_version": FAULT_CATALOGUE_VERSION,
+            "catalogue_version": self.catalogue_version,
             "scenario_id": self.scenario_id,
             "fault_family": self.fault_family,
             "location": {
@@ -142,7 +152,7 @@ class AclScenario(Scenario):
 
     def ground_truth(self) -> dict[str, Any]:
         return {
-            "catalogue_version": FAULT_CATALOGUE_VERSION,
+            "catalogue_version": self.catalogue_version,
             "scenario_id": self.scenario_id,
             "fault_family": self.fault_family,
             "location": {
@@ -186,7 +196,7 @@ class LoopScenario(Scenario):
 
     def ground_truth(self) -> dict[str, Any]:
         return {
-            "catalogue_version": FAULT_CATALOGUE_VERSION,
+            "catalogue_version": self.catalogue_version,
             "scenario_id": self.scenario_id,
             "fault_family": self.fault_family,
             "location": {
@@ -211,7 +221,7 @@ class MissingFlowScenario(Scenario):
 
     def ground_truth(self) -> dict[str, Any]:
         return {
-            "catalogue_version": FAULT_CATALOGUE_VERSION,
+            "catalogue_version": self.catalogue_version,
             "scenario_id": self.scenario_id,
             "fault_family": self.fault_family,
             "location": {

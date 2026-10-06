@@ -101,8 +101,39 @@ def test_integration_recovery_is_one_shot() -> None:
     assert "while true" not in body
     start = _between(text, "cmd_start() {", "\ncmd_stop()")
     assert start.count("recover_onos_once") == 1
-    assert "6 OF_13" in text
-    assert "20 directed links" in text
+    # Expected counts come from the selected spec (main6s8h: 6 and 20).
+    assert "${EXPECTED_SWITCHES} OF_13 switches" in text
+    assert "${EXPECTED_LINKS} directed links" in text
+    ready = _between(text, "integration_ready() {", "\nwait_integration()")
+    assert "from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS" in ready
+    assert "2 * len(INTER_SWITCH_LINKS)" in ready
+
+
+def test_topology_selection_reaches_root() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert 'TOPOLOGY="${COMS6200_TOPOLOGY:-main6s8h}"' in text
+    as_root = _between(text, "as_root() {", "\n}\n")
+    assert "COMS6200_TOPOLOGY" in as_root, "sudo must keep the topology selection"
+    # F1–F5 come from the selected catalogue (faults/registry.py); the helper
+    # does not filter faults by topology itself.
+    for command in ("cmd_inject() {", "cmd_reset() {", "reset_fault_best_effort() {"):
+        body = text.split(command, 1)[1].split("\n}\n", 1)[0]
+        assert "TOPOLOGY" not in body.replace("${TOPOLOGY} is not running", ""), command
+
+
+def test_main6s8h_stop_procedure_unchanged() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    removal = text.split("remove_baseline_best_effort() {", 1)[1].split("\n}\n", 1)[0]
+    first = next(
+        line.strip() for line in removal.splitlines() if line.strip() and not line.strip().startswith("#")
+    )
+    assert first == '[[ "${TOPOLOGY}" != main6s8h ]] || return 0'
+    body = _between(text, "cmd_stop() {", "\ncmd_inject()")
+    assert (
+        body.index("reset_fault_best_effort")
+        < body.index("remove_baseline_best_effort")
+        < body.index("stop_mininet")
+    )
 
 
 def test_onos_log_reads_are_bounded() -> None:
@@ -150,7 +181,11 @@ def test_runner_uses_main_topology_and_remote_onos() -> None:
                 imported.add(alias.name)
     assert "topologies.main_topology" in imported
     assert "MainProjectTopology" in imported
+    assert "topologies.ring_topology" in imported
+    assert "topologies.active" in imported
     source = RUNNER.read_text(encoding="utf-8")
+    assert 'TOPOLOGIES = {"main6s8h": MainProjectTopology, "ring5s5h": RingTopology}' in source
+    assert "topo=TOPOLOGIES[TOPOLOGY]()" in source
     assert "RemoteController" in source
     assert "OVSKernelSwitch" in source
     assert "waitConnected=False" in source
@@ -166,6 +201,8 @@ def main() -> int:
     test_explicit_full_stop_and_argument_validation()
     test_start_reuses_creates_or_starts_onos()
     test_integration_recovery_is_one_shot()
+    test_topology_selection_reaches_root()
+    test_main6s8h_stop_procedure_unchanged()
     test_onos_log_reads_are_bounded()
     test_agent_verifier_uses_harness_path_for_every_scenario()
     test_runner_uses_main_topology_and_remote_onos()
