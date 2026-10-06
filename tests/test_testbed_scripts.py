@@ -27,6 +27,16 @@ def test_helper_files_exist() -> None:
     assert RUNNER.read_text(encoding="utf-8").startswith("#!/usr/bin/env python3")
 
 
+def test_topology_action_selects_supported_topologies() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "main6s8h|tree5s8h" in text
+    assert 'as_root python3 "${ROOT}/scripts/run_main6s8h.py"' in text
+    assert '--topology "${TOPOLOGY}"' in text
+    assert 'start --topology main6s8h|tree5s8h' in text
+    assert "cmd_topology" not in text
+    assert "    topology)" not in text
+
+
 def test_testbed_commands_and_catalogue() -> None:
     text = SCRIPT.read_text(encoding="utf-8")
     for command in ("start)", "stop)", "inject)", "reset)", "status)"):
@@ -159,6 +169,7 @@ def test_runner_uses_main_topology_and_remote_onos() -> None:
 
 def main() -> int:
     test_helper_files_exist()
+    test_topology_action_selects_supported_topologies()
     test_testbed_commands_and_catalogue()
     test_stop_recovery_covers_every_scenario()
     test_stop_resets_faults_before_datapath()

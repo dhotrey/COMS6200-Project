@@ -21,6 +21,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from topologies.main_topology import MainProjectTopology  # noqa: E402
+from topologies.tree_topology import TreeTopology  # noqa: E402
+
+TOPOLOGIES = {
+    "main6s8h": MainProjectTopology,
+    "tree5s8h": TreeTopology,
+}
 
 RUN_DIR = Path(os.environ.get("COMS6200_FAULT_STATE_DIR", "/run/coms6200"))
 DEFAULT_PID = RUN_DIR / "mininet.pid"
@@ -86,14 +92,14 @@ def _daemonize(log_path: Path) -> None:
         os.close(null_fd)
 
 
-def _build_net(controller_ip: str, controller_port: int):
+def _build_net(topology_name: str, controller_ip: str, controller_port: int):
     from mininet.log import setLogLevel
     from mininet.net import Mininet
     from mininet.node import OVSKernelSwitch, RemoteController
 
     setLogLevel("info")
     return Mininet(
-        topo=MainProjectTopology(),
+        topo=TOPOLOGIES[topology_name](),
         switch=OVSKernelSwitch,
         controller=lambda name: RemoteController(
             name, ip=controller_ip, port=controller_port
@@ -115,6 +121,12 @@ def main(argv: list[str] | None = None) -> int:
         "--foreground",
         action="store_true",
         help="Do not daemonize (debugging only)",
+    )
+    parser.add_argument(
+        "--topology",
+        choices=tuple(TOPOLOGIES),
+        default="main6s8h",
+        help="Topology to run (default: main6s8h)",
     )
     parser.add_argument("--controller-ip", default=os.environ.get("ONOS_HOST", "127.0.0.1"))
     parser.add_argument(
@@ -147,10 +159,10 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _request_stop)
 
     try:
-        net = _build_net(args.controller_ip, args.controller_port)
+        net = _build_net(args.topology, args.controller_ip, args.controller_port)
         net.start()
         _write_text(args.ready_file, "ready\n")
-        print("main6s8h started; waiting for stop signal")
+        print(f"{args.topology} started; waiting for stop signal")
         while not stop:
             time.sleep(0.5)
     finally:

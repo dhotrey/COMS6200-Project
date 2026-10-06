@@ -229,7 +229,7 @@ ONOS is a **separate** step. Do not expect `setup_ubuntu.sh` to install it:
 Wait until ONOS is listening on `127.0.0.1:6653` (typically 60–90 seconds on the small team server). Then either use the session helper (background Mininet, no `mininet>` prompt):
 
 ```bash
-./scripts/testbed.sh start
+./scripts/testbed.sh start --topology main6s8h # main6s8h, tree5s8h
 ./scripts/testbed.sh inject F1    # F1–F5; also accepted: f1 or 1
 ./scripts/testbed.sh stop         # Mininet down; ONOS stays up
 ```

@@ -33,19 +33,25 @@ RUN_DIR="${COMS6200_FAULT_STATE_DIR:-/run/coms6200}"
 PID_FILE="${RUN_DIR}/mininet.pid"
 READY_FILE="${RUN_DIR}/mininet.ready"
 LOG_FILE="${RUN_DIR}/mininet.log"
+TOPOLOGY_FILE="${RUN_DIR}/topology"
+TOPOLOGY="${COMS6200_TOPOLOGY:-main6s8h}"
+if [[ -f "${TOPOLOGY_FILE}" && -z "${COMS6200_TOPOLOGY:-}" ]]; then
+  TOPOLOGY="$(cat "${TOPOLOGY_FILE}")"
+fi
 ONOS_RECOVERY_USED=0
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/testbed.sh start
+  ./scripts/testbed.sh start [--topology main6s8h|tree5s8h]
   ./scripts/testbed.sh stop
   ./scripts/testbed.sh stop --with-onos
   ./scripts/testbed.sh inject F1|F2|F3|F4|F5
   ./scripts/testbed.sh reset
   ./scripts/testbed.sh status
 
-start  Open vSwitch, a healthy ONOS, background main6s8h, then baseline flows.
+start  Open vSwitch, a healthy ONOS, and the selected topology. The default is
+  main6s8h, including its baseline flows.
        Reuses an already-healthy ONOS. If REST is up but the six switches do
        not attach, recreates only the ONOS container once and retries.
 stop   Reset any active fault, stop Mininet, clear OVS Mininet state.
@@ -56,7 +62,6 @@ stop --with-onos
 inject Reset an active catalogue fault if needed, then inject F1–F5.
 reset  Clear the active catalogue fault only (Mininet/ONOS stay up).
 status Show ONOS, Mininet, and fault-injector state.
-
 ONOS REST defaults to onos/rocks. Override with ONOS_USER / ONOS_PASSWORD.
 A missing ONOS container is created with ./setup/setup_onos.sh.
 Catalogue v1 has no F6+.
@@ -64,6 +69,17 @@ EOF
 }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+configure_topology() {
+  case "$1" in
+    main6s8h) EXPECTED_SWITCHES=6; EXPECTED_LINKS=20 ;;
+    tree5s8h) EXPECTED_SWITCHES=5; EXPECTED_LINKS=8 ;;
+    *) die "unknown topology '$1' (choose main6s8h or tree5s8h)" ;;
+  esac
+  export EXPECTED_SWITCHES EXPECTED_LINKS
+}
+
+configure_topology "${TOPOLOGY}"
 
 as_root() {
   if [[ "${EUID}" -eq 0 ]]; then
@@ -170,7 +186,10 @@ import json, os, sys, urllib.request, base64
 url = os.environ.get("ONOS_API", "http://127.0.0.1:8181/onos/v1") + "/devices"
 user = os.environ["ONOS_USER"]
 password = os.environ["ONOS_PASSWORD"]
-expected = {f"of:000000000000000{i}" for i in range(1, 7)}
+expected = {
+  f"of:000000000000000{i}"
+  for i in range(1, int(os.environ["EXPECTED_SWITCHES"]) + 1)
+}
 req = urllib.request.Request(url)
 token = base64.b64encode(f"{user}:{password}".encode()).decode()
 req.add_header("Authorization", f"Basic {token}")
@@ -209,7 +228,10 @@ try:
     links = get("/links").get("links") or []
 except Exception:
     raise SystemExit(1)
-expected = {f"of:000000000000000{i}" for i in range(1, 7)}
+expected = {
+  f"of:000000000000000{i}"
+  for i in range(1, int(os.environ["EXPECTED_SWITCHES"]) + 1)
+}
 ready = {
     item.get("id")
     for item in devices
@@ -217,12 +239,17 @@ ready = {
     and item.get("id") in expected
     and (item.get("annotations") or {}).get("protocol") == "OF_13"
 }
-raise SystemExit(0 if len(ready) == 6 and len(links) == 20 else 1)
+raise SystemExit(
+    0
+    if len(ready) == int(os.environ["EXPECTED_SWITCHES"])
+    and len(links) == int(os.environ["EXPECTED_LINKS"])
+    else 1
+)
 PY
 }
 
 wait_integration() {
-  echo "==> Waiting for 6 OF_13 switches and 20 directed links (up to 60s)"
+  echo "==> Waiting for ${EXPECTED_SWITCHES} OF_13 switches and ${EXPECTED_LINKS} directed links (up to 60s)"
   local i
   for i in $(seq 1 30); do
     if integration_ready; then
@@ -231,7 +258,7 @@ wait_integration() {
     fi
     sleep 2
   done
-  echo "ERROR: ONOS REST is up but the expected switches did not attach." >&2
+  echo "ERROR: ONOS REST is up but the expected ${TOPOLOGY} switches did not attach." >&2
   return 1
 }
 
@@ -281,8 +308,9 @@ start_mininet() {
   as_root mn -c >/dev/null
   as_root mkdir -p "${RUN_DIR}"
   as_root chmod 700 "${RUN_DIR}"
-  echo "==> Starting background main6s8h"
+  echo "==> Starting background ${TOPOLOGY}"
   as_root python3 "${ROOT}/scripts/run_main6s8h.py" \
+    --topology "${TOPOLOGY}" \
     --pid-file "${PID_FILE}" \
     --ready-file "${READY_FILE}" \
     --log-file "${LOG_FILE}" \
@@ -292,7 +320,7 @@ start_mininet() {
   for i in $(seq 1 60); do
     if as_root test -f "${READY_FILE}"; then
       pid="$(read_pid || true)"
-      echo "==> main6s8h is up (pid ${pid:-unknown})"
+      echo "==> ${TOPOLOGY} is up (pid ${pid:-unknown})"
       return 0
     fi
     pid="$(read_pid || true)"
@@ -329,7 +357,7 @@ stop_mininet() {
   fi
   echo "==> Clearing Mininet/OVS datapath"
   as_root mn -c >/dev/null || true
-  as_root rm -f "${PID_FILE}" "${READY_FILE}"
+  as_root rm -f "${PID_FILE}" "${READY_FILE}" "${TOPOLOGY_FILE}"
 }
 
 reset_fault_best_effort() {
@@ -347,6 +375,11 @@ reset_fault_best_effort() {
 }
 
 cmd_start() {
+  local requested_topology="${1:-main6s8h}"
+  configure_topology "${requested_topology}"
+  TOPOLOGY="${requested_topology}"
+  as_root mkdir -p "${RUN_DIR}"
+  as_root sh -c "printf '%s\\n' '${TOPOLOGY}' > '${TOPOLOGY_FILE}'"
   start_ovs
   ensure_onos_container
   wait_onos_service
@@ -354,8 +387,9 @@ cmd_start() {
   if ! wait_integration; then
     recover_onos_once
   fi
-  install_baseline
-  cat <<EOF
+  if [[ "${TOPOLOGY}" == "main6s8h" ]]; then
+    install_baseline
+    cat <<EOF
 
 Testbed is up: OVS + ONOS + main6s8h + 56 baseline flows.
 
@@ -366,6 +400,15 @@ Next:
 Stop later with:
   ./scripts/testbed.sh stop
 EOF
+  else
+    cat <<EOF
+
+Testbed is up: OVS + ONOS + ${TOPOLOGY} (no baseline flows).
+
+Stop later with:
+  ./scripts/testbed.sh stop
+EOF
+  fi
 }
 
 cmd_stop() {
@@ -442,8 +485,20 @@ main() {
   shift || true
   case "${cmd}" in
     start)
-      reject_extra "$@"
-      cmd_start
+      local topology="main6s8h"
+      while [[ "${#}" -gt 0 ]]; do
+        case "$1" in
+          --topology)
+            [[ "${#}" -ge 2 ]] || die "--topology requires main6s8h or tree5s8h"
+            topology="$2"
+            shift
+            ;;
+          --topology=*) topology="${1#*=}" ;;
+          *) die "unknown argument '$1'. Use: ./scripts/testbed.sh start --topology main6s8h|tree5s8h" ;;
+        esac
+        shift
+      done
+      cmd_start "${topology}"
       ;;
     stop)
       local with_onos=0
