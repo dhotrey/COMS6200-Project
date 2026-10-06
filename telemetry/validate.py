@@ -3,7 +3,7 @@
 from __future__ import annotations
 from collections.abc import Iterable
 
-from topologies.spec import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES
+from topologies.spec import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES, HostAttachment
 
 
 class ValidationError(ValueError):
@@ -58,9 +58,9 @@ def primary_ip(host: str) -> str:
     return PRIMARY_IPV4[host]
 
 
-def host_attachments() -> list[dict[str, object]]:
+def host_attachments(items: tuple[HostAttachment, ...] = HOST_ATTACHMENTS) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for item in HOST_ATTACHMENTS:
+    for item in items:
         rows.append(
             {
                 "host": item.host,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -448,6 +449,41 @@ def test_hybrid_topology_does_not_use_onos_hosts() -> None:
     assert {row["role"] for row in h6} == {"primary", "secondary"}
 
 
+def test_tree_topology_metadata_filters_stale_main_devices() -> None:
+    class FakeOnos:
+        def devices(self):
+            return [
+                {
+                    "id": f"of:000000000000000{idx}",
+                    "available": idx < 6,
+                    "role": "MASTER" if idx < 6 else "NONE",
+                    "annotations": {"protocol": "OF_13"},
+                }
+                for idx in range(1, 7)
+            ]
+
+        def links(self):
+            return []
+
+    previous = os.environ.get("COMS6200_TOPOLOGY")
+    os.environ["COMS6200_TOPOLOGY"] = "tree5s8h"
+    try:
+        result = TelemetryGateway(client=FakeOnos()).get_topology()  # type: ignore[arg-type]
+    finally:
+        if previous is None:
+            os.environ.pop("COMS6200_TOPOLOGY", None)
+        else:
+            os.environ["COMS6200_TOPOLOGY"] = previous
+
+    assert result["ok"] is True
+    data = result["data"]
+    assert data["summary"]["switches"] == 5
+    assert data["summary"]["configured_inter_switch_links"] == 4
+    assert data["summary"]["configured_host_attachments"] == 8
+    assert data["summary"]["total_physical_links"] == 12
+    assert {row["name"] for row in data["switches"]} == {"s1", "s2", "s3", "s4", "s5"}
+
+
 def test_host_exec_permission_denied_is_not_parse_error() -> None:
     from unittest.mock import patch
 
@@ -796,6 +832,7 @@ def main() -> int:
         test_error_envelope,
         test_gateway_validation_errors_use_envelope,
         test_hybrid_topology_does_not_use_onos_hosts,
+        test_tree_topology_metadata_filters_stale_main_devices,
         test_host_exec_permission_denied_is_not_parse_error,
         test_iperf_cleanup_only_targets_gateway_port,
         test_tool_schemas_reject_arbitrary_properties,

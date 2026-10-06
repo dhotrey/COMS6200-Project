@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import time
+from pathlib import Path
 from typing import Any
 
+from topologies import spec as main_spec
+from topologies import tree_spec
 from topologies.spec import DEVICE_IDS, HOSTS, SWITCHES
 
 from telemetry import envelope
@@ -71,25 +75,40 @@ class TelemetryGateway:
             return envelope.error(tool, exc.code, exc.message)
         return envelope.error(tool, "INTERNAL_ERROR", "tool failed")
 
+    @staticmethod
+    def _configured_topology() -> Any:
+        selected = os.environ.get("COMS6200_TOPOLOGY")
+        if not selected:
+            state_dir = Path(os.environ.get("COMS6200_FAULT_STATE_DIR", "/run/coms6200"))
+            try:
+                selected = (state_dir / "topology").read_text(encoding="utf-8").strip()
+            except OSError:
+                selected = "main6s8h"
+        return tree_spec if selected == "tree5s8h" else main_spec
+
     def get_topology(self) -> dict[str, Any]:
         tool = "get_topology"
         try:
-            devices = normalize_devices(self._onos().devices())
-            observed_links = physical_links_from_onos(self._onos().links())
-            configured_links = configured_inter_switch_links()
-            attachments = host_attachments()
+            topology = self._configured_topology()
+            device_ids = set(topology.DEVICE_IDS.values())
+            devices = normalize_devices(self._onos().devices(), topology.SWITCH_NAMES, device_ids)
+            observed_links = physical_links_from_onos(
+                self._onos().links(), topology.SWITCH_NAMES, device_ids
+            )
+            configured_links = configured_inter_switch_links(topology.INTER_SWITCH_LINKS)
+            attachments = host_attachments(topology.HOST_ATTACHMENTS)
             data = {
                 "switches": devices,
                 "links": observed_links,
                 "configured_inter_switch_links": configured_links,
                 "host_attachments": attachments,
                 "summary": {
-                    "switches": len(SWITCHES),
+                    "switches": len(topology.SWITCHES),
                     "observed_switches": len(devices),
                     "physical_inter_switch_links": len(observed_links),
                     "configured_inter_switch_links": len(configured_links),
                     "configured_host_attachments": len(attachments),
-                    "logical_hosts": len(HOSTS),
+                    "logical_hosts": len(topology.HOSTS),
                     "total_physical_links": len(configured_links) + len(attachments),
                     "onos_host_discovery": "not_used",
                 },

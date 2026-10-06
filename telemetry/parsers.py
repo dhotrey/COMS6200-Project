@@ -37,8 +37,13 @@ def _str(value: Any) -> str | None:
     return text or None
 
 
-def physical_links_from_onos(onos_links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def physical_links_from_onos(
+    onos_links: list[dict[str, Any]],
+    switch_names: dict[str, str] | None = None,
+    device_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Collapse ONOS directed pairs into one physical inter-switch link."""
+    names = switch_names or SWITCH_NAMES
     grouped: dict[tuple[tuple[str, int], tuple[str, int]], dict[str, Any]] = {}
     for item in onos_links:
         src = item.get("src") or {}
@@ -49,20 +54,24 @@ def physical_links_from_onos(onos_links: list[dict[str, Any]]) -> list[dict[str,
         dst_port = _int(dst.get("port"))
         if not src_dev or not dst_dev or src_port is None or dst_port is None:
             continue
+        if device_ids is not None and (src_dev not in device_ids or dst_dev not in device_ids):
+            continue
         left = (src_dev, src_port)
         right = (dst_dev, dst_port)
-        key = tuple(sorted((left, right)))
+        key: tuple[tuple[str, int], tuple[str, int]] = (
+            (left, right) if left <= right else (right, left)
+        )
         entry = grouped.setdefault(
             key,
             {
                 "a": {
                     "device": key[0][0],
-                    "switch": switch_name(key[0][0]),
+                    "switch": names.get(key[0][0]),
                     "port": key[0][1],
                 },
                 "b": {
                     "device": key[1][0],
-                    "switch": switch_name(key[1][0]),
+                    "switch": names.get(key[1][0]),
                     "port": key[1][1],
                 },
                 "state": _str(item.get("state")),
@@ -87,9 +96,9 @@ def physical_links_from_onos(onos_links: list[dict[str, Any]]) -> list[dict[str,
     return rows
 
 
-def configured_inter_switch_links() -> list[dict[str, Any]]:
+def configured_inter_switch_links(links: tuple[Any, ...] = INTER_SWITCH_LINKS) -> list[dict[str, Any]]:
     rows = []
-    for link in INTER_SWITCH_LINKS:
+    for link in links:
         rows.append(
             {
                 "a": {"switch": link.a, "port": link.a_port},
@@ -100,15 +109,22 @@ def configured_inter_switch_links() -> list[dict[str, Any]]:
     return rows
 
 
-def normalize_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def normalize_devices(
+    devices: list[dict[str, Any]],
+    switch_names: dict[str, str] | None = None,
+    device_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    names = switch_names or SWITCH_NAMES
     rows: list[dict[str, Any]] = []
     for device in devices:
         device_id = _str(device.get("id"))
+        if device_ids is not None and device_id not in device_ids:
+            continue
         annotations = device.get("annotations") or {}
         rows.append(
             {
                 "id": device_id,
-                "name": switch_name(device_id or "") or _str(annotations.get("datapathDescription")),
+                "name": names.get(device_id or "") or _str(annotations.get("datapathDescription")),
                 "available": bool(device.get("available")),
                 "role": _str(device.get("role")),
                 "protocol": _str(annotations.get("protocol")),
