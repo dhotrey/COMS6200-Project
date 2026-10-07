@@ -1,6 +1,7 @@
 """Operator CLI for the selected fault catalogue (F1–F5).
 
-main6s8h: Fault Catalogue v1. ring5s5h: its own catalogue (faults/registry.py).
+main6s8h: Fault Catalogue v1. ring5s5h and tree5s8h: topology-specific
+catalogues (faults/registry.py).
 
 This is NOT an LLM/agent tool. Do not expose it through telemetry schemas.
 """

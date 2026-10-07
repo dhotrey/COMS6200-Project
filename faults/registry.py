@@ -1,8 +1,8 @@
 """Fault catalogue for the selected topology (COMS6200_TOPOLOGY).
 
 main6s8h uses the frozen Fault Catalogue v1 (faults/scenarios.py). ring5s5h
-uses its own catalogue (faults/ring_scenarios.py) with the same scenario IDs,
-families and handlers at ring locations.
+and tree5s8h use their own catalogues with the same scenario IDs, families
+and handlers at topology-specific locations.
 
 Operator/evaluator only. Never imported by telemetry.
 """
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from faults import ring_scenarios, scenarios
+from faults import ring_scenarios, scenarios, tree_scenarios
 from faults.catalogue import FAULT_CATALOGUE_STATUS, FAULT_CATALOGUE_VERSION
 from faults.scenarios import Scenario
 from topologies.active import TOPOLOGY
@@ -43,6 +43,12 @@ CATALOGUES: dict[str, Catalogue] = {
         ring_scenarios.CATALOGUE_VERSION,
         ring_scenarios.CATALOGUE_STATUS,
         ring_scenarios.SCENARIOS,
+    ),
+    "tree5s8h": Catalogue(
+        "tree5s8h",
+        tree_scenarios.CATALOGUE_VERSION,
+        tree_scenarios.CATALOGUE_STATUS,
+        tree_scenarios.SCENARIOS,
     ),
 }
 
