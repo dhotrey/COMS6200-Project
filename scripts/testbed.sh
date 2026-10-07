@@ -5,8 +5,8 @@
 # environment. This script only brings a previously installed testbed up and
 # down. It is not an LLM tool and does not send scenario IDs to the agent.
 #
-# COMS6200_TOPOLOGY selects the topology (default main6s8h; or ring5s5h) and
-# with it the fault catalogue (main6s8h: frozen v1; ring5s5h: ring5s5h-v1).
+# COMS6200_TOPOLOGY selects the topology (default main6s8h; ring5s5h or
+# tree5s8h) and with it the fault catalogue.
 #
 #   ./scripts/testbed.sh start
 #   COMS6200_TOPOLOGY=ring5s5h ./scripts/testbed.sh start
@@ -64,7 +64,7 @@ status Show ONOS, Mininet, and fault-injector state.
 
 ONOS REST defaults to onos/rocks. Override with ONOS_USER / ONOS_PASSWORD.
 A missing ONOS container is created with ./setup/setup_onos.sh.
-COMS6200_TOPOLOGY selects main6s8h (default) or ring5s5h. Use the same
+COMS6200_TOPOLOGY selects main6s8h (default), ring5s5h or tree5s8h. Use the same
 value for every command in a session. F1–F5 come from that topology's
 fault catalogue.
 Catalogue v1 has no F6+.
@@ -77,7 +77,7 @@ TOPOLOGY="${COMS6200_TOPOLOGY:-main6s8h}"
 export COMS6200_TOPOLOGY="${TOPOLOGY}"
 # Expected ONOS view of the selected topology: "<switches> <directed links>".
 TOPOLOGY_COUNTS="$(python3 -c 'from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS; print(len(DEVICE_IDS), 2 * len(INTER_SWITCH_LINKS))')" \
-  || die "cannot load topology '${TOPOLOGY}'. COMS6200_TOPOLOGY must be main6s8h or ring5s5h."
+  || die "cannot load topology '${TOPOLOGY}'. COMS6200_TOPOLOGY must be main6s8h, ring5s5h or tree5s8h."
 read -r EXPECTED_SWITCHES EXPECTED_LINKS <<<"${TOPOLOGY_COUNTS}"
 
 as_root() {
