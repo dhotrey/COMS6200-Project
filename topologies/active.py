@@ -1,6 +1,7 @@
 """Configured identities for the operator-selected topology.
 
-``COMS6200_TOPOLOGY`` picks the spec: ``main6s8h`` (default) or ``ring5s5h``.
+``COMS6200_TOPOLOGY`` picks the spec: ``main6s8h`` (default), ``ring5s5h`` or
+``tree5s8h``.
 Telemetry, forwarding and the testbed helper import topology facts from here
 so one setting switches them together. It is operator configuration read at
 import time; the agent cannot change it.
@@ -14,7 +15,7 @@ from __future__ import annotations
 import os
 from types import ModuleType
 
-from topologies import ring_spec
+from topologies import ring_spec, tree_spec
 from topologies import spec as main_spec
 
 DEFAULT_TOPOLOGY = "main6s8h"
@@ -22,6 +23,7 @@ DEFAULT_TOPOLOGY = "main6s8h"
 SPECS: dict[str, ModuleType] = {
     "main6s8h": main_spec,
     "ring5s5h": ring_spec,
+    "tree5s8h": tree_spec,
 }
 
 
