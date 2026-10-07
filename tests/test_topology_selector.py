@@ -15,7 +15,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from topologies import ring_spec  # noqa: E402
+from topologies import ring_spec, tree_spec  # noqa: E402
 from topologies import spec as main_spec  # noqa: E402
 
 
@@ -60,6 +60,15 @@ def test_ring_selection() -> None:
     assert result["hosts"] == list(ring_spec.HOSTS)
     assert result["devices"] == ring_spec.DEVICE_IDS
     assert (result["links"], result["attachments"]) == (5, 5)
+
+
+def test_tree_selection() -> None:
+    result = _json(_SELECTION, "tree5s8h")
+    assert result["topology"] == "tree5s8h"
+    assert result["switches"] == list(tree_spec.SWITCHES)
+    assert result["hosts"] == list(tree_spec.HOSTS)
+    assert result["devices"] == tree_spec.DEVICE_IDS
+    assert (result["links"], result["attachments"]) == (6, 8)
 
 
 def test_unknown_topology_is_rejected() -> None:

@@ -29,7 +29,7 @@ os.environ["COMS6200_TOPOLOGY"] = "main6s8h"
 
 import baseline_forwarding as bf  # noqa: E402
 from faults import injector as inj  # noqa: E402
-from faults import ring_scenarios, scenarios  # noqa: E402
+from faults import ring_scenarios, scenarios, tree_scenarios  # noqa: E402
 from faults import state as fault_state  # noqa: E402
 from faults.expectations import EXPECTATIONS  # noqa: E402
 from faults.registry import CATALOGUES  # noqa: E402
@@ -43,13 +43,18 @@ from faults.scenarios import (  # noqa: E402
 )
 from topologies import ring_spec  # noqa: E402
 from topologies import spec as main_spec  # noqa: E402
+from topologies import tree_spec  # noqa: E402
 
 RING_UNICAST = bf.tree_forwarding(
     ring_spec.SWITCHES, ring_spec.INTER_SWITCH_LINKS, ring_spec.HOST_ATTACHMENTS, bf.RING_RESERVED_LINKS
 )[0]
+TREE_UNICAST = bf.tree_forwarding(
+    tree_spec.SWITCHES, tree_spec.INTER_SWITCH_LINKS, tree_spec.HOST_ATTACHMENTS, ()
+)[0]
 PLANS: dict[str, tuple[ModuleType, dict[str, dict[str, int]], dict[str, Scenario]]] = {
     "main6s8h": (main_spec, bf.UNICAST_EGRESS, scenarios.SCENARIOS),
     "ring5s5h": (ring_spec, RING_UNICAST, ring_scenarios.SCENARIOS),
+    "tree5s8h": (tree_spec, TREE_UNICAST, tree_scenarios.SCENARIOS),
 }
 RING_PORTS = {f"s{n}-eth{p}" for n in range(1, 6) for p in range(1, 4)}
 
