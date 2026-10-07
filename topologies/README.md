@@ -347,6 +347,136 @@ python3 tests/test_ring_static.py
 sudo mn -c
 ```
 
+## Seven-switch/eight-host tree topology
+
+The tree topology is a selectable seven-switch testbed with the same eight
+primary hosts and deterministic addressing as the main topology. It is
+selected with `COMS6200_TOPOLOGY=tree5s8h` and registered as Mininet topo
+`tree5s8h` in `tree_topology.py`.
+
+The selector keeps the original `tree5s8h` name for compatibility with the
+existing scripts; the physical topology is now the seven-switch tree below.
+It uses OpenFlow 1.3 and secure switch fail mode, and must run against the
+project ONOS controller rather than standalone `ovsbr` mode.
+
+```
+                              s1
+                            /    \
+                          s2      s3
+                         /  \    /  \
+                       s4   s5  s6   s7
+                     / |   / |  | \   | \
+                    h1 h2 h3 h4 h5 h6 h7 h8
+```
+
+| Class | Count |
+|-------|------:|
+| Switches | 7 |
+| Hosts | 8 |
+| Inter-switch physical links | 6 |
+| Host-switch physical links | 8 |
+| Total physical links | 14 |
+
+The physical tree is rooted at s1. Intermediate switches s2 and s3 each have
+two leaf switches: s4 carries h1-h2, s5 carries h3-h4, s6 carries h5-h6,
+and s7 carries h7-h8. Baseline forwarding uses all six links. Tree DPIDs are
+`0x201`-`0x207`, separate from the main and ring testbeds, and its draft F1-F5
+catalogue is selected automatically by the same environment variable.
+
+### Port map
+
+Every switch-to-switch link uses port 1 on the child. The root uses ports 1
+and 2 for s2 and s3; each intermediate switch uses ports 2 and 3 for its
+leaf switches. Host ports are explicit so every host uses `eth0`.
+
+| Link | Port A | Port B |
+|------|--------|--------|
+| s1-s2 | s1:1 | s2:1 |
+| s1-s3 | s1:2 | s3:1 |
+| s2-s4 | s2:2 | s4:1 |
+| s2-s5 | s2:3 | s5:1 |
+| s3-s6 | s3:2 | s6:1 |
+| s3-s7 | s3:3 | s7:1 |
+| s4-h1 | s4:2 | h1-eth0 |
+| s4-h2 | s4:3 | h2-eth0 |
+| s5-h3 | s5:2 | h3-eth0 |
+| s5-h4 | s5:3 | h4-eth0 |
+| s6-h5 | s6:2 | h5-eth0 |
+| s6-h6 | s6:3 | h6-eth0 |
+| s7-h7 | s7:2 | h7-eth0 |
+| s7-h8 | s7:3 | h8-eth0 |
+
+### Switch identities
+
+| Switch | ONOS device ID |
+|--------|----------------|
+| s1 | `of:0000000000000201` |
+| s2 | `of:0000000000000202` |
+| s3 | `of:0000000000000203` |
+| s4 | `of:0000000000000204` |
+| s5 | `of:0000000000000205` |
+| s6 | `of:0000000000000206` |
+| s7 | `of:0000000000000207` |
+
+The tree's device IDs are deliberately separate from both `main6s8h` and
+`ring5s5h`, preventing stale ONOS flow rules from being reused when switching
+between testbeds.
+
+### Launch workflow
+
+The normal helper starts ONOS, the background Mininet network, and the
+derived baseline forwarding rules:
+
+```bash
+export COMS6200_TOPOLOGY=tree5s8h
+./scripts/testbed.sh start
+./scripts/testbed.sh status
+```
+
+Use the same environment setting when injecting or resetting the draft F1-F5
+fault catalogue:
+
+```bash
+./scripts/testbed.sh inject F1
+./scripts/testbed.sh reset
+./scripts/testbed.sh stop
+```
+
+For a manual Mininet session, start ONOS first and run:
+
+```bash
+sudo --preserve-env=COMS6200_TOPOLOGY mn \
+  --custom topologies/tree_topology.py \
+  --topo tree5s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+After starting Mininet manually, install and verify the deterministic
+forwarding rules from another shell:
+
+```bash
+export COMS6200_TOPOLOGY=tree5s8h
+python3 forwarding/baseline_forwarding.py install
+python3 forwarding/baseline_forwarding.py verify
+```
+
+The generic tree derivation installs 56 destination-MAC unicast rules and
+the corresponding ARP-tree rules. `pingall` is expected to work only after
+those rules are installed. The topology is covered by static tests but has
+not yet been runtime-verified against ONOS.
+
+### Cleanup
+
+Remove baseline rules before disconnecting a manually started network, then
+clear Mininet state:
+
+```bash
+export COMS6200_TOPOLOGY=tree5s8h
+python3 forwarding/baseline_forwarding.py remove
+sudo mn -c
+```
+
 ## Custom progress topology
 
 This topology reproduces the early five-switch/two-host Mininet progress
