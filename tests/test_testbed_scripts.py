@@ -184,7 +184,9 @@ def test_runner_uses_main_topology_and_remote_onos() -> None:
     assert "topologies.ring_topology" in imported
     assert "topologies.active" in imported
     source = RUNNER.read_text(encoding="utf-8")
-    assert 'TOPOLOGIES = {"main6s8h": MainProjectTopology, "ring5s5h": RingTopology}' in source
+    assert '"main6s8h": MainProjectTopology' in source
+    assert '"ring5s5h": RingTopology' in source
+    assert '"tree5s8h": TreeTopology' in source
     assert "topo=TOPOLOGIES[TOPOLOGY]()" in source
     assert "RemoteController" in source
     assert "OVSKernelSwitch" in source

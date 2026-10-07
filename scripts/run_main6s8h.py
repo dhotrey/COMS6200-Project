@@ -26,8 +26,13 @@ if str(ROOT) not in sys.path:
 from topologies.active import TOPOLOGY  # noqa: E402
 from topologies.main_topology import MainProjectTopology  # noqa: E402
 from topologies.ring_topology import RingTopology  # noqa: E402
+from topologies.tree_topology import TreeTopology  # noqa: E402
 
-TOPOLOGIES = {"main6s8h": MainProjectTopology, "ring5s5h": RingTopology}
+TOPOLOGIES = {
+    "main6s8h": MainProjectTopology,
+    "ring5s5h": RingTopology,
+    "tree5s8h": TreeTopology,
+}
 
 RUN_DIR = Path(os.environ.get("COMS6200_FAULT_STATE_DIR", "/run/coms6200"))
 DEFAULT_PID = RUN_DIR / "mininet.pid"

@@ -55,4 +55,11 @@ EXPECTATIONS: dict[str, dict[str, Expectation]] = {
             reachable=(("h3", "h5"), ("h4", "h5"), ("h1", "h4")),
         ),
     },
+    "tree5s8h": {
+        "F1": Expectation(unreachable=(('h1', 'h5'),), reachable=(('h5', 'h6'), ('h7', 'h8'))),
+        "F2": Expectation(reachable=(('h1', 'h5'),), slow=('h1', 'h5')),
+        "F3": Expectation(unreachable=(('h1', 'h5'),), reachable=(('h2', 'h5'), ('h3', 'h5'))),
+        "F4": Expectation(unreachable=(('h1', 'h5'),), reachable=(('h3', 'h5'), ('h7', 'h8'))),
+        "F5": Expectation(unreachable=(('h1', 'h5'), ('h2', 'h5')), reachable=(('h5', 'h6'), ('h1', 'h6'))),
+    },
 }

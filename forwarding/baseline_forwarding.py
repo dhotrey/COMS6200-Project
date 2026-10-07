@@ -4,8 +4,8 @@
 Installs explicit ONOS flow rules over an active tree for the topology chosen
 by COMS6200_TOPOLOGY (topologies/active.py). main6s8h uses the verified M3
 s1 tree. ring5s5h leaves the s5-s1 ring link unused, giving the chain
-s1-s2-s3-s4-s5. Redundant and test links stay physically present but are
-unused by baseline forwarding.
+s1-s2-s3-s4-s5. tree5s8h uses all four links. Redundant and test links stay
+physically present but are unused by baseline forwarding.
 
 This module is the M3 provisioner. It is not the telemetry gateway, fault
 injector, scripted troubleshooter, or LLM agent.
@@ -193,6 +193,15 @@ if active.TOPOLOGY == "ring5s5h":
         active.INTER_SWITCH_LINKS,
         active.HOST_ATTACHMENTS,
         RING_RESERVED_LINKS,
+    )
+elif active.TOPOLOGY == "tree5s8h":
+    HOST_MACS = dict(active.HOST_MACS)
+    DEVICE_IDS = dict(active.DEVICE_IDS)
+    UNICAST_EGRESS, ARP_ACTIVE_PORTS, RESERVED_PORTS = tree_forwarding(
+        active.SWITCHES,
+        active.INTER_SWITCH_LINKS,
+        active.HOST_ATTACHMENTS,
+        (),
     )
 elif active.TOPOLOGY != "main6s8h":
     raise RuntimeError(f"no baseline forwarding plan for {active.TOPOLOGY}")

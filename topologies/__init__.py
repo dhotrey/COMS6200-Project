@@ -1,1 +1,1 @@
-"""Mininet topologies and the canonical main6s8h specification."""
+"""Mininet topologies and their canonical specifications."""
