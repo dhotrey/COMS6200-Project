@@ -192,7 +192,7 @@ The reference server used during ONOS testing had 1 vCPU and about 955 MiB RAM. 
 | WSL2 Ubuntu 24.04.4 (Windows 11) | Capability-based only | Kernel 6.18 provides `openvswitch`, `sch_tbf`, namespaces and veth; testbed, F1–F5 and the chat harness ran on 23 September 2026 (`evidence/progress/llm/`). Enable systemd; run from a clone in the WSL filesystem, not `/mnt/c` (Windows CRLF checkouts break the bash scripts). Not milestone evidence |
 
 Native Windows cannot run the testbed or fault controls. The harness UI can
-open there, but **Load scenario** / **Reset** return HTTP 500 (`os.geteuid` is
+open there, but scenario loading / **Reset** return HTTP 500 (`os.geteuid` is
 Linux-only) and host tools cannot reach Mininet.
 
 Do **not** treat Kali as the primary target instead of Ubuntu. Ubuntu remains the reference because it is what M0–M3 evidence was collected on. Kali is supported so the UQ VM is a valid course machine, not because every milestone has been re-run there.
@@ -997,7 +997,7 @@ the diagnostic agent. Telemetry must never import fault state.
 
 Requires **root** for mutations. The injector does **not** call `sudo` internally.
 
-The harness UI **Load scenario** / **Reset** buttons call the same injector
+Selecting a scenario in the harness UI loads it immediately; **Reset** clears it. Both call the same injector
 (`POST /api/scenario/load` and `POST /api/scenario/reset`). They do not put the
 scenario id in the chat prompt or tool schemas.
 
@@ -1188,7 +1188,7 @@ pre-collection. The table below remains the operator reference for symptom
 prompts. Do not paste the evidence or localisation columns into the chat.
 
 ✅ (WSL2) The harness loads all five catalogue faults through the same path
-(**Load scenario** → `POST /api/scenario/load` → `agent/fault_control.py` →
+(scenario load → `POST /api/scenario/load` → `agent/fault_control.py` →
 `faults.injector`). The model receives the same prompt and tools for every
 scenario; there is no per-scenario code path. Test results are kept in
 [LLM diagnosis test results](results/llm-diagnosis.md). The evidence column below is the telemetry signature verified by
@@ -1199,7 +1199,7 @@ Same procedure for every scenario:
 
 1. `./scripts/testbed.sh start` (or the manual path) and confirm the [healthy network checklist](#healthy-network-checklist).
 2. Set `TOOL_DELAY_MIN_SECONDS=0` and `TOOL_DELAY_MAX_SECONDS=0` in the root `.env` for real timings, then start the harness.
-3. Load one fault: UI **Load scenario**, or `./scripts/testbed.sh inject Fn`.
+3. Load one fault: select it in the UI scenario picker, or run `./scripts/testbed.sh inject Fn`.
 4. Start a **new** conversation and send a symptom-only prompt.
 5. Compare the answer with the operator-only localisation below.
 6. UI **Reset** (or `./scripts/testbed.sh reset`); start a new conversation before the next fault.
@@ -1247,7 +1247,7 @@ tokens, cost, conversation id) in a dated evidence file under
 `scripts/verify_agent_scenarios.sh` checks each scenario through the harness
 path without sending model requests (no API credits). For each scenario it runs
 the healthy gate, loads the fault with `agent.fault_control.load_scenario` (the
-**Load scenario** button), calls `agent.tools.execute_tool` with the arguments
+scenario picker), calls `agent.tools.execute_tool` with the arguments
 the model would send and asserts the evidence in the table above, checks that
 tool observations contain no scenario id or ground-truth keys, resets with
 `agent.fault_control.reset_scenario`, and repeats the healthy gate. For F2 it
@@ -1493,7 +1493,7 @@ uv run --project agent python -m agent
 Allow the sudo re-exec. You should see `uid=0` and `ONOS REST user=onos`. Then
 start a **new** conversation; old failed tool results stay in the previous thread.
 
-### Harness **Load scenario** works for one fault but not another
+### Harness scenario loading works for one fault but not another
 
 The banner shows the injector's error message. Run the same load/observe/reset
 path outside the UI for that scenario to see which step fails:
@@ -1575,7 +1575,7 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 5. Baseline flows: `start` already installs them; otherwise `python3 forwarding/baseline_forwarding.py install` then `verify`
 6. Mininet `pingall` → 56/56, 0% dropped (interactive CLI only; background helper has no `mininet>` prompt)
 7. Collect structured telemetry ✅ (`python3 -m telemetry.cli get-topology`; `./scripts/verify_telemetry.sh`)
-8. Inject one fault Fn (F1–F5) ✅ (`./scripts/testbed.sh inject Fn`, harness **Load scenario**, or `python3 -m faults.cli inject --scenario Fn`)
+8. Inject one fault Fn (F1–F5) ✅ (`./scripts/testbed.sh inject Fn`, harness scenario picker, or `python3 -m faults.cli inject --scenario Fn`)
 9. Observe with telemetry ✅ (per-scenario evidence: [verified symptoms](#verified-symptoms-catalogue-v1); `./scripts/verify_fault_fN.sh`)
 10. Ask the harness for a diagnosis ✅ (WSL2; [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5); harness path check `./scripts/verify_agent_scenarios.sh Fn`; record results in [results](results/llm-diagnosis.md))
 11. Reset ✅ (`./scripts/testbed.sh reset`, harness **Reset**, or `python3 -m faults.cli reset`; see [after an injected fault](#after-an-injected-fault-f1f5-))

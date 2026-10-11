@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 
 import logfire
@@ -13,6 +14,7 @@ from . import config, fault_control, store
 from .loop import run
 
 busy = False
+DEV_STARTED = time.time_ns()
 
 
 @asynccontextmanager
@@ -45,9 +47,18 @@ def index():
 @app.get("/api/config")
 def settings():
     payload = {"configured": config.configured(), "models": config.MODELS,
+               "dev_mode": config.dev_mode(),
                "default_model": "gpt-5.6-sol", "default_effort": "medium"}
     payload.update(config.runtime_limits())
     return payload
+
+
+@app.get("/api/dev-version")
+def dev_version():
+    if not config.dev_mode():
+        raise HTTPException(404, "Development reload is disabled")
+    return {"version": f"{DEV_STARTED}:{(config.ROOT / 'index.html').stat().st_mtime_ns}",
+            "busy": busy}
 
 
 @app.get("/api/conversations")

@@ -1,6 +1,7 @@
 """API persistence and failed/interrupted turn cleanup, all offline."""
 import asyncio
 import json
+import os
 import sqlite3
 import sys
 
@@ -151,6 +152,28 @@ def test_model_catalogue_groups_legacy_models(client):
     }
 
 
+def test_development_version_tracks_ui_and_server_changes(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("COMS6200_AGENT_DEV", "0")
+    assert client.get("/api/config").json()["dev_mode"] is False
+    assert client.get("/api/dev-version").status_code == 404
+    monkeypatch.setenv("COMS6200_AGENT_DEV", "1")
+    assert client.get("/api/config").json()["dev_mode"] is True
+    page = tmp_path / "index.html"
+    page.write_text("Preview")
+    monkeypatch.setattr(server.config, "ROOT", tmp_path)
+    first = client.get("/api/dev-version").json()
+    assert first["busy"] is False
+    stamp = page.stat().st_mtime_ns + 1_000_000_000
+    os.utime(page, ns=(stamp, stamp))
+    edited = client.get("/api/dev-version").json()
+    assert edited["version"] != first["version"]
+    monkeypatch.setattr(server, "DEV_STARTED", server.DEV_STARTED + 1)
+    monkeypatch.setattr(server, "busy", True)
+    restarted = client.get("/api/dev-version").json()
+    assert restarted["version"] != edited["version"]
+    assert restarted["busy"] is True
+
+
 @pytest.mark.parametrize("failure", [RuntimeError("Tool failed"), asyncio.CancelledError()])
 def test_failed_or_cancelled_turn_drops_unpaired_tools(client, monkeypatch, failure):
     async def fake_run(provider, history, model, effort, state):
@@ -246,4 +269,5 @@ def test_picker_offers_every_catalogue_scenario(client):
     page = client.get("/").text
     for scenario in ("F1", "F2", "F3", "F4", "F5"):
         assert f'<option value="{scenario}">' in page
-    assert 'id="load-scenario" disabled' not in page
+    assert 'id="load-scenario"' not in page
+    assert 'id="reset-scenario"' in page

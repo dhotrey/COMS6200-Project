@@ -722,16 +722,15 @@
         <section class="scenario-picker" aria-label="Fault scenario controls">
           <label for="scenario">Fault scenario</label>
           <select id="scenario" aria-describedby="scenario-note">
-            <option value="">Choose a scenario…</option>
+            <option value="" disabled selected>Choose a scenario…</option>
             <option value="F1">F1 · Link failure</option>
             <option value="F2">F2 · Congestion</option>
             <option value="F3">F3 · ACL / policy error</option>
             <option value="F4">F4 · Forwarding loop</option>
             <option value="F5">F5 · Missing / incorrect flow rule</option>
           </select>
-          <button type="button" id="load-scenario">Load scenario</button>
           <button type="button" id="reset-scenario">Reset</button>
-          <p id="scenario-note">Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.</p>
+          <p id="scenario-note">Selecting a scenario loads it onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.</p>
         </section>
         <div class="banner" id="banner" hidden role="status"></div>
         <section class="timeline" id="timeline" aria-label="Chat messages">
@@ -813,7 +812,7 @@
         $("model-trigger").setAttribute("aria-disabled", String(value || loading));
         document
           .querySelectorAll(
-            ".sidebar button, .selectors select, .model-option, #scenario, #load-scenario, #reset-scenario",
+            ".sidebar button, .selectors select, .model-option, #scenario, #reset-scenario",
           )
           .forEach((el) => {
             if (el.classList.contains("rename")) return;
@@ -1274,7 +1273,7 @@
         if (!$("model-picker").contains(event.relatedTarget)) $("model-picker").open = false;
       });
       const scenarioHint =
-        "Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
+        "Selecting a scenario loads it onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
       function showScenario(status) {
         if (!status) {
           $("scenario-note").textContent = scenarioHint;
@@ -1289,6 +1288,7 @@
             scenarioHint;
           return;
         }
+        $("scenario").value = "";
         $("scenario-note").textContent =
           (status.error ? status.error + " " : "No catalogue fault is active. ") +
           scenarioHint;
@@ -1297,7 +1297,7 @@
         if (location.protocol === "file:") return;
         showScenario(await api("/api/scenario"));
       }
-      $("load-scenario").onclick = async () => {
+      $("scenario").onchange = async () => {
         const scenario = $("scenario").value;
         if (!scenario || busy || loading) return;
         loading = true;
@@ -1315,6 +1315,12 @@
               " on the network. The assistant is not told the scenario id — describe a symptom. Start a new conversation for a clean run.",
           );
         } catch (e) {
+          // A failed injection may have reset the previous fault; show live state.
+          try {
+            await refreshScenario();
+          } catch {
+            $("scenario").value = "";
+          }
           notice(e.message, true);
         } finally {
           loading = false;
@@ -1474,6 +1480,25 @@
           $("input").focus();
         }
       };
+      async function watchDevChanges() {
+        let version;
+        try {
+          version = (await api("/api/dev-version", { cache: "no-store" })).version;
+        } catch {
+          // Retry after a server restart, including when the first check failed.
+        }
+        setInterval(async () => {
+          if (busy || loading || $("input").value.trim()) return;
+          try {
+            const next = await api("/api/dev-version", { cache: "no-store" });
+            if (version && next.version !== version && !next.busy &&
+                !busy && !loading && !$("input").value.trim()) location.reload();
+            version ||= next.version;
+          } catch {
+            // The server may be restarting; keep the previous version and retry.
+          }
+        }, 2000);
+      }
       (async () => {
         empty();
         renderModels();
@@ -1486,6 +1511,7 @@
         lock(false);
         try {
           config = await api("/api/config");
+          if (config.dev_mode) watchDevChanges();
           renderModels();
           await refreshScenario();
           if (!config.configured)

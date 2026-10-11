@@ -28,3 +28,4 @@ class ConfigTests(unittest.TestCase):
         preserve = execvp.call_args.args[1][1]
         self.assertTrue(preserve.startswith("--preserve-env="), preserve)
         self.assertIn("COMS6200_TOPOLOGY", preserve.split("=", 1)[1].split(","))
+        self.assertIn("COMS6200_AGENT_DEV", preserve.split("=", 1)[1].split(","))

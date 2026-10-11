@@ -25,7 +25,7 @@ _SUDO_ENV = (
     "MAX_TOOL_CALLS", "MAX_TURN_SECONDS", "MAX_TURN_TOKENS",
     "PYTHONPATH",
     # Without it the root server falls back to main6s8h tools on any topology.
-    "COMS6200_TOPOLOGY",
+    "COMS6200_TOPOLOGY", "COMS6200_AGENT_DEV",
 )
 EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 MODELS = [
@@ -41,6 +41,10 @@ PRICES = {"gpt-5.6-luna": (.2, .02, 1.2), "gpt-5.6-terra": (2, .2, 12),
           "gpt-5.6-sol": (4, .4, 20), "gpt-6-astra": (10, 1, 50)}
 # New model Standard prices reviewed 2026-10-11 against the OpenAI model pages.
 PRICES.update({"gpt-6.1-sol": (2, .1, 10), "gpt-6-luna": (.1, .01, .5)})
+
+
+def dev_mode():
+    return os.getenv("COMS6200_AGENT_DEV", "") == "1"
 
 
 def d1_settings() -> tuple[str, str, str]:

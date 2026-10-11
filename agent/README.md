@@ -22,6 +22,18 @@ messages requires AI Gateway configuration. Keep one server process/worker.
 Assistant replies render Markdown. Tool calls are faint until hovered or clicked.
 The sidebar is resizable, and conversations can be renamed from the list.
 
+For automatic reload during development, start with:
+
+```sh
+COMS6200_AGENT_DEV=1 uv run --project agent python -m agent
+```
+
+You can also set `COMS6200_AGENT_DEV=1` in the root `.env`. It is off by default.
+Python edits in the agent and its network modules restart the server. The
+browser checks every two seconds for UI edits or a server restart and refreshes
+when idle, with no unsent text. Python restarts can interrupt an active diagnosis;
+saved conversations remain in D1. Set the flag to `0` and restart to disable it.
+
 ## Credentials
 
 Add the entries from `.env.example` to the **repository-root `.env`**.
@@ -65,7 +77,7 @@ D1. The ignored legacy `agent/chat.sqlite3` is not read, migrated, or deleted.
 
 ## Fault scenario picker
 
-The UI includes a picker for F1–F5. **Load scenario** injects the chosen
+The UI includes a picker for F1–F5. Selecting a scenario immediately injects the chosen
 catalogue fault on the live network (resetting any active catalogue fault first).
 **Reset** clears it. The picker value is not sent in chat requests, stored as
 assistant context, or added to the system prompt. Describe a symptom; do not name
@@ -92,7 +104,7 @@ port-5201 iperf3, so they no longer end the F2 load.
 
 Run on the Linux testbed host, beside the existing Mininet/ONOS installation
 (Ubuntu server, Linux VM, or WSL2 Ubuntu 24.04 from a clone in the WSL
-filesystem). On native Windows the UI opens but **Load scenario** / **Reset**
+filesystem). On native Windows the UI opens but scenario loading / **Reset**
 return HTTP 500 and the tools cannot reach Mininet. Session helper:
 `./scripts/testbed.sh start`. Load F1–F5 from the UI or `./scripts/testbed.sh inject F1`.
 The diagnostic tools, including `nmap` and `get_link_metrics`, call `telemetry.TelemetryGateway`. `get_link_metrics(sw, port)` returns a fixed two-second port measurement: rates, drop and error deltas, instantaneous queue backlog, and overlimit and requeue deltas. It does not return queue configuration. `nmap` scans one TCP or UDP port between two project hosts (primary IPv4, no host discovery, 5 s host timeout, 20 s limit) and returns protocol, state, and service name. Inject/reset is operator-only and is not an LLM tool.
