@@ -25,18 +25,28 @@ _SUDO_ENV = (
     "MAX_TOOL_CALLS", "MAX_TURN_SECONDS", "MAX_TURN_TOKENS",
     "PYTHONPATH",
     # Without it the root server falls back to main6s8h tools on any topology.
-    "COMS6200_TOPOLOGY",
+    "COMS6200_TOPOLOGY", "COMS6200_AGENT_DEV",
 )
 EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"]
 MODELS = [
-    {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": EFFORTS},
-    {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "efforts": EFFORTS},
-    {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "efforts": EFFORTS},
+    {"id": "gpt-6.1-sol", "label": "GPT-6.1 Sol", "efforts": EFFORTS[1:]},
+    {"id": "gpt-6-luna", "label": "GPT-6 Luna", "efforts": EFFORTS},
     {"id": "gpt-6-astra", "label": "GPT-6 Astra", "efforts": EFFORTS[1:]},
+    {"id": "gpt-4.1-mini", "label": "GPT-4.1 Mini", "efforts": ["none"], "reasoning": False},
+    {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": EFFORTS, "deprecated": True},
+    {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "efforts": EFFORTS, "deprecated": True},
+    {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "efforts": EFFORTS, "deprecated": True},
 ]
 # USD per million input, cached input, output tokens; reviewed 2026-09-10.
 PRICES = {"gpt-5.6-luna": (.2, .02, 1.2), "gpt-5.6-terra": (2, .2, 12),
           "gpt-5.6-sol": (4, .4, 20), "gpt-6-astra": (10, 1, 50)}
+# New model Standard prices reviewed 2026-10-11 against the OpenAI model pages.
+PRICES.update({"gpt-6.1-sol": (2, .1, 10), "gpt-6-luna": (.1, .01, .5)})
+PRICES["gpt-4.1-mini"] = (.4, .1, 1.6)
+
+
+def dev_mode():
+    return os.getenv("COMS6200_AGENT_DEV", "") == "1"
 
 
 def d1_settings() -> tuple[str, str, str]:
@@ -71,6 +81,24 @@ def ensure_mininet_privileges() -> None:
 class GatewayClient:
     def __init__(self, http_client):
         self.http = http_client
+
+    async def create_decision(self, payload):
+        return await self._json_request("decisions", payload)
+
+    async def create_response(self, payload):
+        return await self._json_request("responses", payload)
+
+    async def _json_request(self, endpoint, payload):
+        response = await self.http.post(endpoint, json=payload)
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError(f"Gateway {endpoint} request failed with status {response.status_code}.")
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Gateway returned malformed {endpoint} data.") from exc
+        if not isinstance(result, dict) or result.get("error"):
+            raise RuntimeError(f"Gateway returned invalid {endpoint} data.")
+        return result
 
     async def stream_events(self, payload):
         async with self.http.stream("POST", "responses", json=payload) as response:

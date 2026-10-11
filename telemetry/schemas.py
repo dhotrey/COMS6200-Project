@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from topologies.active import HOST_ATTACHMENTS, HOSTS, INTER_SWITCH_LINKS, SWITCHES
+from topologies import active
 
-_HOST_ENUM = list(HOSTS)
-_SWITCH_ENUM = list(SWITCHES)
+_HOST_ENUM = list(active.HOSTS)
+_SWITCH_ENUM = list(active.SWITCHES)
 _MAX_SWITCH_PORT = max(
-    [link.a_port for link in INTER_SWITCH_LINKS]
-    + [link.b_port for link in INTER_SWITCH_LINKS]
-    + [item.switch_port for item in HOST_ATTACHMENTS]
+    [link.a_port for link in active.INTER_SWITCH_LINKS]
+    + [link.b_port for link in active.INTER_SWITCH_LINKS]
+    + [item.switch_port for item in active.HOST_ATTACHMENTS]
 )
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -167,6 +167,18 @@ CANONICAL_TOOL_NAMES: tuple[str, ...] = (
     "get_flow_table",
     "iperf",
 )
+
+
+def refresh_topology() -> None:
+    """Update allow-lists in place after an idle agent switches its testbed."""
+    _HOST_ENUM[:] = active.HOSTS
+    _SWITCH_ENUM[:] = active.SWITCHES
+    maximum = max(
+        [link.a_port for link in active.INTER_SWITCH_LINKS]
+        + [link.b_port for link in active.INTER_SWITCH_LINKS]
+        + [item.switch_port for item in active.HOST_ATTACHMENTS]
+    )
+    TOOL_SCHEMAS["get_link_metrics"]["parameters"]["properties"]["port"]["maximum"] = maximum
 
 
 def schema_list() -> list[dict[str, Any]]:

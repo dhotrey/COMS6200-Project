@@ -23,11 +23,28 @@ SCHEMA_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_id
     ON messages(conversation_id, id)
     """,
+    """
+    CREATE TABLE IF NOT EXISTS benchmark_runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        payload TEXT NOT NULL CHECK (json_valid(payload)),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS benchmark_results (
+        run_id TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+        cell_id TEXT NOT NULL,
+        payload TEXT NOT NULL CHECK (json_valid(payload)),
+        PRIMARY KEY (run_id, cell_id)
+    )
+    """,
 )
 
 EXPECTED_COLUMNS = {
     "conversations": {"id", "title", "history", "created_at", "updated_at"},
     "messages": {"id", "conversation_id", "payload", "created_at"},
+    "benchmark_runs": {"id", "payload", "created_at"},
+    "benchmark_results": {"run_id", "cell_id", "payload"},
 }
 
 EXPECTED_INDEX = "idx_messages_conversation_id_id"

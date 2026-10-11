@@ -161,7 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         net = _build_net(args.controller_ip, args.controller_port)
         net.start()
-        _write_text(args.ready_file, "ready\n")
+        # The agent uses this identity after a restart to select matching tools.
+        _write_text(args.ready_file, f"{TOPOLOGY}\n")
         print(f"{TOPOLOGY} started; waiting for stop signal")
         while not stop:
             time.sleep(0.5)

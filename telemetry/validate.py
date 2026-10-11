@@ -3,7 +3,7 @@
 from __future__ import annotations
 from collections.abc import Iterable
 
-from topologies.active import HOSTS, HOST_ATTACHMENTS, PRIMARY_IPV4, SWITCHES
+from topologies import active
 
 
 class ValidationError(ValueError):
@@ -14,14 +14,14 @@ class ValidationError(ValueError):
 
 
 def require_host(name: object) -> str:
-    if not isinstance(name, str) or name not in HOSTS:
-        raise ValidationError("INVALID_HOST", f"host must be one of {list(HOSTS)}")
+    if not isinstance(name, str) or name not in active.HOSTS:
+        raise ValidationError("INVALID_HOST", f"host must be one of {list(active.HOSTS)}")
     return name
 
 
 def require_switch(name: object) -> str:
-    if not isinstance(name, str) or name not in SWITCHES:
-        raise ValidationError("INVALID_SWITCH", f"switch must be one of {list(SWITCHES)}")
+    if not isinstance(name, str) or name not in active.SWITCHES:
+        raise ValidationError("INVALID_SWITCH", f"switch must be one of {list(active.SWITCHES)}")
     return name
 
 
@@ -55,12 +55,12 @@ def require_range(value: object, name: str, min: int, max: int) -> int:
 
 def primary_ip(host: str) -> str:
     require_host(host)
-    return PRIMARY_IPV4[host]
+    return active.PRIMARY_IPV4[host]
 
 
 def host_attachments() -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for item in HOST_ATTACHMENTS:
+    for item in active.HOST_ATTACHMENTS:
         rows.append(
             {
                 "host": item.host,

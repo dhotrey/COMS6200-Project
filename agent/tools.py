@@ -12,18 +12,26 @@ import time
 from telemetry import envelope
 from telemetry.gateway import TelemetryGateway
 from agent.limits import runtime_limits
-from telemetry.schemas import TOOL_SCHEMAS, schema_list, validate_arguments
+from telemetry.schemas import TOOL_SCHEMAS, refresh_topology, schema_list, validate_arguments
 from telemetry.validate import ValidationError, require_host
 
 
 TOOLS = []
-for original in schema_list():
-    schema = deepcopy(original)
-    parameters = schema["parameters"]
-    parameters["required"] = list(parameters["properties"])
-    for property_schema in parameters["properties"].values():
-        property_schema.pop("default", None)
-    TOOLS.append({"type": "function", "strict": True, **schema})
+
+
+def refresh_tools() -> None:
+    refresh_topology()
+    TOOLS.clear()
+    for original in schema_list():
+        schema = deepcopy(original)
+        parameters = schema["parameters"]
+        parameters["required"] = list(parameters["properties"])
+        for property_schema in parameters["properties"].values():
+            property_schema.pop("default", None)
+        TOOLS.append({"type": "function", "strict": True, **schema})
+
+
+refresh_tools()
 
 gateway = TelemetryGateway()
 

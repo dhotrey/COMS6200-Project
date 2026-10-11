@@ -7,7 +7,7 @@ import re
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from topologies.active import DEVICE_IDS, INTER_SWITCH_LINKS, SWITCH_NAMES, peer_of, switch_name
+from topologies import active
 
 _PING_COUNTS = re.compile(
     r"(\d+)\s+packets transmitted,\s+(\d+)\s+(?:packets\s+)?received",
@@ -57,12 +57,12 @@ def physical_links_from_onos(onos_links: list[dict[str, Any]]) -> list[dict[str,
             {
                 "a": {
                     "device": key[0][0],
-                    "switch": switch_name(key[0][0]),
+                    "switch": active.switch_name(key[0][0]),
                     "port": key[0][1],
                 },
                 "b": {
                     "device": key[1][0],
-                    "switch": switch_name(key[1][0]),
+                    "switch": active.switch_name(key[1][0]),
                     "port": key[1][1],
                 },
                 "state": _str(item.get("state")),
@@ -89,7 +89,7 @@ def physical_links_from_onos(onos_links: list[dict[str, Any]]) -> list[dict[str,
 
 def configured_inter_switch_links() -> list[dict[str, Any]]:
     rows = []
-    for link in INTER_SWITCH_LINKS:
+    for link in active.INTER_SWITCH_LINKS:
         rows.append(
             {
                 "a": {"switch": link.a, "port": link.a_port},
@@ -108,7 +108,7 @@ def normalize_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rows.append(
             {
                 "id": device_id,
-                "name": switch_name(device_id or "") or _str(annotations.get("datapathDescription")),
+                "name": active.switch_name(device_id or "") or _str(annotations.get("datapathDescription")),
                 "available": bool(device.get("available")),
                 "role": _str(device.get("role")),
                 "protocol": _str(annotations.get("protocol")),
@@ -138,7 +138,7 @@ def normalize_ports(switch: str, ports: list[dict[str, Any]]) -> list[dict[str, 
         number = _port_number(port)
         annotations = port.get("annotations") or {}
         numeric = number if isinstance(number, int) else _int(number)
-        peer = peer_of(switch, numeric) if numeric is not None else None
+        peer = active.peer_of(switch, numeric) if numeric is not None else None
         rows.append(
             {
                 "switch": switch,
@@ -233,7 +233,7 @@ def normalize_port_stats(
                 "tx_bits_per_sec": tx_bps,
                 "delta_window_sec": _counter(delta_port, "durationSec"),
                 "utilization_pct": None,
-                "peer": peer_of(switch, number) if isinstance(number, int) else None,
+                "peer": active.peer_of(switch, number) if isinstance(number, int) else None,
             }
         )
     return {
@@ -383,5 +383,5 @@ def parse_nmapXML(text: str) -> dict[str, Any]:
     raise ValueError("nmap XML does not contain any port elements")
 
 
-# Imported by tests; keep SWITCH_NAMES referenced so mappings stay in sync.
-assert SWITCH_NAMES[DEVICE_IDS["s1"]] == "s1"
+# Imported by tests; keep active.SWITCH_NAMES referenced so mappings stay in sync.
+assert active.SWITCH_NAMES[active.DEVICE_IDS["s1"]] == "s1"

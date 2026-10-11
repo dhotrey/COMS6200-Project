@@ -12,13 +12,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from topologies.active import peer_of
+from topologies import active
 
 from telemetry.validate import ValidationError, require_switch
 
 LINK_SAMPLE_SEC = 2.0
 
-_IFACE = re.compile(r"^s[1-6]-eth[1-5]$")
+_IFACE = re.compile(r"^s[1-7]-eth[1-5]$")
 _OVERLIMITS = re.compile(r"overlimits\s+(\d+)\s+requeues\s+(\d+)")
 _BACKLOG = re.compile(r"backlog\s+(\d+)b\s+(\d+)p\b")
 _STAT_NAMES = (
@@ -37,7 +37,7 @@ def require_switch_port(sw: object, port: object) -> tuple[str, int]:
     switch = require_switch(sw)
     if not isinstance(port, int) or isinstance(port, bool):
         raise ValidationError("INVALID_PORT", "port must be an integer")
-    if peer_of(switch, port) is None:
+    if active.peer_of(switch, port) is None:
         raise ValidationError("INVALID_PORT", "port is not a known port on that switch")
     interface_name(switch, port)
     return switch, port
@@ -51,7 +51,7 @@ def interface_name(switch: str, port: int) -> str:
 
 
 def public_peer(switch: str, port: int) -> dict[str, str | int]:
-    peer = peer_of(switch, port)
+    peer = active.peer_of(switch, port)
     if peer is None:
         raise ValidationError("INVALID_PORT", "port is not a known port on that switch")
     if peer.get("kind") == "switch":

@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Benchmark results · Network Lab</title>
+  <style>
+    :root { color-scheme:light; --bg:#f7f8fa; --panel:#fff; --ink:#192738; --muted:#687384;
+      --line:#e0e5eb; --accent:#176a57; --soft:#eaf4f0; --error:#b13737;
+      font:15px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); }
+    button,select,input { font:inherit; color:inherit; } button,select { cursor:pointer; }
+    button,select { border:1px solid var(--line); border-radius:9px; padding:8px 12px; background:var(--panel); }
+    button:hover:not(:disabled) { border-color:var(--accent); } button:disabled { opacity:.5; cursor:default; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    a { color:var(--accent); } header { background:var(--panel); border-bottom:1px solid var(--line); }
+    .bar { max-width:1440px; margin:auto; padding:18px 28px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .brand { font-weight:650; margin-right:auto; } .primary { background:var(--accent); color:white; border-color:var(--accent); }
+    .repeat-control { display:flex; align-items:center; gap:8px; font-size:13px; }
+    .repeat-control input { width:68px; border:1px solid var(--line); border-radius:9px; padding:8px; background:var(--panel); }
+    main { max-width:1440px; margin:auto; padding:28px; } h1 { font-size:28px; letter-spacing:-.7px; margin:0 0 6px; }
+    h2 { font-size:19px; margin:26px 0 12px; } h3 { font-size:14px; margin:0; } p { margin:8px 0; }
+    .muted,.hint { color:var(--muted); } .hint { font-size:13px; } .toolbar { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin:20px 0; }
+    .toolbar select { max-width:100%; } .notice { padding:12px 16px; background:var(--soft); border-radius:9px; margin:16px 0; }
+    .error { color:var(--error); } [hidden] { display:none!important; }
+    details.settings { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 16px; }
+    summary { cursor:pointer; } .selection { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin:16px 0; }
+    .model-options { border:0; padding:0; margin:0; } .model-options legend { font-size:13px; font-weight:600; margin-bottom:6px; }
+    .model-options label { display:inline-flex; align-items:center; gap:4px; margin:0 10px 6px 0; font-size:13px; }
+    .legend { display:flex; gap:18px; flex-wrap:wrap; margin:18px 0; font-size:13px; }
+    progress { accent-color:var(--accent); width:100%; height:8px; } .progress-text { display:flex; gap:12px; justify-content:space-between; font-size:13px; }
+    .matrices { display:grid; grid-template-columns:repeat(auto-fit,minmax(275px,1fr)); gap:14px; }
+    .section-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:26px 0 12px; }
+    .section-head h2 { margin:0; } .section-head button { padding:5px 10px; font-size:13px; }
+    .section-cost { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .matrix { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    .matrix h3 { padding:10px 14px; border-bottom:1px solid var(--line); }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:13px; }
+    th,td { text-align:center; padding:7px 2px; } th:first-child { width:65px; text-align:left; padding-left:12px; }
+    thead th { color:var(--muted); font-size:11px; font-weight:500; } tbody tr+tr { border-top:1px solid var(--line); }
+    .cell { border:0; background:transparent; width:100%; padding:4px 0; font-size:20px; line-height:1.5; }
+    .cell:hover { background:var(--soft); } .cell.running { color:var(--accent); animation:pulse 1.4s infinite; }
+    .cell small { display:block; font-size:10px; line-height:1.2; color:var(--muted); }
+    dialog { width:min(680px,calc(100vw - 32px)); max-height:85vh; padding:22px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--ink); }
+    dialog::backdrop { background:#0008; }
+    .dialog-head { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+    .dialog-head h2 { margin:0; } .dialog-head button { padding:4px 10px; }
+    .distribution { display:flex; gap:12px; flex-wrap:wrap; margin:16px 0; font-variant-numeric:tabular-nums; }
+    .distribution span { padding:6px 12px; border-radius:8px; background:var(--soft); }
+    .trial-list { padding:0; margin:16px 0 0; list-style:none; }
+    .trial-list li { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 0; border-top:1px solid var(--line); }
+    .trial-list a { margin-left:auto; } .trial-label { flex:1; } .trial-note { width:100%; font-size:12px; color:var(--muted); }
+    @keyframes pulse { 50% { opacity:.35; } } @media(prefers-reduced-motion:reduce) { .cell.running { animation:none; } }
+    @media(max-width:600px) { main,.bar { padding:16px; } h1 { font-size:24px; } .matrices { grid-template-columns:1fr; } }
+    @media(prefers-color-scheme:dark) { :root { color-scheme:dark; --bg:#111820; --panel:#18222d; --ink:#e2e9f1; --muted:#a0acbb; --line:#2e3b49; --accent:#72c5ad; --soft:#203831; --error:#ff9494; } .primary { color:#111820; } }
+  </style>
+</head>
+<body>
+  <header><div class="bar">
+    <a href="/" class="brand">Network Lab</a>
+    <label class="repeat-control">Runs per cell <input id="repeats" type="number" min="1" max="50" step="1" value="3" disabled></label>
+    <button id="play" class="primary" disabled>▶ Run all</button>
+    <button id="stop" disabled>■ Stop</button>
+    <span id="run-cost" class="section-cost" hidden></span>
+    <button id="export" disabled>Export JSON</button>
+  </div></header>
+  <main>
+    <h1>Benchmark results</h1>
+    <p class="muted">Three topologies, five faults, every selected model and thinking level.</p>
+    <div id="error" class="notice error" role="alert" hidden></div>
+    <div id="offline" class="notice" hidden>Preview only. Open this page through the Network Lab server to run benchmarks and view saved results.</div>
+    <details class="settings">
+      <summary>Models and thinking levels <span id="selection-count" class="hint"></span></summary>
+      <div class="toolbar"><button id="all">Select all</button><button id="none">Clear selection</button>
+        <label>Concurrent runs <select id="concurrency"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
+      </div>
+      <div id="selection" class="selection"></div>
+      <p class="hint">Model requests overlap; network probes run one at a time. Every repeat starts a fresh conversation after the fault scenario is reapplied, using the same prompt and limits.</p>
+      <p class="hint">Elapsed time and the turn timeout include waiting for probes. Choose 1 concurrent run for timing comparisons. Ring/tree catalogues are draft; runs are exploratory.</p>
+      <p class="hint">Each model's ▶ runs its displayed thinking levels. Pause ends the current benchmark safely and keeps its results; ↻ starts a fresh run. During Run all, Pause ends that whole run.</p>
+    </details>
+    <div class="toolbar"><label>Saved run <select id="history"><option value="">New benchmark</option></select></label><span id="run-meta" class="hint"></span></div>
+    <div class="progress-text"><span id="status" role="status">Ready when you are.</span><span id="counts"></span></div>
+    <progress id="progress" value="0" max="1" aria-label="Benchmark progress"></progress>
+    <div id="run-error" class="notice error" hidden></div>
+    <div class="legend"><span>✅ Correct</span><span>🟡 Mostly / partially correct</span><span>❌ Incorrect</span><span>? Inconclusive tie</span><span>◌ Running</span><span>⚠ Incomplete / error</span><span>— Pending</span></div>
+    <p class="hint">Cells show the most frequent symbol after all trials are graded; ties show ?. Yellow grades count together. Click a cell for its distribution and individual trial chats. More repeats reveal variability; the count alone does not establish statistical significance.</p>
+    <div id="matrices"></div>
+  </main>
+  <dialog id="cell-details" aria-labelledby="cell-title">
+    <div class="dialog-head"><h2 id="cell-title">Trial distribution</h2><button id="cell-close" type="button" aria-label="Close trial distribution">×</button></div>
+    <p id="cell-meta" class="hint"></p>
+    <p id="cell-summary" role="status"></p>
+    <div id="cell-distribution" class="distribution"></div>
+    <span id="cell-cost" class="section-cost" hidden></span>
+    <p class="hint">Open a trial chat for the diagnosis, tools and grade. Explain decision generates an explanation on demand and saves it.</p>
+    <ul id="cell-trials" class="trial-list"></ul>
+  </dialog>
+  <script>
+    const $ = id => document.getElementById(id);
+    const preview = location.protocol === 'file:';
+    let cfg = null, runId = null, activeId = null, activeRun = null, item = null, busy = false, polling = false;
+    let drawn = '', cellButtons = new Map(), modelControls = new Map(), openCellId = null, modalSignature = '';
+    const names = {main6s8h:'Main', ring5s5h:'Ring', tree5s8h:'Tree'};
+    function showError(message) { $('error').textContent = message || ''; $('error').hidden = !message; }
+    async function api(path, options = {}) {
+      const response = await fetch(path, {cache:'no-store', ...options});
+      let data;
+      try { data = await response.json(); } catch { throw new Error('The server returned an unreadable response.'); }
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed.');
+      return data;
+    }
+    const post = (path, body) => api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    function selected() {
+      return [...$('selection').querySelectorAll('input:checked')].map(input => ({model:input.dataset.model, effort:input.dataset.effort}));
+    }
+    function repeatCount() {
+      const value = Number($('repeats').value);
+      return Number.isInteger(value) && value >= 1 && value <= (cfg?.repeats.max || 50) ? value : null;
+    }
+    function showCost(node, cost, running) {
+      node.hidden = !cost;
+      if (!cost) return;
+      node.textContent = `${running ? 'Cost so far' : 'Cost'}: $${cost.total_usd.toFixed(5)} USD${cost.incomplete ? ' · partial' : ''}`;
+      node.title = `Calculated from reported token usage and configured model rates. Diagnosis $${cost.diagnosis_usd.toFixed(5)}, grading $${cost.judge_usd.toFixed(5)}, explanations $${cost.explanation_usd.toFixed(5)}.${cost.incomplete ? ' Some requests are unfinished or have missing usage.' : ''}`;
+    }
+    function controls() {
+      const count = selected().length, repeats = repeatCount(), locked = !!activeId || busy;
+      $('selection-count').textContent = `· ${count} combinations / ${count * 15} cells / ${repeats ? count * 15 * repeats : '—'} trials`;
+      $('play').textContent = `▶ Run all (${repeats ? count * 15 * repeats : '—'})`;
+      $('play').disabled = preview || locked || !cfg?.configured || !count || !repeats;
+      const ending = ['pausing','stopping'].includes(activeRun?.status) || activeRun?.phase === 'cleanup';
+      $('stop').disabled = !activeId || busy || ending;
+      $('export').disabled = !runId || busy;
+      $('concurrency').disabled = locked;
+      $('repeats').disabled = preview || locked || !cfg;
+      $('all').disabled = locked; $('none').disabled = locked;
+      $('selection').querySelectorAll('input').forEach(input => input.disabled = locked);
+      for (const [model, view] of modelControls) {
+        const running = activeRun?.variants.some(v => v.model === model);
+        const previous = item?.variants.some(v => v.model === model) && !['starting','running','stopping','pausing'].includes(item.status);
+        view.button.textContent = running ? (ending ? (activeRun.status === 'pausing' ? 'Pausing…' : 'Finishing…') : 'Ⅱ Pause') : previous ? '↻ Rerun' : '▶ Run';
+        view.button.title = running ? 'Pause the current benchmark, wait for cleanup and keep its results' : `${previous ? 'Rerun' : 'Run'} ${repeats ? view.variants.length * 15 * repeats : '—'} trials for ${view.label} (${repeats || '—'} per cell)`;
+        view.button.setAttribute('aria-label', `${view.button.textContent} ${view.label}`);
+        view.button.disabled = preview || busy || !cfg?.configured || (!activeId && !repeats) || (activeId ? !running || ending || (runId && runId !== activeId) : false);
+        showCost(view.cost, item?.costs_by_model?.[model], item?.id === activeId);
+      }
+      showCost($('run-cost'), item?.cost, item?.id === activeId);
+    }
+    function buildSelection() {
+      $('selection').replaceChildren();
+      for (const model of [...new Set(cfg.variants.map(v => v.model))]) {
+        const variants = cfg.variants.filter(v => v.model === model), field = document.createElement('fieldset');
+        field.className = 'model-options';
+        const legend = document.createElement('legend');
+        legend.textContent = variants[0].label + (variants[0].deprecated ? ' · Deprecated' : ''); field.append(legend);
+        for (const variant of variants) {
+          const label = document.createElement('label'), input = document.createElement('input');
+          input.type = 'checkbox'; input.checked = true; input.dataset.model = model; input.dataset.effort = variant.effort;
+          input.addEventListener('change', () => { controls(); if (!runId) draw(null); });
+          label.append(input, document.createTextNode(variant.effort)); field.append(label);
+        }
+        $('selection').append(field);
+      }
+      controls();
+    }
+    function symbol(cell) {
+      if (!cell) return ['—','Pending'];
+      if (cell.status === 'completed') {
+        const grade = cell.verdict;
+        return [grade === 'correct' ? '✅' : grade === 'incorrect' ? '❌' : grade === 'partial' ? '🟡' : '?', cell.label || 'Assessment'];
+      }
+      if (cell.status === 'running' || cell.status === 'grading') return ['◌',cell.status === 'grading' ? 'Grading' : 'Running'];
+      if (['error','interrupted','incomplete'].includes(cell.status)) return ['⚠',cell.label || cell.status];
+      return ['—',cell.status];
+    }
+    function draw(run) {
+      const variants = run?.variants || cfg.variants.filter(v => selected().some(s => s.model === v.model && s.effort === v.effort));
+      const topologies = run?.topologies || cfg.topologies, scenarios = run?.scenarios || cfg.scenarios;
+      const signature = JSON.stringify([run?.id, variants, topologies, scenarios]);
+      if (signature !== drawn) {
+        drawn = signature; cellButtons.clear(); modelControls.clear(); $('matrices').replaceChildren();
+        for (const model of [...new Set(variants.map(v => v.model))]) {
+          const heading = document.createElement('h2'); heading.textContent = variants.find(v => v.model === model).label;
+          const sectionHead = document.createElement('div'); sectionHead.className = 'section-head';
+          const action = document.createElement('button'), cost = document.createElement('span');
+          action.type = 'button'; cost.className = 'section-cost'; cost.hidden = true;
+          action.addEventListener('click', () => {
+            if (activeRun?.variants.some(v => v.model === model)) pauseCurrent();
+            else startRun(modelControls.get(model).variants);
+          });
+          const modelVariants = variants.filter(v => v.model === model);
+          modelControls.set(model, {button:action, cost, variants:modelVariants, label:heading.textContent});
+          sectionHead.append(heading, action, cost);
+          const grid = document.createElement('div'); grid.className = 'matrices';
+          for (const variant of variants.filter(v => v.model === model)) {
+            const card = document.createElement('section'); card.className = 'matrix';
+            const title = document.createElement('h3'); title.textContent = `${variant.effort} thinking`;
+            const table = document.createElement('table'), thead = document.createElement('thead'), head = document.createElement('tr');
+            const caption = document.createElement('caption'); caption.hidden = true; caption.textContent = `${variant.label}, ${variant.effort}`; table.append(caption);
+            table.setAttribute('aria-label', caption.textContent);
+            for (const label of ['Topology', ...scenarios]) { const th = document.createElement('th'); th.scope = 'col'; th.textContent = label; head.append(th); }
+            thead.append(head); table.append(thead); const tbody = document.createElement('tbody');
+            for (const topology of topologies) {
+              const tr = document.createElement('tr'), th = document.createElement('th'); th.scope = 'row'; th.textContent = topology.label; tr.append(th);
+              for (const fault of scenarios) {
+                const td = document.createElement('td'), button = document.createElement('button'); button.className = 'cell';
+                const id = `${topology.id}:${fault}:${variant.model}:${variant.effort}`;
+                button.addEventListener('click', () => openCell(id)); td.append(button); tr.append(td); cellButtons.set(id, button);
+              }
+              tbody.append(tr);
+            }
+            table.append(tbody); card.append(title, table); grid.append(card);
+          }
+          $('matrices').append(sectionHead, grid);
+        }
+      }
+      const cells = new Map((run?.cells || []).map(cell => [cell.id,cell]));
+      for (const [id, button] of cellButtons) {
+        const cell = cells.get(id), [icon,label] = symbol(cell), parts = id.split(':');
+        button.replaceChildren(document.createTextNode(icon));
+        if (cell) { const detail = document.createElement('small'); detail.textContent = `${cell.graded}/${cell.total}`; button.append(detail); }
+        const distribution = cell ? ` · ✅ ${cell.distribution.correct} / 🟡 ${cell.distribution.partial} / ❌ ${cell.distribution.incorrect}` : '';
+        button.title = `${names[parts[0]]} · ${parts[1]} · ${parts[2]} / ${parts[3]} · ${label}${distribution}`;
+        button.setAttribute('aria-label', button.title); button.disabled = !cell;
+        button.classList.toggle('running', cell?.status === 'running' || cell?.status === 'grading');
+      }
+      $('export').disabled = !runId;
+      if (!run) { $('status').textContent = activeId ? 'Another benchmark is running.' : 'Ready when you are.'; $('counts').textContent = ''; $('progress').value = 0; $('run-meta').textContent = ''; $('run-error').hidden = true; controls(); return; }
+      const completed = run.graded, errors = run.errors, finished = run.finished;
+      $('status').textContent = `${run.status}${run.phase ? ` · ${run.phase}` : ''}${run.current ? ` · ${names[run.current.topology]} / ${run.current.scenario} · trial ${run.current.trial || 1}/${run.repeats}` : ''}${activeId && activeId !== run.id ? ' · Another benchmark is running' : ''}`;
+      $('counts').textContent = `${finished}/${run.total} trials finished · ${completed} graded · ${errors} errors`;
+      $('progress').max = run.total; $('progress').value = finished;
+      $('run-meta').textContent = `${new Date(run.started_at).toLocaleString()} · ${run.repeats} runs per cell · ${run.concurrency} concurrent · Exploratory`;
+      $('run-error').hidden = !run.error; $('run-error').textContent = run.error || '';
+      controls();
+      if ($('cell-details').open) renderCellDetails();
+    }
+    async function refreshHistory() {
+      const runs = await api('/api/benchmarks');
+      const signature = JSON.stringify(runs.map(run => [run.id,run.status]));
+      if ($('history').dataset.signature !== signature) {
+        $('history').dataset.signature = signature;
+        $('history').replaceChildren(new Option('New benchmark',''));
+        for (const run of runs) $('history').append(new Option(`${new Date(run.started_at).toLocaleString()} · ${run.status} · ${run.repeats}× · ${run.total} trials`, run.id));
+        $('history').value = runId || '';
+      }
+      return runs;
+    }
+    async function choose(id) {
+      $('cell-details').close(); openCellId = null;
+      runId = id || null; item = null;
+      localStorage.setItem('network-lab-benchmark', runId || '');
+      if (runId) {
+        const target = runId, value = await api(`/api/benchmarks/${encodeURIComponent(target)}`);
+        if (target !== runId) return; item = value; $('repeats').value = item.repeats;
+      } else $('repeats').value = cfg.repeats.default;
+      draw(item); controls();
+    }
+    function openCell(id) {
+      openCellId = id; modalSignature = ''; renderCellDetails();
+      if (!$('cell-details').open) $('cell-details').showModal();
+    }
+    function renderCellDetails() {
+      const cell = item?.cells.find(c => c.id === openCellId);
+      if (!cell) { $('cell-details').close(); return; }
+      const signature = JSON.stringify(cell);
+      if (signature === modalSignature) return;
+      modalSignature = signature;
+      const model = item.variants.find(v => v.model === cell.model);
+      $('cell-title').textContent = `${names[cell.topology]} · ${cell.scenario}`;
+      $('cell-meta').textContent = `${model?.label || cell.model} / ${cell.effort} thinking · ${cell.total} trials`;
+      const [icon, label] = symbol(cell);
+      $('cell-summary').textContent = `${icon} ${label} · ${cell.graded}/${cell.total} graded${cell.status === 'completed' && cell.verdict ? ' · most frequent outcome' : ''}`;
+      $('cell-distribution').replaceChildren();
+      for (const [key, title] of [['correct','✅ Correct'],['partial','🟡 Mostly / partially correct'],['incorrect','❌ Incorrect']]) {
+        const count = cell.distribution[key], value = document.createElement('span');
+        value.textContent = `${title}: ${count}/${cell.total} (${Math.round(count / cell.total * 100)}%)`;
+        $('cell-distribution').append(value);
+      }
+      if (cell.graded < cell.total) {
+        const remaining = document.createElement('span'); remaining.textContent = `Ungraded: ${cell.total - cell.graded}/${cell.total}`;
+        $('cell-distribution').append(remaining);
+      }
+      showCost($('cell-cost'), cell.cost, item.id === activeId);
+      $('cell-trials').replaceChildren();
+      for (const trial of cell.trials) {
+        const row = document.createElement('li'), text = document.createElement('span'); text.className = 'trial-label';
+        const verdict = trial.evaluation?.verdict;
+        const mark = trial.status === 'completed' ? (verdict === 'correct' ? '✅' : verdict === 'incorrect' ? '❌' : '🟡') : ['running','grading'].includes(trial.status) ? '◌' : ['error','interrupted'].includes(trial.status) ? '⚠' : '—';
+        text.textContent = `Trial ${trial.trial || 1} · ${mark} ${trial.status === 'completed' ? trial.evaluation?.label || verdict : trial.status}`;
+        row.append(text);
+        if (trial.conversation_id) {
+          const link = document.createElement('a'); link.textContent = 'Open chat →';
+          link.href = `/?conversation=${encodeURIComponent(trial.conversation_id)}`; row.append(link);
+        }
+        if (trial.error) { const note = document.createElement('span'); note.className = 'trial-note'; note.textContent = trial.error; row.append(note); }
+        $('cell-trials').append(row);
+      }
+    }
+    async function poll() {
+      if (polling || busy || !cfg || preview) return;
+      polling = true;
+      try {
+        const current = await api('/api/benchmarks/config'); activeId = current.active_id; activeRun = current.active_run;
+        await refreshHistory();
+        if (runId) { const target = runId, value = await api(`/api/benchmarks/${encodeURIComponent(target)}`); if (target === runId) { item = value; draw(item); } }
+        else draw(null);
+        controls();
+      } catch (error) { showError(error.message); } finally { polling = false; }
+    }
+    async function startRun(variants) {
+      const repeats = repeatCount();
+      if (!repeats) { $('repeats').reportValidity(); return; }
+      busy = true; controls(); showError('');
+      try {
+        const run = await post('/api/benchmarks', {variants:variants.map(v => ({model:v.model, effort:v.effort})), concurrency:Number($('concurrency').value), repeats});
+        activeId = run.id; activeRun = run; await choose(run.id); await refreshHistory();
+      } catch (error) { showError(error.message); } finally { busy = false; controls(); }
+    }
+    async function pauseCurrent() {
+      if (!activeId || busy) return;
+      busy = true; controls(); showError('');
+      try {
+        await post(`/api/benchmarks/${encodeURIComponent(activeId)}/pause`, {});
+        if (activeRun) activeRun.status = 'pausing';
+        if (item?.id === activeId) { item.status = 'pausing'; draw(item); }
+      } catch (error) { showError(error.message); } finally { busy = false; controls(); }
+    }
+    $('play').addEventListener('click', () => startRun(selected()));
+    $('repeats').addEventListener('input', controls);
+    $('cell-close').addEventListener('click', () => $('cell-details').close());
+    $('cell-details').addEventListener('close', () => { openCellId = null; modalSignature = ''; });
+    $('stop').addEventListener('click', async () => {
+      busy = true; controls();
+      try { await post(`/api/benchmarks/${encodeURIComponent(activeId)}/stop`, {}); if (activeRun) activeRun.status = 'stopping'; if (item?.id === activeId) { item.status = 'stopping'; draw(item); } }
+      catch (error) { showError(error.message); } finally { busy = false; controls(); }
+    });
+    $('history').addEventListener('change', () => choose($('history').value).catch(error => showError(error.message)));
+    for (const [id,checked] of [['all',true],['none',false]]) $(id).addEventListener('click', () => {
+      $('selection').querySelectorAll('input').forEach(input => input.checked = checked); controls(); if (!runId) draw(null);
+    });
+    $('export').addEventListener('click', async () => {
+      try {
+        const data = await api(`/api/benchmarks/${encodeURIComponent(runId)}/export`);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+        const link = document.createElement('a'); link.href = url; link.download = `benchmark-${runId}.json`; link.click();
+        setTimeout(() => URL.revokeObjectURL(url),1000);
+      } catch (error) { showError(error.message); }
+    });
+    async function init() {
+      if (preview) { $('offline').hidden = false; return; }
+      try {
+        cfg = await api('/api/benchmarks/config'); activeId = cfg.active_id; activeRun = cfg.active_run;
+        $('repeats').min = cfg.repeats.min; $('repeats').max = cfg.repeats.max; $('repeats').value = cfg.repeats.default; buildSelection();
+        const runs = await refreshHistory(), saved = localStorage.getItem('network-lab-benchmark');
+        await choose(activeId || (runs.some(run => run.id === saved) ? saved : runs[0]?.id));
+        $('history').value = runId || '';
+        if (!cfg.configured) showError('Configure the AI Gateway and restart the server before running a benchmark.');
+      } catch (error) { showError(error.message); }
+      setInterval(poll,2000);
+    }
+    init();
+  </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ from faults.common import (
     tc_replace_tbf,
     tc_show,
     validate_iface_bridge,
+    which,
 )
 from faults.onos_experiment import (
     eth_src_dst_criteria,
@@ -25,6 +26,8 @@ from faults.state import clear_state, utc_now, write_state
 
 def inject_f4(scenario: LoopScenario) -> dict[str, Any]:
     require_root()
+    # A missing safety limiter must not leave an unresettable PENDING fault.
+    which("tc")
     if list_experiment_flows():
         raise FaultError(
             "EXPERIMENT_FLOWS_PRESENT",

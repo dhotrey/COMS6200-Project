@@ -60,6 +60,7 @@
       select:focus-visible,
       textarea:focus-visible,
       input:focus-visible,
+      .benchmark-link:focus-visible,
       summary:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;
@@ -83,6 +84,51 @@
         cursor: col-resize;
         background: transparent;
         touch-action: none;
+      }
+      .sidebar-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .sidebar-toggle {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        font-size: 20px;
+        line-height: 1;
+      }
+      .sidebar-content {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+      }
+      .sidebar-content[hidden] {
+        display: none;
+      }
+      .layout.sidebar-collapsed {
+        grid-template-columns: 56px 0 minmax(0, 1fr);
+      }
+      .sidebar-collapsed .sidebar {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .sidebar-collapsed .brand {
+        display: none;
+      }
+      .layout.sidebar-collapsed .new {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        text-align: center;
+        font-size: 20px;
+        line-height: 1;
+      }
+      .sidebar-collapsed .new-label {
+        display: none;
       }
       .sidebar-resizer:hover,
       .sidebar-resizer.dragging {
@@ -165,11 +211,35 @@
       .conversation.editing .rename {
         display: none;
       }
+      .chat-tooltip {
+        position: fixed;
+        z-index: 30;
+        pointer-events: none;
+        max-width: calc(100vw - 24px);
+        padding: 11px 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        color: var(--ink);
+        box-shadow: 0 6px 24px #0003;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 12px;
+      }
+      .chat-tooltip .eyebrow {
+        font-size: 9px;
+        letter-spacing: 0.8px;
+        margin-bottom: 3px;
+      }
+      #chat-tooltip-date { font-weight: 600; }
+      #chat-tooltip-time { color: var(--muted); }
       .sidebar footer {
         font-size: 11px;
         color: var(--muted);
       }
       main {
+        grid-column: 3;
         display: flex;
         flex-direction: column;
         min-width: 0;
@@ -178,11 +248,26 @@
       .topbar {
         padding: 18px 30px;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
         border-bottom: 1px solid var(--line);
         background: var(--panel);
+      }
+      .benchmark-link {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px 12px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .benchmark-link:hover {
+        border-color: var(--accent);
       }
       .workspace-title {
         font-weight: 600;
@@ -195,7 +280,8 @@
         display: flex;
         gap: 12px;
       }
-      .selectors label {
+      .selectors label,
+      .selector-field {
         font-size: 10px;
         letter-spacing: 0.8px;
         color: var(--muted);
@@ -203,7 +289,7 @@
         display: flex;
         flex-direction: column;
       }
-      .selectors select {
+      .selector-picker > summary {
         font-size: 12px;
         letter-spacing: 0;
         text-transform: none;
@@ -211,7 +297,100 @@
         border: 1px solid var(--line);
         border-radius: 7px;
         padding: 5px 8px;
+        min-height: 31px;
+        min-width: 100px;
         max-width: 210px;
+      }
+      .selector-picker {
+        position: relative;
+        color: var(--ink);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .selector-picker summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 12px;
+      }
+      .selector-picker summary::-webkit-details-marker {
+        display: none;
+      }
+      .selector-picker summary::after {
+        content: "›";
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1;
+      }
+      .selector-picker details[open] > summary::after,
+      .selector-picker[open] > summary::after {
+        transform: rotate(90deg);
+      }
+      .selector-picker > summary[aria-disabled="true"] {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .selector-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 10;
+        width: 220px;
+        max-width: calc(100vw - 30px);
+        max-height: 65vh;
+        overflow-y: auto;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: 0 8px 28px #0002;
+      }
+      .selector-option,
+      .model-deprecated > summary,
+      .topology-group > summary {
+        width: 100%;
+        border: 0;
+        border-radius: 7px;
+        padding: 8px 10px;
+        font-size: 12px;
+        text-align: left;
+      }
+      .selector-option {
+        display: flex;
+        justify-content: space-between;
+      }
+      .selector-option[aria-pressed="true"]::after {
+        content: "✓";
+        color: var(--accent);
+      }
+      .selector-option:hover:not(:disabled),
+      .selector-option[aria-pressed="true"],
+      .model-deprecated > summary:hover,
+      .topology-group > summary:hover {
+        background: var(--soft);
+      }
+      .model-deprecated {
+        border-top: 1px solid var(--line);
+        margin-top: 5px;
+        padding-top: 5px;
+      }
+      .model-deprecated .selector-option {
+        padding-left: 22px;
+      }
+      .topology-group + .topology-group {
+        border-top: 1px solid var(--line);
+        margin-top: 4px;
+        padding-top: 4px;
+      }
+      .topology-group .selector-option { padding-left: 22px; }
+      .topology-description {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 3px;
       }
       .banner {
         padding: 10px 30px;
@@ -339,6 +518,41 @@
       .body.md a {
         color: var(--accent);
       }
+      .body.md .md-table {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.7em 0 1em;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+      }
+      .md-table table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .md-table:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .md-table th,
+      .md-table td {
+        min-width: 100px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .md-table th {
+        background: var(--soft);
+        font-weight: 600;
+      }
+      .md-table tbody tr:nth-child(even) {
+        background: color-mix(in srgb, var(--soft) 30%, transparent);
+      }
+      .md-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
       .tools {
         display: flex;
         flex-direction: column;
@@ -396,10 +610,21 @@
       .tool-panel[hidden] {
         display: none !important;
       }
-      details.metrics-requests {
+      .diagnostics {
+        margin-top: 6px;
+        color: var(--muted);
+        font: 11px/1.8 ui-monospace, monospace;
+      }
+      details.diagnostic-group {
         border: 0;
         background: transparent;
-        font-size: 12px;
+        margin-top: 4px;
+      }
+      .diagnostic-group > summary {
+        width: fit-content;
+      }
+      .diagnostic-group > summary:hover {
+        color: var(--accent);
       }
       summary {
         cursor: pointer;
@@ -497,13 +722,57 @@
         border-bottom: 1px solid var(--line);
         font-size: 12px;
       }
-      .scenario-picker label { font-weight: 600; }
-      .scenario-picker select {
-        max-width: 100%;
-        padding: 6px 8px;
+      #scenario-label { font-weight: 600; }
+      .evaluation-card {
+        margin-top: 18px;
+        padding: 14px 16px;
         border: 1px solid var(--line);
-        border-radius: 7px;
+        border-radius: 10px;
         background: var(--panel);
+        font-size: 13px;
+      }
+      .evaluation-line { display: flex; align-items: center; gap: 9px; margin: 6px 0; }
+      .evaluation-criteria { margin: 6px 0 12px; color: var(--muted); }
+      .verdict-symbol { font-size: 20px; line-height: 1; font-weight: 700; }
+      .verdict-symbol.correct { color: #27a76e; }
+      .verdict-symbol.incorrect { color: #e15454; }
+      .verdict-symbol.partially_correct { color: #ed9439; }
+      .verdict-symbol.mostly_correct { color: #d2b333; }
+      .evaluation-spinner {
+        display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
+        border: 2px solid var(--line); border-top-color: var(--accent);
+        border-radius: 50%; animation: evaluation-spin .8s linear infinite;
+      }
+      @keyframes evaluation-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .evaluation-spinner { animation: none; } }
+      .evaluation-details { color: var(--muted); font-size: 11px; margin-top: 12px; }
+      .evaluation-details pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .layout.evaluation-open {
+        grid-template-columns: var(--sidebar-width, 244px) 5px minmax(0, 1fr) minmax(320px, 410px);
+      }
+      .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 56px 0 minmax(0, 1fr) minmax(320px, 410px); }
+      .evaluation-panel {
+        grid-column: 4; min-width: 0; min-height: 0; overflow: auto;
+        border-left: 1px solid var(--line); background: var(--panel); padding: 22px;
+      }
+      .evaluation-panel[hidden] { display: none; }
+      .evaluation-panel header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+      .evaluation-panel h2 { margin: 0; font-size: 18px; }
+      .evaluation-panel .md { font-size: 13px; overflow-wrap: anywhere; }
+      .evaluation-panel .evaluation-notice { font-size: 12px; color: var(--muted); margin: 8px 0 20px; }
+      @media (max-width: 1050px) {
+        .layout.evaluation-open { grid-template-columns: var(--sidebar-width, 244px) 5px minmax(0, 1fr); }
+        .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 56px 0 minmax(0, 1fr); }
+        .evaluation-panel { position: fixed; z-index: 30; right: 0; top: 0; height: 100dvh;
+          width: min(100vw, 410px); box-shadow: -12px 0 40px #0003; }
+      }
+      .scenario-picker .selector-picker > summary {
+        max-width: 100%;
+      }
+      .scenario-picker .selector-menu {
+        left: 0;
+        right: auto;
+        width: 280px;
       }
       .scenario-picker p {
         flex-basis: 100%;
@@ -517,6 +786,13 @@
           grid-template-columns: 1fr;
           grid-template-rows: auto minmax(0, 1fr);
         }
+        .layout.sidebar-collapsed {
+          grid-template-columns: 1fr;
+        }
+        .layout.evaluation-open, .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 1fr; }
+        main {
+          grid-column: 1;
+        }
         .sidebar-resizer {
           display: none;
         }
@@ -526,6 +802,13 @@
           align-items: center;
           border-right: 0;
           border-bottom: 1px solid var(--line);
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .sidebar-content {
+          flex-basis: 100%;
+          flex-direction: row;
+          align-items: center;
           gap: 12px;
         }
         .sidebar footer,
@@ -565,12 +848,17 @@
         .selectors {
           width: 100%;
         }
-        .selectors label {
+        .selectors label,
+        .selector-field {
           flex: 1;
         }
-        .selectors select {
+        .selector-picker > summary {
           max-width: 100%;
           width: 100%;
+        }
+        .selector-field:first-child .selector-menu {
+          left: 0;
+          right: auto;
         }
         .timeline {
           padding: 24px 18px;
@@ -593,8 +881,14 @@
   <body>
     <div class="layout">
       <aside class="sidebar">
-        <div class="brand"><span>◈</span> Network Lab</div>
-        <button class="new" id="new">＋ New conversation</button>
+        <div class="sidebar-heading">
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button"
+            aria-label="Collapse sidebar" title="Collapse sidebar"
+            aria-expanded="true" aria-controls="sidebar-content"><span aria-hidden="true">☰</span></button>
+          <div class="brand"><span>◈</span> Network Lab</div>
+        </div>
+        <button class="new" id="new" type="button" aria-label="New conversation" title="New conversation"><span aria-hidden="true">＋</span><span class="new-label"> New conversation</span></button>
+        <div class="sidebar-content" id="sidebar-content">
         <div class="eyebrow">Conversations</div>
         <nav
           class="conversations"
@@ -605,6 +899,7 @@
           Observe. Investigate. Understand.<br />Network troubleshooting
           workspace
         </footer>
+        </div>
       </aside>
       <div
         class="sidebar-resizer"
@@ -621,31 +916,47 @@
               An assistant for understanding your network
             </div>
           </div>
+          <a class="benchmark-link" href="/results.html">Benchmarks / Evals →</a>
           <div class="selectors">
-            <label>Model<select id="model" aria-label="Model">
-              <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
-              <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
-              <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+            <div class="selector-field"><span id="model-label">Model</span>
+            <details class="selector-picker" id="model-picker">
+              <summary id="model-trigger" aria-labelledby="model-label model-name"><span id="model-name">Choose a model</span></summary>
+              <div class="selector-menu" id="model-menu" role="group" aria-label="Models"></div>
+            </details>
+            <select id="model" hidden>
+              <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
+              <option value="gpt-6-luna">GPT-6 Luna</option>
               <option value="gpt-6-astra">GPT-6 Astra</option>
-            </select></label
-            ><label
-              >Thinking<select id="effort" aria-label="Thinking level"></select
-            ></label>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+              <option value="gpt-5.6-luna" data-deprecated="true">GPT-5.6 Luna</option>
+              <option value="gpt-5.6-terra" data-deprecated="true">GPT-5.6 Terra</option>
+              <option value="gpt-5.6-sol" data-deprecated="true">GPT-5.6 Sol</option>
+            </select></div>
+            <div class="selector-field"><span id="effort-label">Thinking</span>
+              <details class="selector-picker" id="effort-picker">
+                <summary id="effort-trigger" aria-labelledby="effort-label effort-name"><span id="effort-name">Choose a level</span></summary>
+                <div class="selector-menu" id="effort-menu" role="group" aria-label="Thinking levels"></div>
+              </details>
+              <select id="effort" hidden></select>
+            </div>
           </div>
         </header>
         <section class="scenario-picker" aria-label="Fault scenario controls">
-          <label for="scenario">Fault scenario</label>
-          <select id="scenario" aria-describedby="scenario-note">
-            <option value="">Choose a scenario…</option>
+          <span id="scenario-label">Network</span>
+          <details class="selector-picker" id="scenario-picker">
+            <summary id="scenario-trigger" aria-labelledby="scenario-label scenario-name" aria-describedby="scenario-note"><span id="scenario-name">Choose a topology…</span></summary>
+            <div class="selector-menu" id="scenario-menu" role="group" aria-label="Topologies and fault scenarios"></div>
+          </details>
+          <select id="scenario" hidden>
+            <option value="" disabled selected>Choose a scenario…</option>
             <option value="F1">F1 · Link failure</option>
             <option value="F2">F2 · Congestion</option>
             <option value="F3">F3 · ACL / policy error</option>
             <option value="F4">F4 · Forwarding loop</option>
-            <option value="F5">F5 · Missing / incorrect flow rule</option>
+            <option value="F5">F5 · Missing forwarding rule</option>
           </select>
-          <button type="button" id="load-scenario">Load scenario</button>
           <button type="button" id="reset-scenario">Reset</button>
-          <p id="scenario-note">Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.</p>
+          <p id="scenario-note">Choose a topology and fault before sending a message. Settings lock when the chat starts; use New conversation to change them.</p>
         </section>
         <div class="banner" id="banner" hidden role="status"></div>
         <section class="timeline" id="timeline" aria-label="Chat messages">
@@ -673,6 +984,19 @@
           </p>
         </div>
       </main>
+      <aside class="evaluation-panel" id="evaluation-panel" hidden aria-labelledby="evaluation-title">
+        <header>
+          <div><div class="eyebrow">LLM-as-judge</div><h2 id="evaluation-title">Evaluation explanation</h2></div>
+          <button id="evaluation-close" type="button" aria-label="Close evaluation panel">×</button>
+        </header>
+        <p class="evaluation-notice">Separate from the diagnosis chat. This assessment and explanation are never sent to the diagnosing agent.</p>
+        <div id="evaluation-content"></div>
+      </aside>
+    </div>
+    <div class="chat-tooltip" id="chat-tooltip" role="tooltip" hidden>
+      <span class="eyebrow">Last updated</span>
+      <span id="chat-tooltip-date"></span>
+      <span id="chat-tooltip-time"></span>
     </div>
     <script>
       "use strict";
@@ -680,12 +1004,12 @@
       // Static options keep the file preview usable; the server is authoritative when connected.
       let config = {
           configured: false,
-          default_model: "gpt-5.6-sol",
-          default_effort: "medium",
           models: Array.from($("model").options, option => ({
             id: option.value,
             label: option.text,
-            efforts: option.value === "gpt-6-astra"
+            deprecated: option.dataset.deprecated === "true",
+            efforts: option.value === "gpt-4.1-mini" ? ["none"]
+              : ["gpt-6-astra", "gpt-6.1-sol"].includes(option.value)
               ? ["low", "medium", "high", "xhigh", "max"]
               : ["none", "low", "medium", "high", "xhigh", "max"],
           })),
@@ -694,6 +1018,60 @@
         busy = false,
         controller = null,
         loading = false;
+      let scenarioTopology = "main6s8h";
+      let topologies = [
+        { id: "main6s8h", label: "Main", description: "6 switches · 8 hosts" },
+        { id: "ring5s5h", label: "Ring", description: "5 switches · 5 hosts" },
+        { id: "tree5s8h", label: "Tree", description: "7 switches · 8 hosts" },
+      ];
+      let networkError = false;
+      let chatStarted = false;
+      let chatSettings = null;
+      let liveNetwork = null;
+      let activeEvaluationView = null;
+      const evaluationSymbols = { correct: "✓", mostly_correct: "●", partially_correct: "●", incorrect: "✕" };
+      function closeEvaluation() {
+        $("evaluation-panel").hidden = true;
+        document.querySelector(".layout").classList.remove("evaluation-open");
+        activeEvaluationView?.explainButton?.focus();
+        activeEvaluationView = null;
+      }
+      $("evaluation-close").onclick = closeEvaluation;
+      $("evaluation-panel").onkeydown = event => {
+        if (event.key === "Escape") closeEvaluation();
+      };
+      function settingsLocked() {
+        return busy || loading || chatStarted;
+      }
+      function networkMismatch() {
+        return chatStarted && (!chatSettings?.topology || !liveNetwork ||
+          chatSettings.topology !== liveNetwork.topology ||
+          (chatSettings.scenario || null) !==
+            (liveNetwork.active ? liveNetwork.scenario_id : null));
+      }
+      function restoreChatSettings(data) {
+        chatStarted = Boolean(data.messages?.length);
+        chatSettings = data.settings || null;
+        if (chatSettings?.model) {
+          if (!Array.from($("model").options).some(o => o.value === chatSettings.model)) {
+            const option = node("option", "", chatSettings.model);
+            option.value = chatSettings.model;
+            $("model").append(option);
+          }
+          $("model").value = chatSettings.model;
+          updateModel();
+          if (chatSettings.effort) {
+            if (!Array.from($("effort").options).some(o => o.value === chatSettings.effort)) {
+              const option = node("option", "", chatSettings.effort);
+              option.value = chatSettings.effort;
+              $("effort").append(option);
+            }
+            $("effort").value = chatSettings.effort;
+            updatePicker("effort");
+          }
+        }
+        showScenario(liveNetwork);
+      }
       function node(tag, className, text) {
         const el = document.createElement(tag);
         if (className) el.className = className;
@@ -722,21 +1100,26 @@
       }
       function lock(value) {
         busy = value;
+        for (const id of ["model", "effort", "scenario"]) {
+          if (settingsLocked()) $(id + "-picker").open = false;
+          $(id + "-trigger").setAttribute("aria-disabled", String(settingsLocked()));
+          $(id + "-trigger").title = chatStarted ? "Start a new conversation to change settings" : "";
+        }
         document
           .querySelectorAll(
-            ".sidebar button, .selectors select, #scenario, #load-scenario, #reset-scenario",
+            ".sidebar button, .selectors select, .selector-option, #scenario, #reset-scenario",
           )
           .forEach((el) => {
-            if (el.classList.contains("rename")) return;
-            el.disabled = value || loading;
+            if (el.classList.contains("rename") || el.id === "sidebar-toggle") return;
+            el.disabled = el.closest(".sidebar") ? value || loading : settingsLocked();
           });
         $("send").hidden = value;
         $("stop").hidden = !value;
-        $("send").disabled = loading || !config?.configured;
+        $("send").disabled = loading || networkError || networkMismatch() || !config?.configured;
         $("input").disabled = loading;
         $("status").textContent = value
           ? "Investigating…"
-          : "Ready to investigate";
+          : networkMismatch() ? "Start a new conversation" : "Ready to investigate";
       }
       function escapeHtml(value) {
         return String(value).replace(/[&<>"']/g, (ch) =>
@@ -758,14 +1141,51 @@
           );
         return html.replace(/\0C(\d+)\0/g, (_, index) => codes[Number(index)]);
       }
+      function tableCells(line) {
+        const text = line.trim(), cells = [];
+        let cell = "";
+        for (let i = 0; i < text.length; i += 1) {
+          if (text[i] === "\\" && text[i + 1] === "|") {
+            cell += "|";
+            i += 1;
+          } else if (text[i] === "|") {
+            cells.push(cell.trim());
+            cell = "";
+          } else cell += text[i];
+        }
+        cells.push(cell.trim());
+        if (text.startsWith("|")) cells.shift();
+        if (text.endsWith("|") && cells.at(-1) === "") cells.pop();
+        return cells;
+      }
       function markdownBlocks(text) {
         const lines = text.replace(/\r\n/g, "\n").split("\n");
+        const tableAt = (index) => {
+          if (!lines[index]?.includes("|") || !lines[index + 1]) return null;
+          const headers = tableCells(lines[index]), dividers = tableCells(lines[index + 1]);
+          if (!headers.length || headers.length !== dividers.length || !dividers.every(cell => /^:?-{3,}:?$/.test(cell))) return null;
+          return { headers, align: dividers.map(cell => cell.endsWith(":") ? (cell.startsWith(":") ? "center" : "right") : "left") };
+        };
         let html = "",
           i = 0;
         while (i < lines.length) {
           const line = lines[i];
           if (!line.trim()) {
             i += 1;
+            continue;
+          }
+          const table = tableAt(i);
+          if (table) {
+            const row = (cells, tag) => `<tr>${table.headers.map((_, column) =>
+              `<${tag}${tag === "th" ? ' scope="col"' : ""} style="text-align:${table.align[column]}">${inlineMarkdown(cells[column] || "")}</${tag}>`,
+            ).join("")}</tr>`;
+            html += `<div class="md-table" tabindex="0" role="region" aria-label="Table"><table><thead>${row(table.headers, "th")}</thead><tbody>`;
+            i += 2;
+            while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+              html += row(tableCells(lines[i]), "td");
+              i += 1;
+            }
+            html += "</tbody></table></div>";
             continue;
           }
           const heading = line.match(/^(#{1,4}) (.+)/);
@@ -792,6 +1212,7 @@
           while (
             i < lines.length &&
             lines[i].trim() &&
+            !tableAt(i) &&
             !/^#{1,4} /.test(lines[i]) &&
             !/^[-*] /.test(lines[i]) &&
             !/^\d+\. /.test(lines[i])
@@ -836,7 +1257,23 @@
         if (el.scrollHeight - el.scrollTop - el.clientHeight < 180)
           el.scrollTop = el.scrollHeight;
       }
+      function scenarioPrompt() {
+        // Symptom-only prompts shared by the three topology judge rubrics.
+        const prompts = {
+          F1: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F2: "Transfers from h1 to h5 are very slow. Investigate and localise the cause.",
+          F3: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F4: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F5: "h1 and h2 can no longer reach h5. Diagnose and localise the fault.",
+        };
+        return prompts[$("scenario").value] || "Help me investigate a connectivity issue";
+      }
+      function updateScenarioSuggestion() {
+        const suggestion = $("scenario-suggestion");
+        if (suggestion) suggestion.textContent = scenarioPrompt();
+      }
       function empty() {
+        closeEvaluation();
         $("messages").replaceChildren();
         const el = node("div", "empty");
         el.append(
@@ -850,13 +1287,14 @@
           ),
         );
         const suggestions = node("div", "suggestions");
-        for (const text of [
-          "Inspect the network topology",
-          "Help me investigate a connectivity issue",
+        for (const [id, prompt] of [
+          ["topology-suggestion", () => "Inspect the network topology"],
+          ["scenario-suggestion", scenarioPrompt],
         ]) {
-          const b = node("button", "", text);
+          const b = node("button", "", prompt());
+          b.id = id;
           b.onclick = () => {
-            $("input").value = text;
+            $("input").value = prompt();
             $("input").focus();
           };
           suggestions.append(b);
@@ -869,17 +1307,143 @@
         const el = node("article", `message ${role}`),
           body = node("div", role === "user" ? "body" : "body md"),
           tools = node("div", "tools"),
-          metrics = node("div", "metrics");
+          metrics = node("div", "metrics"),
+          diagnostics = node("div", "diagnostics"),
+          toolDetails = node("details", "diagnostic-group tool-history"),
+          toolSummary = node("summary", "", "Tool calls");
+        toolDetails.hidden = true;
+        diagnostics.hidden = true;
+        toolDetails.append(toolSummary, tools);
+        diagnostics.append(toolDetails);
         el.append(
           node("div", "role", role === "user" ? "You" : "Network assistant"),
           body,
-          tools,
           metrics,
+          diagnostics,
         );
         $("messages").append(el);
-        const view = { el, body, tools, metrics, calls: new Map(), raw: text };
+        const view = { el, body, tools, metrics, diagnostics, toolDetails, toolSummary,
+          calls: new Map(), raw: text };
         renderBody(view);
         return view;
+      }
+      function evaluationLine(data) {
+        const line = node("div", "evaluation-line");
+        if (data.status === "pending") {
+          line.append(node("span", "evaluation-spinner"), node("span", "", "Analysing answer…"));
+        } else if (data.status === "completed") {
+          const symbol = node("span", "verdict-symbol " + data.verdict, evaluationSymbols[data.verdict] || "");
+          symbol.setAttribute("aria-hidden", "true");
+          line.append(symbol, node("strong", "", data.label));
+        } else {
+          line.append(node("strong", "", "Evaluation failed"));
+        }
+        return line;
+      }
+      function evaluationDetails(data) {
+        const details = node("details", "evaluation-details");
+        details.append(node("summary", "", "Evaluation details"));
+        const metadata = { model: data.model, confidence: data.confidence,
+          duration_seconds: data.duration_seconds, usage: data.usage, cost_usd: data.cost_usd,
+          rubric_path: data.rubric_path, rubric_sha256: data.rubric_sha256,
+          grading_sha256: data.grading_sha256, decision_api_result: data.raw_result };
+        details.append(node("pre", "", JSON.stringify(metadata, null, 2)));
+        return details;
+      }
+      function renderEvaluation(view, data, cid, messageId) {
+        if (!data || data.status === "skipped") return;
+        view.cid = cid;
+        view.messageId = messageId;
+        view.evaluation = data;
+        if (!view.evaluationCard) {
+          view.evaluationCard = node("section", "evaluation-card");
+          view.evaluationCard.setAttribute("aria-label", "Diagnosis assessment");
+          view.evaluationCard.setAttribute("aria-live", "polite");
+          view.el.append(view.evaluationCard);
+        }
+        const card = view.evaluationCard;
+        card.replaceChildren(node("div", "eyebrow", "LLM-as-judge · Diagnosis assessment"), evaluationLine(data));
+        card.append(node("p", "evaluation-criteria", data.criteria_text || data.error || "Checking this answer against the selected fault’s rubric."));
+        const button = node("button", "explain-decision", "▶ Explain decision");
+        button.type = "button";
+        button.disabled = data.status !== "completed" || view.explanationRequest;
+        view.explainButton = button;
+        button.onclick = async () => {
+          activeEvaluationView = view;
+          $("evaluation-panel").hidden = false;
+          document.querySelector(".layout").classList.add("evaluation-open");
+          $("evaluation-close").focus();
+          renderEvaluationPanel(view);
+          if (data.explanation?.status === "completed" || data.explanation?.status === "pending") return;
+          view.explanationRequest = true;
+          button.disabled = true;
+          $("evaluation-content").append(node("div", "status", "Preparing explanation…"));
+          try {
+            const next = await api(evaluationURL(view) + "/explain", {method: "POST"});
+            if (!view.el.isConnected || view.cid !== currentId) return;
+            renderEvaluation(view, next, cid, messageId);
+            watchEvaluation(view);
+          } catch (e) {
+            if (activeEvaluationView === view)
+              $("evaluation-content").append(node("p", "status", e.message));
+          } finally {
+            view.explanationRequest = false;
+            view.explainButton.disabled = view.evaluation.status !== "completed";
+          }
+        };
+        card.append(button);
+        if (data.status === "completed") card.append(evaluationDetails(data));
+        if (activeEvaluationView === view) renderEvaluationPanel(view);
+      }
+      function renderEvaluationPanel(view) {
+        if (activeEvaluationView !== view) return;
+        const data = view.evaluation;
+        const content = $("evaluation-content");
+        const topology = topologies.find(t => t.id === data.topology)?.label || data.topology;
+        content.replaceChildren(node("div", "eyebrow", `${topology} · ${data.fault}`), evaluationLine(data),
+          node("p", "evaluation-criteria", data.criteria_text || data.error || ""));
+        const explanation = data.explanation;
+        if (!explanation) return;
+        content.append(node("div", "eyebrow", "Explanation · GPT-6.1 Sol · high"));
+        if (explanation.status === "pending") {
+          const line = node("div", "evaluation-line");
+          line.append(node("span", "evaluation-spinner"), node("span", "", "Explaining decision…"));
+          content.append(line);
+        } else if (explanation.status === "completed") {
+          const body = node("div", "md");
+          body.innerHTML = markdown(explanation.content);
+          content.append(body);
+          const details = node("details", "evaluation-details");
+          details.append(node("summary", "", "Explanation usage"), node("pre", "", JSON.stringify({
+            model: explanation.model, effort: explanation.effort, usage: explanation.usage,
+            cost_usd: explanation.cost_usd, duration_seconds: explanation.duration_seconds,
+          }, null, 2)));
+          content.append(details);
+        } else content.append(node("p", "status", explanation.error || "Explanation failed."));
+      }
+      function evaluationURL(view) {
+        return `/api/conversations/${encodeURIComponent(view.cid)}/messages/${encodeURIComponent(view.messageId)}/evaluation`;
+      }
+      function watchEvaluation(view) {
+        if (view.polling || !view.el.isConnected || view.cid !== currentId) return;
+        if (view.evaluation?.status !== "pending" && view.evaluation?.explanation?.status !== "pending") return;
+        view.polling = true;
+        const poll = async () => {
+          if (!view.el.isConnected || view.cid !== currentId) { view.polling = false; return; }
+          try {
+            const data = await api(evaluationURL(view), {cache: "no-store"});
+            if (!view.el.isConnected || view.cid !== currentId) { view.polling = false; return; }
+            renderEvaluation(view, data, view.cid, view.messageId);
+            if (data.status === "pending" || data.explanation?.status === "pending") {
+              setTimeout(poll, 1000);
+              return;
+            }
+          } catch (e) {
+            view.evaluationCard.append(node("p", "status", "Assessment status unavailable. Reopen this conversation to check it."));
+          }
+          view.polling = false;
+        };
+        setTimeout(poll, 500);
       }
       function toolLabel(entry, finished, data) {
         const duration = data.duration_seconds ?? data.latency_seconds;
@@ -897,16 +1461,21 @@
             args = node("pre"),
             result = node("pre");
           chip.type = "button";
+          chip.setAttribute("aria-expanded", "false");
           panel.hidden = true;
           panel.append(args, result);
           wrap.append(chip, panel);
           chip.onclick = () => {
             wrap.classList.toggle("open");
             panel.hidden = !wrap.classList.contains("open");
+            chip.setAttribute("aria-expanded", String(!panel.hidden));
           };
           view.tools.append(wrap);
           entry = { wrap, chip, args, result, name: data.name || "Tool" };
           view.calls.set(id, entry);
+          view.toolDetails.hidden = false;
+          view.diagnostics.hidden = false;
+          view.toolSummary.textContent = `${view.calls.size} tool call${view.calls.size === 1 ? "" : "s"}`;
         }
         if (data.name) entry.name = data.name;
         if (data.arguments !== undefined)
@@ -955,8 +1524,9 @@
             );
           }
         if (data.requests?.length) {
-          const details = node("details", "metrics-requests");
-          details.style.width = "100%";
+          const details = view.requests || node("details", "diagnostic-group metrics-requests");
+          view.requests = details;
+          details.replaceChildren();
           details.append(
             node(
               "summary",
@@ -981,7 +1551,8 @@
             row.append(metrics);
             details.append(row);
           }
-          view.metrics.append(details);
+          (view.diagnostics || view.metrics).append(details);
+          if (view.diagnostics) view.diagnostics.hidden = false;
         }
       }
       function startRename(row, item, choose) {
@@ -1011,7 +1582,6 @@
             );
             item.title = updated.title;
             choose.textContent = updated.title;
-            choose.title = updated.title;
             await list();
           } catch (e) {
             notice(e.message, true);
@@ -1032,8 +1602,42 @@
         field.focus();
         field.select();
       }
+      function hideConversationTooltip() {
+        $("chat-tooltip").hidden = true;
+        document.querySelector('[aria-describedby="chat-tooltip"]')?.removeAttribute("aria-describedby");
+      }
+      function attachConversationTooltip(choose, updatedAt) {
+        if (!updatedAt) return;
+        // D1 CURRENT_TIMESTAMP is UTC, with no timezone suffix.
+        const date = new Date(updatedAt.replace(" ", "T") + "Z");
+        if (Number.isNaN(date.getTime())) return;
+        const show = () => {
+          hideConversationTooltip();
+          $("chat-tooltip-date").textContent = date.toLocaleDateString(undefined, { dateStyle: "medium" });
+          $("chat-tooltip-time").textContent = date.toLocaleTimeString(undefined, {
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+          const tooltip = $("chat-tooltip");
+          tooltip.hidden = false;
+          choose.setAttribute("aria-describedby", tooltip.id);
+          const anchor = choose.getBoundingClientRect(), box = tooltip.getBoundingClientRect();
+          tooltip.style.left = `${Math.max(12, Math.min(anchor.right + 10, innerWidth - box.width - 12))}px`;
+          tooltip.style.top = `${Math.max(12, Math.min(anchor.top, innerHeight - box.height - 12))}px`;
+        };
+        choose.onpointerenter = choose.onfocus = show;
+        choose.onpointerleave = () => {
+          if (document.activeElement !== choose) hideConversationTooltip();
+        };
+        choose.onblur = choose.onpointerdown = hideConversationTooltip;
+        choose.addEventListener("keydown", event => {
+          if (event.key === "Escape") hideConversationTooltip();
+        });
+      }
+      $("conversations").onscroll = hideConversationTooltip;
+      window.addEventListener("resize", hideConversationTooltip);
       async function list() {
         const items = await api("/api/conversations");
+        hideConversationTooltip();
         $("conversations").replaceChildren();
         for (const item of items) {
           const row = node(
@@ -1044,7 +1648,7 @@
             rename = node("button", "rename", "✎"),
             remove = node("button", "delete", "×");
           const label = item.title || "New conversation";
-          choose.title = label;
+          attachConversationTooltip(choose, item.updated_at);
           choose.onclick = () => open(item.id);
           rename.title = "Rename conversation";
           rename.setAttribute("aria-label", `Rename ${label}`);
@@ -1075,7 +1679,13 @@
               });
               if (currentId === item.id) {
                 currentId = null;
+                const url = new URL(location.href);
+                url.searchParams.delete("conversation");
+                window.history.replaceState(null, "", url);
+                chatStarted = false;
+                chatSettings = null;
                 empty();
+                await refreshScenario();
               }
               await list();
             } catch (e) {
@@ -1099,11 +1709,21 @@
             `/api/conversations/${encodeURIComponent(id)}`,
           );
           currentId = id;
+          const url = new URL(location.href);
+          url.searchParams.set("conversation", id);
+          window.history.replaceState(null, "", url);
+          await refreshScenario();
+          restoreChatSettings(data);
+          notice("");
           empty();
           for (const saved of data.messages || []) {
             const view = message(saved.role, saved.content || "");
             for (const call of saved.tools || []) tool(view, call, true);
             if (saved.stats) stats(view, saved.stats);
+            if (saved.evaluation) {
+              renderEvaluation(view, saved.evaluation, id, saved.id);
+              watchEvaluation(view);
+            }
           }
           await list();
           $("timeline").scrollTop = $("timeline").scrollHeight;
@@ -1117,7 +1737,6 @@
       function efforts() {
         const available =
           config.models.find((m) => m.id === $("model").value)?.efforts || [];
-        const previous = $("effort").value;
         $("effort").replaceChildren(
           ...available.map((value) => {
             const el = node("option", "", value);
@@ -1125,63 +1744,210 @@
             return el;
           }),
         );
-        $("effort").value = available.includes(previous)
-          ? previous
-          : available.includes(config.default_effort)
-            ? config.default_effort
-            : available[0] || "";
+        $("effort").value = available[0] || "";
+        $("effort-menu").replaceChildren(
+          ...available.map(value => pickerOption("effort", value, value)),
+        );
+        updatePicker("effort");
       }
-      $("model").onchange = efforts;
+      function updatePicker(id) {
+        if (id === "scenario") {
+          const topology = topologies.find(t => t.id === scenarioTopology);
+          const fault = $("scenario").value;
+          $("scenario-name").textContent = (topology?.label || "Network") +
+            " · " + (fault || "No fault");
+          for (const button of $("scenario-menu").querySelectorAll(".selector-option"))
+            button.setAttribute("aria-pressed", String(
+              button.dataset.topology === scenarioTopology && button.dataset.value === fault,
+            ));
+          updateScenarioSuggestion();
+          return;
+        }
+        $(id + "-name").textContent = $(id).selectedOptions[0]?.text || "Choose an option";
+        for (const button of $(id + "-menu").querySelectorAll(".selector-option"))
+          button.setAttribute("aria-pressed", String(button.dataset.value === $(id).value));
+      }
+      function pickerOption(id, value, label) {
+        const button = node("button", "selector-option", label);
+        button.type = "button";
+        button.dataset.value = value;
+        button.onclick = () => {
+          if (settingsLocked()) return;
+          $(id).value = value;
+          $(id + "-picker").open = false;
+          $(id + "-trigger").focus();
+          $(id).onchange?.();
+        };
+        return button;
+      }
+      function updateModel() {
+        updatePicker("model");
+        efforts();
+      }
+      function renderModels() {
+        $("model").replaceChildren(
+          ...config.models.map((model) => {
+            const option = node("option", "", model.label);
+            option.value = model.id;
+            return option;
+          }),
+        );
+        $("model").value = config.models[0]?.id || "";
+        $("model-menu").replaceChildren();
+        const deprecated = node("details", "model-deprecated");
+        deprecated.append(node("summary", "", "Deprecated"));
+        for (const model of config.models) {
+          const button = pickerOption("model", model.id, model.label);
+          (model.deprecated ? deprecated : $("model-menu")).append(button);
+        }
+        if (deprecated.querySelector("button")) $("model-menu").append(deprecated);
+        updateModel();
+      }
+      $("model").onchange = updateModel;
+      $("effort").onchange = () => updatePicker("effort");
+      for (const id of ["model", "effort", "scenario"]) {
+        const picker = $(id + "-picker"), trigger = $(id + "-trigger");
+        trigger.onclick = (event) => {
+          if (settingsLocked()) event.preventDefault();
+        };
+        picker.onkeydown = (event) => {
+          if (event.key === "Escape") {
+            picker.open = false;
+            trigger.focus();
+            event.preventDefault();
+          }
+        };
+        document.addEventListener("click", (event) => {
+          if (!picker.contains(event.target)) picker.open = false;
+        });
+        picker.addEventListener("focusout", (event) => {
+          if (!picker.contains(event.relatedTarget)) picker.open = false;
+        });
+      }
       const scenarioHint =
-        "Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
+        "Choose a topology and fault before sending a message. Settings lock when the chat starts; use New conversation to change them.";
+      function renderScenarios() {
+        $("scenario-menu").replaceChildren();
+        for (const topology of topologies) {
+          const group = node("details", "topology-group");
+          group.dataset.topology = topology.id;
+          const title = node("span", "", topology.label);
+          title.append(node("small", "topology-description", topology.description));
+          const summary = node("summary");
+          summary.setAttribute("aria-label", topology.label + " · " + topology.description);
+          summary.append(title);
+          summary.onclick = (event) => {
+            if (settingsLocked()) event.preventDefault();
+          };
+          group.append(summary);
+          const options = [{ value: "", text: "Healthy · No fault" },
+            ...Array.from($("scenario").options).filter(option => !option.disabled)];
+          for (const option of options) {
+            const button = node("button", "selector-option", option.text);
+            button.type = "button";
+            button.dataset.topology = topology.id;
+            button.dataset.value = option.value;
+            button.onclick = () => loadNetwork(topology.id, option.value);
+            group.append(button);
+          }
+          group.addEventListener("toggle", () => {
+            if (!group.open) return;
+            for (const other of $("scenario-menu").querySelectorAll(".topology-group"))
+              if (other !== group) other.open = false;
+          });
+          $("scenario-menu").append(group);
+        }
+      }
       function showScenario(status) {
+        liveNetwork = status;
+        if (chatStarted) {
+          if (chatSettings?.topology) {
+            scenarioTopology = chatSettings.topology;
+            $("scenario").value = chatSettings.scenario || "";
+            updatePicker("scenario");
+          } else {
+            $("scenario-name").textContent = "Network not recorded";
+          }
+          networkError = Boolean(status?.network_error);
+          $("scenario-note").textContent =
+            "Model, thinking, topology and fault are locked for this chat. " +
+            (networkMismatch() ? "The current network differs or was not recorded. Start a new conversation to continue." :
+              "Use New conversation to change them.");
+          return;
+        }
         if (!status) {
           $("scenario-note").textContent = scenarioHint;
           return;
         }
+        if (status.topologies) {
+          topologies = status.topologies;
+          renderScenarios();
+        }
+        scenarioTopology = status.topology || scenarioTopology;
+        networkError = Boolean(status.network_error);
+        const name = topologies.find(t => t.id === scenarioTopology)?.label || scenarioTopology;
         if (status.active && status.scenario_id) {
           $("scenario").value = status.scenario_id;
+          updatePicker("scenario");
           $("scenario-note").textContent =
-            "Network has " +
+            name + " has " +
             status.scenario_id +
             " active (operator view only). " +
             scenarioHint;
           return;
         }
+        $("scenario").value = "";
+        updatePicker("scenario");
         $("scenario-note").textContent =
-          (status.error ? status.error + " " : "No catalogue fault is active. ") +
+          (status.network_error || status.error ||
+            (status.running ? name + ": no catalogue fault is active." : name + " is not running.")) + " " +
           scenarioHint;
       }
       async function refreshScenario() {
         if (location.protocol === "file:") return;
         showScenario(await api("/api/scenario"));
       }
-      $("load-scenario").onclick = async () => {
-        const scenario = $("scenario").value;
-        if (!scenario || busy || loading) return;
+      async function loadNetwork(topology, scenario) {
+        if (settingsLocked()) return;
+        $("scenario-picker").open = false;
+        $("scenario-trigger").focus();
+        if (location.protocol === "file:") {
+          notice("Preview only. Start the agent server to load a topology or fault.");
+          return;
+        }
         loading = true;
         lock(false);
+        const name = topologies.find(t => t.id === topology)?.label || topology;
+        $("scenario-note").textContent = "Loading " + name +
+          (scenario ? " · " + scenario : " · Healthy") + "…";
         try {
-          const status = await api("/api/scenario/load", {
+          const status = await api(scenario ? "/api/scenario/load" : "/api/topology/load", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scenario }),
+            body: JSON.stringify(scenario ? { topology, scenario } : { topology }),
           });
           showScenario(status);
           notice(
-            "Loaded " +
-              scenario +
-              " on the network. The assistant is not told the scenario id — describe a symptom. Start a new conversation for a clean run.",
+            "Loaded " + name + (scenario ? " · " + scenario : " · Healthy") +
+              ". Describe a symptom and start a new conversation for a clean run.",
           );
         } catch (e) {
+          // A failed injection may have reset the previous fault; show live state.
+          try {
+            await refreshScenario();
+          } catch {
+            $("scenario").value = "";
+            updatePicker("scenario");
+          }
           notice(e.message, true);
         } finally {
           loading = false;
           lock(false);
         }
-      };
+      }
+      $("scenario").onchange = () => loadNetwork(scenarioTopology, $("scenario").value);
       $("reset-scenario").onclick = async () => {
-        if (busy || loading) return;
+        if (settingsLocked()) return;
         loading = true;
         lock(false);
         try {
@@ -1196,21 +1962,39 @@
             "Catalogue fault reset. Start a new conversation so old tool results are not reused.",
           );
         } catch (e) {
+          try { await refreshScenario(); } catch { /* Keep the last known state. */ }
           notice(e.message, true);
         } finally {
           loading = false;
           lock(false);
         }
       };
-      $("new").onclick = () => {
+      $("new").onclick = async () => {
         if (busy || loading) return;
+        loading = true;
         currentId = null;
+        const url = new URL(location.href);
+        url.searchParams.delete("conversation");
+        window.history.replaceState(null, "", url);
+        chatStarted = false;
+        chatSettings = null;
         empty();
+        notice("");
+        lock(false);
         document
           .querySelectorAll(".conversation")
           .forEach((el) => el.classList.remove("active"));
         $("input").value = "";
-        $("input").focus();
+        try {
+          await refreshScenario();
+        } catch (e) {
+          networkError = true;
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+          $("input").focus();
+        }
       };
       $("stop").onclick = () => controller?.abort();
       $("input").onkeydown = (event) => {
@@ -1222,7 +2006,7 @@
       $("composer").onsubmit = async (event) => {
         event.preventDefault();
         const text = $("input").value.trim();
-        if (!text || busy || loading || !config?.configured) return;
+        if (!text || busy || loading || networkError || networkMismatch() || !config?.configured) return;
         lock(true);
         controller = new AbortController();
         const signal = controller.signal;
@@ -1263,6 +2047,11 @@
           }
           if (!response.body)
             throw new Error("Streaming is unavailable in this browser.");
+          chatStarted = true;
+          chatSettings ||= { model: $("model").value, effort: $("effort").value,
+            topology: scenarioTopology, scenario: $("scenario").value || null };
+          notice("");
+          showScenario(liveNetwork);
           const reader = response.body.getReader(),
             decoder = new TextDecoder();
           let buffer = "",
@@ -1275,13 +2064,21 @@
               .join("\n");
             if (!raw) return;
             const data = JSON.parse(raw);
-            if (data.type === "text") {
+            if (data.type === "settings") {
+              chatSettings = data.settings;
+              showScenario(liveNetwork);
+            }
+            else if (data.type === "text") {
               view.raw += data.text;
               renderBody(view);
             }
             else if (data.type === "tool_start") tool(view, data);
             else if (data.type === "tool_end") tool(view, data, true);
             else if (data.type === "stats") stats(view, data.stats);
+            else if (data.type === "evaluation") {
+              renderEvaluation(view, data.evaluation, currentId, data.message_id);
+              watchEvaluation(view);
+            }
             else if (data.type === "error")
               view.el.append(
                 node("div", "status", data.message || "The request failed."),
@@ -1325,6 +2122,11 @@
         } finally {
           controller = null;
           try {
+            await refreshScenario();
+            if (currentId) {
+              const saved = await api(`/api/conversations/${encodeURIComponent(currentId)}`);
+              if (saved.messages?.length) restoreChatSettings(saved);
+            }
             await list();
           } catch (e) {
             notice(e.message, true);
@@ -1333,9 +2135,30 @@
           $("input").focus();
         }
       };
+      async function watchDevChanges() {
+        let version;
+        try {
+          version = (await api("/api/dev-version", { cache: "no-store" })).version;
+        } catch {
+          // Retry after a server restart, including when the first check failed.
+        }
+        setInterval(async () => {
+          if (busy || loading || $("input").value.trim()) return;
+          try {
+            const next = await api("/api/dev-version", { cache: "no-store" });
+            if (version && next.version !== version && !next.busy &&
+                !busy && !loading && !$("input").value.trim()) location.reload();
+            version ||= next.version;
+          } catch {
+            // The server may be restarting; keep the previous version and retry.
+          }
+        }, 2000);
+      }
       (async () => {
         empty();
-        efforts();
+        renderModels();
+        renderScenarios();
+        updatePicker("scenario");
         if (location.protocol === "file:") {
           notice("Preview only. From the repository root, run uv run --project agent python -m agent, then open http://127.0.0.1:8000 to chat.");
           lock(false);
@@ -1345,17 +2168,8 @@
         lock(false);
         try {
           config = await api("/api/config");
-          $("model").replaceChildren(
-            ...config.models.map((model) => {
-              const option = node("option", "", model.label);
-              option.value = model.id;
-              return option;
-            }),
-          );
-          $("model").value = config.default_model;
-          if (!$("model").value && config.models.length)
-            $("model").value = config.models[0].id;
-          efforts();
+          if (config.dev_mode) watchDevChanges();
+          renderModels();
           await refreshScenario();
           if (!config.configured)
             notice(
@@ -1368,6 +2182,24 @@
           loading = false;
           lock(false);
         }
+        const requestedChat = new URLSearchParams(location.search).get("conversation");
+        if (requestedChat) await open(requestedChat);
+      })();
+      (function collapseSidebar() {
+        const layout = document.querySelector(".layout");
+        const toggle = $("sidebar-toggle");
+        const apply = (collapsed) => {
+          hideConversationTooltip();
+          layout.classList.toggle("sidebar-collapsed", collapsed);
+          $("sidebar-content").hidden = collapsed;
+          $("sidebar-resizer").hidden = collapsed;
+          toggle.setAttribute("aria-expanded", String(!collapsed));
+          toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+          toggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+          localStorage.setItem("sidebar-collapsed", String(collapsed));
+        };
+        apply(localStorage.getItem("sidebar-collapsed") === "true");
+        toggle.onclick = () => apply(!layout.classList.contains("sidebar-collapsed"));
       })();
       (function resizeSidebar() {
         const layout = document.querySelector(".layout");

@@ -31,7 +31,8 @@ def test_public_status_strips_ground_truth(monkeypatch):
     assert result["runnable"] == sorted(fault_control.RUNNABLE)
     assert "ground_truth" not in result
     assert "expected_correction" not in result
-    assert set(result) == {"ok", "active", "scenario_id", "runnable", "error"}
+    assert set(result) == {"ok", "active", "scenario_id", "runnable", "error",
+                           "topology", "topologies", "network_error", "running"}
 
 
 def test_load_requires_root(monkeypatch):
@@ -61,6 +62,16 @@ def test_load_resets_then_injects(monkeypatch):
 
 def test_every_catalogue_scenario_is_runnable():
     assert fault_control.RUNNABLE == frozenset(CATALOGUE)
+
+
+def test_failed_reset_does_not_inject(monkeypatch):
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(fault_control, "reset", lambda: {
+        "ok": False, "error": {"message": "reset failed"},
+    })
+    monkeypatch.setattr(fault_control, "status", lambda: {"ok": True, "data": {"active": True}})
+    monkeypatch.setattr(fault_control, "inject", lambda _: pytest.fail("Injected after failed reset"))
+    assert fault_control.load_scenario("F1")["error"] == "reset failed"
 
 
 @pytest.mark.parametrize("scenario", CATALOGUE)
