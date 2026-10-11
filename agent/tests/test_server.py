@@ -62,6 +62,8 @@ def client(monkeypatch):
     monkeypatch.setattr(server.config, "make_client", lambda: pytest.fail("Unexpected provider client"))
     monkeypatch.setattr(server.logfire, "configure", lambda **_: None)
     monkeypatch.setattr(server, "busy", False)
+    monkeypatch.setattr(server, "network_changing", False)
+    monkeypatch.setattr(server.fault_state, "active_state", lambda: None)
     backend_options = ({"loop_factory": _wakeful_loop_factory}
                        if sys.version_info >= (3, 14) else {})
     with TestClient(server.app, backend_options=backend_options) as client:
@@ -139,6 +141,63 @@ def test_sol_rejects_unsupported_none_effort(client, monkeypatch):
     })
     assert result.status_code == 422
     assert store.get(cid)["messages"] == []
+    server.app.state.client = None
+
+
+@pytest.mark.parametrize("changed", ["model", "effort", "topology", "scenario"])
+def test_started_chat_keeps_settings_and_network(client, monkeypatch, changed):
+    network = {"topology": "ring5s5h", "scenario": "F1"}
+    monkeypatch.setattr(server, "network_settings", lambda: dict(network))
+    monkeypatch.setattr(server.app.state, "client", object())
+    seen = []
+
+    async def fake_run(provider, history, model, effort, state):
+        seen.append((model, effort))
+        # Fault/operator metadata must never enter the model's input.
+        assert all("settings" not in message for message in history)
+        assert "F1" not in json.dumps(history)
+        state["content"] = "Inspecting link status."
+        history.append({"role": "assistant", "content": state["content"]})
+        yield {"type": "text", "text": state["content"]}
+
+    monkeypatch.setattr(server, "run", fake_run)
+    cid = client.post("/api/conversations").json()["id"]
+    assert client.post("/api/chat", json=body(cid)).status_code == 200
+    expected = {"model": body(cid)["model"], "effort": "medium", **network}
+    reopened = client.get(f"/api/conversations/{cid}").json()
+    assert reopened["settings"] == expected
+    assert reopened["messages"][1]["settings"] == expected
+    assert "F1" not in json.dumps(store.get(cid)["history"])
+    assert client.post("/api/chat", json=body(cid)).status_code == 200
+    request = body(cid)
+    if changed == "model":
+        request["model"] = "gpt-6.1-sol"
+    elif changed == "effort":
+        request["effort"] = "high"
+    elif changed == "topology":
+        network["topology"] = "tree5s8h"
+    else:
+        network["scenario"] = "F2"
+    rejected = client.post("/api/chat", json=request)
+    assert rejected.status_code == 409
+    assert "new conversation" in rejected.json()["detail"]
+    assert len(store.get(cid)["messages"]) == 4
+    new_cid = client.post("/api/conversations").json()["id"]
+    assert client.post("/api/chat", json={**request, "conversation_id": new_cid}).status_code == 200
+    assert len(seen) == 3
+    assert server.busy is False
+    server.app.state.client = None
+
+
+def test_legacy_chat_is_readable_but_requires_new_chat(client, monkeypatch):
+    cid = client.post("/api/conversations").json()["id"]
+    user = {"role": "user", "content": "Previous diagnosis"}
+    assistant = {"role": "assistant", "content": "Old result",
+                 "stats": {"model": "gpt-5.6-luna", "effort": "medium"}}
+    store.save(cid, user, assistant, [user, {"role": "assistant", "content": "Old result"}])
+    assert client.get(f"/api/conversations/{cid}").json()["settings"] == assistant["stats"]
+    monkeypatch.setattr(server.app.state, "client", object())
+    assert client.post("/api/chat", json=body(cid)).status_code == 409
     server.app.state.client = None
 
 
@@ -280,3 +339,69 @@ def test_picker_offers_every_catalogue_scenario(client):
         assert f'<option value="{scenario}">' in page
     assert 'id="load-scenario"' not in page
     assert 'id="reset-scenario"' in page
+
+
+def test_load_topology_and_fault_passes_selection(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(server.fault_control, "load_scenario", lambda sid, topology:
+        seen.append((topology, sid)) or {"ok": True, "topology": topology, "scenario_id": sid})
+    for topology in ("main6s8h", "ring5s5h", "tree5s8h"):
+        response = client.post("/api/scenario/load", json={"topology": topology, "scenario": "f3"})
+        assert response.status_code == 200
+        assert response.json()["topology"] == topology
+    assert seen == [(t, "F3") for t in ("main6s8h", "ring5s5h", "tree5s8h")]
+    assert client.post("/api/scenario/load", json={"topology": "unknown", "scenario": "F1"}).status_code == 422
+    assert client.post("/api/topology/load", json={"topology": "unknown"}).status_code == 422
+
+
+def test_healthy_topology_load_resets_fault(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(server.topology_control, "load_topology", lambda name: seen.append(name))
+    monkeypatch.setattr(server.fault_control, "reset_scenario", lambda:
+        seen.append("reset") or {"ok": True, "active": False})
+    assert client.post("/api/topology/load", json={"topology": "tree5s8h"}).status_code == 200
+    assert seen == ["tree5s8h", "reset"]
+    monkeypatch.setattr(server, "network_changing", True)
+    assert client.post("/api/topology/load", json={"topology": "ring5s5h"}).status_code == 409
+    assert client.post("/api/scenario/reset").status_code == 409
+    assert client.post("/api/chat", json=body("unused")).status_code == 409
+    assert seen == ["tree5s8h", "reset"]
+
+
+def test_failed_topology_load_blocks_diagnosis(client, monkeypatch):
+    monkeypatch.setattr(server.topology_control, "error", "setup failed")
+    assert client.post("/api/chat", json=body("unused")).status_code == 409
+
+
+def test_network_change_lock_survives_disconnect(monkeypatch):
+    import threading
+    started, finish = threading.Event(), threading.Event()
+    monkeypatch.setattr(server, "busy", False)
+    monkeypatch.setattr(server, "network_changing", False)
+
+    def setup():
+        started.set()
+        finish.wait(timeout=2)
+        return {"ok": True}
+
+    async def check():
+        task = asyncio.create_task(server.change_network(setup))
+        try:
+            for _ in range(200):
+                if started.is_set():
+                    break
+                await asyncio.sleep(.01)
+            assert started.is_set()
+            assert server.network_changing is True
+            task.cancel()
+            await asyncio.sleep(.01)
+            task.cancel()
+            await asyncio.sleep(.01)
+            assert not task.done()
+            assert server.network_changing is True
+        finally:
+            finish.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert server.network_changing is False
+    asyncio.run(check())

@@ -77,13 +77,50 @@ schema check at startup and refuses to start if D1 is unavailable or malformed.
 Conversation creation, history, tool results, and turn statistics now go only to
 D1. The ignored legacy `agent/chat.sqlite3` is not read, migrated, or deleted.
 
-## Fault scenario picker
+## Topology and fault picker
 
-The UI includes a picker for F1–F5. Selecting a scenario immediately injects the chosen
-catalogue fault on the live network (resetting any active catalogue fault first).
-**Reset** clears it. The picker value is not sent in chat requests, stored as
-assistant context, or added to the system prompt. Describe a symptom; do not name
-the scenario. Start a new conversation after changing the fault.
+The **Network** picker initially shows three collapsed groups: **Main**
+(6 switches / 8 hosts), **Ring** (5 / 5), and **Tree** (7 / 8). Expand a group,
+then select **Healthy · No fault** or **F1–F5**. Expanding a group only browses
+the choices. Selecting an option loads that topology on the live testbed;
+selecting a fault also injects it from the matching catalogue.
+
+Switching topology resets the previous fault, removes its baseline flows,
+stops Mininet and starts the selected topology with its baseline forwarding.
+ONOS stays running unless the existing start helper needs its normal recovery.
+Selecting an option on the already-running topology keeps it running and resets
+the old fault before applying the new choice. **Reset** clears the fault on the
+current topology. The agent updates its telemetry mappings and model tool
+allow-lists without a server restart. Changes cannot overlap a diagnosis or
+another network change. A failed setup blocks chat until a topology is reloaded.
+
+After the first accepted message, the model, thinking, topology and fault
+controls (including **Reset**) are locked for that conversation. **New
+conversation** unlocks them. Reopening a saved conversation restores its
+selections; if the shared network has since changed, start a new conversation
+to continue. Older chats without a recorded network remain available to read.
+
+Selections are saved as operator-only message metadata, without a database
+schema change. They are not sent in chat requests, included in provider history,
+or added to the system prompt. Describe a symptom; do not name the scenario.
+The network's ordinary configured facts remain available through telemetry.
+
+The tree uses the retained selector `tree5s8h` despite having seven switches.
+The testbed helper records the running topology in `mininet.ready`, and the
+agent also recognises the switch-port layout after a server/dev reload.
+The picker requires the existing Linux Mininet/OVS/ONOS installation and a root
+agent process; it does not install those dependencies. File preview offers the
+nested menus but cannot load a network. Ring/tree catalogue definitions remain
+draft pending their separate live verification.
+
+F2 also requires `tc` and `iperf3`; F4 requires `tc` for its safety limiter.
+On Fedora, install them with `sudo dnf install -y iproute-tc iperf3`.
+Injection checks these dependencies before writing pending fault state. If a
+previous failed injection left pending state, install the missing tools and
+retry the selection so normal reset can finish. A switching error naming the
+old topology may refer to cleanup of that topology, before the selected one is
+started. The UI now names the failing step and its error; the agent terminal
+contains bounded diagnostic output with configured secrets redacted.
 
 All five scenarios use the same loop, prompt and tools. Example symptom prompts,
 the evidence each fault exposes to the tools, and the operator-only expected
@@ -162,6 +199,7 @@ observations may be exported to that Logfire project.
 
 - `server.py`: routes and streamed turn lifecycle.
 - `fault_control.py`: operator F1–F5 load/reset for the UI (not an LLM tool).
+- `topology_control.py`: operator testbed switching and topology recognition.
 - `loop.py`: complete model/tool loop and measurements.
 - `tools.py`: tool adapter around `TelemetryGateway`, including `nmap`.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from topologies.active import DEVICE_IDS, HOSTS, SWITCHES
+from topologies import active
 
 from telemetry import envelope
 from telemetry.host_exec import HostExecError, run_in_host, start_in_host, terminate
@@ -84,12 +84,12 @@ class TelemetryGateway:
                 "configured_inter_switch_links": configured_links,
                 "host_attachments": attachments,
                 "summary": {
-                    "switches": len(SWITCHES),
+                    "switches": len(active.SWITCHES),
                     "observed_switches": len(devices),
                     "physical_inter_switch_links": len(observed_links),
                     "configured_inter_switch_links": len(configured_links),
                     "configured_host_attachments": len(attachments),
-                    "logical_hosts": len(HOSTS),
+                    "logical_hosts": len(active.HOSTS),
                     "total_physical_links": len(configured_links) + len(attachments),
                     "onos_host_discovery": "not_used",
                 },
@@ -102,7 +102,7 @@ class TelemetryGateway:
         tool = "get_port_status"
         try:
             switch = require_switch(sw)
-            ports = self._onos().device_ports(DEVICE_IDS[switch])
+            ports = self._onos().device_ports(active.DEVICE_IDS[switch])
             return envelope.ok(
                 tool,
                 {"switch": switch, "ports": normalize_ports(switch, ports)},
@@ -124,7 +124,7 @@ class TelemetryGateway:
                 delta = []
             data = normalize_port_stats(
                 switch,
-                DEVICE_IDS[switch],
+                active.DEVICE_IDS[switch],
                 first,
                 second,
                 self.stats_interval_sec,
@@ -164,7 +164,7 @@ class TelemetryGateway:
 
     def _port_enabled(self, switch: str, port: int) -> bool | None:
         try:
-            rows = normalize_ports(switch, self._onos().device_ports(DEVICE_IDS[switch]))
+            rows = normalize_ports(switch, self._onos().device_ports(active.DEVICE_IDS[switch]))
         except OnosError:
             return None
         for row in rows:
@@ -178,7 +178,7 @@ class TelemetryGateway:
         tool = "get_flow_table"
         try:
             switch = require_switch(sw)
-            flows = normalize_flows(switch, DEVICE_IDS[switch], self._onos().flows())
+            flows = normalize_flows(switch, active.DEVICE_IDS[switch], self._onos().flows())
             return envelope.ok(tool, {"switch": switch, "count": len(flows), "flows": flows})
         except Exception as exc:  # noqa: BLE001
             return self._fail(tool, exc)

@@ -200,7 +200,7 @@ def test_f2_fixed_tc_argv_mocked() -> None:
         directory = pathlib.Path(raw)
         with mock.patch.object(fault_state, "STATE_DIR", directory):
             with mock.patch.object(fault_state, "STATE_PATH", directory / "fault-state.json"):
-                with mock.patch.object(f2, "require_root"):
+                with mock.patch.object(f2, "require_root"), mock.patch.object(f2, "which"):
                     with mock.patch.object(
                         f2,
                         "validate_iface_bridge",
@@ -286,7 +286,7 @@ def test_f4_requires_safety_qdisc_mocked() -> None:
         directory = pathlib.Path(raw)
         with mock.patch.object(fault_state, "STATE_DIR", directory):
             with mock.patch.object(fault_state, "STATE_PATH", directory / "fault-state.json"):
-                with mock.patch.object(f4, "require_root"):
+                with mock.patch.object(f4, "require_root"), mock.patch.object(f4, "which"):
                     with mock.patch.object(f4, "list_experiment_flows", return_value=[]):
                         with mock.patch.object(
                             f4,
@@ -338,6 +338,31 @@ def test_fixed_argv_no_user_iface() -> None:
     assert "--rate" not in (ROOT / "faults" / "cli.py").read_text(encoding="utf-8")
 
 
+def test_missing_injection_tools_do_not_write_pending_state() -> None:
+    from faults import f2_congestion as f2, f4_loop as f4
+    from faults.common import FaultError
+
+    for module, scenario, command in ((f2, F2, 'tc'), (f2, F2, 'iperf3'), (f4, F4, 'tc')):
+        def executable(name):
+            if name == command:
+                raise FaultError('COMMAND_UNAVAILABLE', f'{name} is not available on PATH')
+            return '/usr/bin/' + name
+
+        with mock.patch.object(module, 'require_root'), \
+                mock.patch.object(module, 'which', side_effect=executable), \
+                mock.patch.object(module, 'write_state') as write, \
+                mock.patch.object(module, 'tc_replace_tbf') as shape:
+            try:
+                getattr(module, 'inject_' + scenario.scenario_id.lower())(scenario)
+            except FaultError as error:
+                assert error.code == 'COMMAND_UNAVAILABLE'
+                assert command in error.message
+            else:
+                raise AssertionError('injection accepted a missing required tool')
+            write.assert_not_called()
+            shape.assert_not_called()
+
+
 def main() -> int:
     checks = (
         test_catalogue_version_and_runnable,
@@ -360,6 +385,7 @@ def main() -> int:
         test_f4_requires_safety_qdisc_mocked,
         test_f5_ambiguous_rejected,
         test_fixed_argv_no_user_iface,
+        test_missing_injection_tools_do_not_write_pending_state,
     )
     failed = 0
     for check in checks:

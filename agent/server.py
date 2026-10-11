@@ -9,11 +9,13 @@ import logfire
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+from faults import state as fault_state
 
-from . import config, fault_control, store
+from . import config, topology_control, fault_control, store, tools
 from .loop import run
 
 busy = False
+network_changing = False
 DEV_STARTED = time.time_ns()
 
 
@@ -59,7 +61,7 @@ def dev_version():
     if not config.dev_mode():
         raise HTTPException(404, "Development reload is disabled")
     return {"version": f"{DEV_STARTED}:{(config.ROOT / 'index.html').stat().st_mtime_ns}",
-            "busy": busy}
+            "busy": busy or network_changing}
 
 
 @app.get("/api/conversations")
@@ -77,7 +79,30 @@ def conversation(cid: str):
     item = store.get(cid)
     if not item:
         raise HTTPException(404, "Conversation not found")
-    return {k: v for k, v in item.items() if k != "history"}
+    return {**{k: v for k, v in item.items() if k != "history"},
+            "settings": conversation_settings(item)}
+
+
+def conversation_settings(item: dict) -> dict | None:
+    """Operator-only metadata lives in message payloads, never provider history."""
+    for message in item["messages"]:
+        if message.get("settings"):
+            return message["settings"]
+    # Older chats have model statistics but no recorded network selection.
+    for message in item["messages"]:
+        stats = message.get("stats") or {}
+        if stats.get("model"):
+            return {"model": stats["model"], "effort": stats.get("effort")}
+    return None
+
+
+def network_settings() -> dict:
+    try:
+        active_fault = fault_state.active_state() or {}
+    except fault_state.StateError as exc:
+        raise HTTPException(409, "Cannot read the current fault state; reload the network.") from exc
+    return {"topology": topology_control.active.TOPOLOGY,
+            "scenario": active_fault.get("scenario_id")}
 
 
 @app.delete("/api/conversations/{cid}")
@@ -114,6 +139,49 @@ class ChatRequest(BaseModel):
 class LoadScenarioRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scenario: str = Field(min_length=2, max_length=2)
+    topology: str | None = None
+
+
+class LoadTopologyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topology: str
+
+
+async def change_network(function, *args):
+    """Reserve network access before yielding; finish cleanup on disconnect."""
+    global network_changing
+    if busy or network_changing:
+        raise HTTPException(409, "Wait for the current diagnosis or network change to finish")
+    network_changing = True
+    worker = asyncio.create_task(asyncio.to_thread(function, *args))
+    cancelled = False
+    try:
+        # As with diagnostic tool threads, cancellation cannot stop setup.
+        # Retain the reservation until it finishes, even after repeated cancels.
+        while not worker.done():
+            try:
+                await asyncio.sleep(.05)
+            except asyncio.CancelledError:
+                cancelled = True
+        if cancelled:
+            if not worker.cancelled():
+                worker.exception()  # Consume a setup error after disconnect.
+            raise asyncio.CancelledError
+        try:
+            return worker.result()
+        except RuntimeError as exc:
+            code = 503 if "root" in str(exc).lower() else 409
+            raise HTTPException(code, str(exc)) from exc
+    finally:
+        try:
+            tools.refresh_tools()
+        finally:
+            network_changing = False
+
+
+def require_topology(name: str | None) -> None:
+    if name is not None and name not in topology_control.active.SPECS:
+        raise HTTPException(422, "topology must be main6s8h, ring5s5h or tree5s8h")
 
 
 def _scenario_http(result: dict) -> dict:
@@ -129,26 +197,37 @@ def scenario_status():
     return fault_control.public_status()
 
 
+@app.post("/api/topology/load")
+async def topology_load(body: LoadTopologyRequest):
+    require_topology(body.topology)
+    def load():
+        topology_control.load_topology(body.topology)
+        return fault_control.reset_scenario()
+    return _scenario_http(await change_network(load))
+
+
 @app.post("/api/scenario/load")
 async def scenario_load(body: LoadScenarioRequest):
-    if busy:
-        raise HTTPException(409, "Stop the current turn before changing the scenario")
+    require_topology(body.topology)
     scenario = body.scenario.strip().upper()
     if scenario not in fault_control.RUNNABLE:
         raise HTTPException(422, "scenario must be F1–F5")
-    return _scenario_http(await asyncio.to_thread(fault_control.load_scenario, scenario))
+    args = (scenario,) if body.topology is None else (scenario, body.topology)
+    return _scenario_http(await change_network(fault_control.load_scenario, *args))
 
 
 @app.post("/api/scenario/reset")
 async def scenario_reset():
-    if busy:
-        raise HTTPException(409, "Stop the current turn before resetting the scenario")
-    return _scenario_http(await asyncio.to_thread(fault_control.reset_scenario))
+    return _scenario_http(await change_network(fault_control.reset_scenario))
 
 
 @app.post("/api/chat")
 async def chat(body: ChatRequest):
     global busy
+    if network_changing:
+        raise HTTPException(409, "Wait for the topology or fault change to finish")
+    if topology_control.error:
+        raise HTTPException(409, "Reload a topology before diagnosing: " + topology_control.error)
     if not app.state.client:
         raise HTTPException(503, "Configure Cloudflare credentials in the root .env and restart the server.")
     if not body.message.strip():
@@ -159,8 +238,15 @@ async def chat(body: ChatRequest):
     item = await asyncio.to_thread(store.get, body.conversation_id)
     if item is None:
         raise HTTPException(404, "Conversation not found")
-    if busy:
+    if busy or network_changing:
         raise HTTPException(409, "Another diagnostic turn is running. Wait for it to finish.")
+    # D1 lookup yielded: setup may have failed while the conversation was read.
+    if topology_control.error:
+        raise HTTPException(409, "Reload a topology before diagnosing: " + topology_control.error)
+    settings = {"model": body.model, "effort": body.effort, **network_settings()}
+    saved_settings = conversation_settings(item)
+    if item["messages"] and saved_settings != settings:
+        raise HTTPException(409, "This chat's settings or network differ. Start a new conversation to change them.")
     busy = True
 
     async def events():
@@ -170,6 +256,7 @@ async def chat(body: ChatRequest):
         history = [*item["history"], user]
         completed = False
         try:
+            yield "data: " + json.dumps({"type": "settings", "settings": settings}) + "\n\n"
             with logfire.span("chat turn", conversation_id=body.conversation_id) as span:
                 async for event in run(app.state.client, history, body.model, body.effort, state):
                     yield "data: " + json.dumps(event) + "\n\n"
@@ -194,7 +281,7 @@ async def chat(body: ChatRequest):
                 history = [*item["history"], user]
                 if state["content"]:
                     history.append({"role": "assistant", "content": state["content"]})
-            assistant = {"role": "assistant", **state}
+            assistant = {"role": "assistant", **state, "settings": settings}
             try:
                 await asyncio.to_thread(
                     store.save, body.conversation_id, user, assistant, history

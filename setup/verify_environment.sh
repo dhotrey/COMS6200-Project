@@ -153,6 +153,12 @@ else
   fail "iperf3 is not installed or not on PATH"
 fi
 
+if command -v tc >/dev/null 2>&1; then
+  pass "Traffic control (tc) is available for F2/F4 injection and reset"
+else
+  fail "tc is not installed or not on PATH (F2/F4 cannot be injected or reset)"
+fi
+
 if [[ "${EUID}" -eq 0 ]]; then
   SUDO=""
   info "Running as root; privileged commands will not use sudo"

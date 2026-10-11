@@ -333,7 +333,8 @@
         box-shadow: 0 8px 28px #0002;
       }
       .selector-option,
-      .model-deprecated > summary {
+      .model-deprecated > summary,
+      .topology-group > summary {
         width: 100%;
         border: 0;
         border-radius: 7px;
@@ -351,7 +352,8 @@
       }
       .selector-option:hover:not(:disabled),
       .selector-option[aria-pressed="true"],
-      .model-deprecated > summary:hover {
+      .model-deprecated > summary:hover,
+      .topology-group > summary:hover {
         background: var(--soft);
       }
       .model-deprecated {
@@ -361,6 +363,18 @@
       }
       .model-deprecated .selector-option {
         padding-left: 22px;
+      }
+      .topology-group + .topology-group {
+        border-top: 1px solid var(--line);
+        margin-top: 4px;
+        padding-top: 4px;
+      }
+      .topology-group .selector-option { padding-left: 22px; }
+      .topology-description {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 3px;
       }
       .banner {
         padding: 10px 30px;
@@ -855,10 +869,10 @@
           </div>
         </header>
         <section class="scenario-picker" aria-label="Fault scenario controls">
-          <span id="scenario-label">Fault scenario</span>
+          <span id="scenario-label">Network</span>
           <details class="selector-picker" id="scenario-picker">
-            <summary id="scenario-trigger" aria-labelledby="scenario-label scenario-name" aria-describedby="scenario-note"><span id="scenario-name">Choose a scenario…</span></summary>
-            <div class="selector-menu" id="scenario-menu" role="group" aria-label="Fault scenarios"></div>
+            <summary id="scenario-trigger" aria-labelledby="scenario-label scenario-name" aria-describedby="scenario-note"><span id="scenario-name">Choose a topology…</span></summary>
+            <div class="selector-menu" id="scenario-menu" role="group" aria-label="Topologies and fault scenarios"></div>
           </details>
           <select id="scenario" hidden>
             <option value="" disabled selected>Choose a scenario…</option>
@@ -866,10 +880,10 @@
             <option value="F2">F2 · Congestion</option>
             <option value="F3">F3 · ACL / policy error</option>
             <option value="F4">F4 · Forwarding loop</option>
-            <option value="F5">F5 · Missing / incorrect flow rule</option>
+            <option value="F5">F5 · Missing forwarding rule</option>
           </select>
           <button type="button" id="reset-scenario">Reset</button>
-          <p id="scenario-note">Selecting a scenario loads it onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.</p>
+          <p id="scenario-note">Choose a topology and fault before sending a message. Settings lock when the chat starts; use New conversation to change them.</p>
         </section>
         <div class="banner" id="banner" hidden role="status"></div>
         <section class="timeline" id="timeline" aria-label="Chat messages">
@@ -922,6 +936,48 @@
         busy = false,
         controller = null,
         loading = false;
+      let scenarioTopology = "main6s8h";
+      let topologies = [
+        { id: "main6s8h", label: "Main", description: "6 switches · 8 hosts" },
+        { id: "ring5s5h", label: "Ring", description: "5 switches · 5 hosts" },
+        { id: "tree5s8h", label: "Tree", description: "7 switches · 8 hosts" },
+      ];
+      let networkError = false;
+      let chatStarted = false;
+      let chatSettings = null;
+      let liveNetwork = null;
+      function settingsLocked() {
+        return busy || loading || chatStarted;
+      }
+      function networkMismatch() {
+        return chatStarted && (!chatSettings?.topology || !liveNetwork ||
+          chatSettings.topology !== liveNetwork.topology ||
+          (chatSettings.scenario || null) !==
+            (liveNetwork.active ? liveNetwork.scenario_id : null));
+      }
+      function restoreChatSettings(data) {
+        chatStarted = Boolean(data.messages?.length);
+        chatSettings = data.settings || null;
+        if (chatSettings?.model) {
+          if (!Array.from($("model").options).some(o => o.value === chatSettings.model)) {
+            const option = node("option", "", chatSettings.model);
+            option.value = chatSettings.model;
+            $("model").append(option);
+          }
+          $("model").value = chatSettings.model;
+          updateModel();
+          if (chatSettings.effort) {
+            if (!Array.from($("effort").options).some(o => o.value === chatSettings.effort)) {
+              const option = node("option", "", chatSettings.effort);
+              option.value = chatSettings.effort;
+              $("effort").append(option);
+            }
+            $("effort").value = chatSettings.effort;
+            updatePicker("effort");
+          }
+        }
+        showScenario(liveNetwork);
+      }
       function node(tag, className, text) {
         const el = document.createElement(tag);
         if (className) el.className = className;
@@ -951,8 +1007,9 @@
       function lock(value) {
         busy = value;
         for (const id of ["model", "effort", "scenario"]) {
-          if (value || loading) $(id + "-picker").open = false;
-          $(id + "-trigger").setAttribute("aria-disabled", String(value || loading));
+          if (settingsLocked()) $(id + "-picker").open = false;
+          $(id + "-trigger").setAttribute("aria-disabled", String(settingsLocked()));
+          $(id + "-trigger").title = chatStarted ? "Start a new conversation to change settings" : "";
         }
         document
           .querySelectorAll(
@@ -960,15 +1017,15 @@
           )
           .forEach((el) => {
             if (el.classList.contains("rename") || el.id === "sidebar-toggle") return;
-            el.disabled = value || loading;
+            el.disabled = el.closest(".sidebar") ? value || loading : settingsLocked();
           });
         $("send").hidden = value;
         $("stop").hidden = !value;
-        $("send").disabled = loading || !config?.configured;
+        $("send").disabled = loading || networkError || networkMismatch() || !config?.configured;
         $("input").disabled = loading;
         $("status").textContent = value
           ? "Investigating…"
-          : "Ready to investigate";
+          : networkMismatch() ? "Start a new conversation" : "Ready to investigate";
       }
       function escapeHtml(value) {
         return String(value).replace(/[&<>"']/g, (ch) =>
@@ -1378,7 +1435,10 @@
               });
               if (currentId === item.id) {
                 currentId = null;
+                chatStarted = false;
+                chatSettings = null;
                 empty();
+                await refreshScenario();
               }
               await list();
             } catch (e) {
@@ -1402,6 +1462,9 @@
             `/api/conversations/${encodeURIComponent(id)}`,
           );
           currentId = id;
+          await refreshScenario();
+          restoreChatSettings(data);
+          notice("");
           empty();
           for (const saved of data.messages || []) {
             const view = message(saved.role, saved.content || "");
@@ -1434,6 +1497,17 @@
         updatePicker("effort");
       }
       function updatePicker(id) {
+        if (id === "scenario") {
+          const topology = topologies.find(t => t.id === scenarioTopology);
+          const fault = $("scenario").value;
+          $("scenario-name").textContent = (topology?.label || "Network") +
+            " · " + (fault || "No fault");
+          for (const button of $("scenario-menu").querySelectorAll(".selector-option"))
+            button.setAttribute("aria-pressed", String(
+              button.dataset.topology === scenarioTopology && button.dataset.value === fault,
+            ));
+          return;
+        }
         $(id + "-name").textContent = $(id).selectedOptions[0]?.text || "Choose an option";
         for (const button of $(id + "-menu").querySelectorAll(".selector-option"))
           button.setAttribute("aria-pressed", String(button.dataset.value === $(id).value));
@@ -1443,7 +1517,7 @@
         button.type = "button";
         button.dataset.value = value;
         button.onclick = () => {
-          if (busy || loading) return;
+          if (settingsLocked()) return;
           $(id).value = value;
           $(id + "-picker").open = false;
           $(id + "-trigger").focus();
@@ -1479,7 +1553,7 @@
       for (const id of ["model", "effort", "scenario"]) {
         const picker = $(id + "-picker"), trigger = $(id + "-trigger");
         trigger.onclick = (event) => {
-          if (busy || loading) event.preventDefault();
+          if (settingsLocked()) event.preventDefault();
         };
         picker.onkeydown = (event) => {
           if (event.key === "Escape") {
@@ -1496,17 +1570,72 @@
         });
       }
       const scenarioHint =
-        "Selecting a scenario loads it onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
+        "Choose a topology and fault before sending a message. Settings lock when the chat starts; use New conversation to change them.";
+      function renderScenarios() {
+        $("scenario-menu").replaceChildren();
+        for (const topology of topologies) {
+          const group = node("details", "topology-group");
+          group.dataset.topology = topology.id;
+          const title = node("span", "", topology.label);
+          title.append(node("small", "topology-description", topology.description));
+          const summary = node("summary");
+          summary.setAttribute("aria-label", topology.label + " · " + topology.description);
+          summary.append(title);
+          summary.onclick = (event) => {
+            if (settingsLocked()) event.preventDefault();
+          };
+          group.append(summary);
+          const options = [{ value: "", text: "Healthy · No fault" },
+            ...Array.from($("scenario").options).filter(option => !option.disabled)];
+          for (const option of options) {
+            const button = node("button", "selector-option", option.text);
+            button.type = "button";
+            button.dataset.topology = topology.id;
+            button.dataset.value = option.value;
+            button.onclick = () => loadNetwork(topology.id, option.value);
+            group.append(button);
+          }
+          group.addEventListener("toggle", () => {
+            if (!group.open) return;
+            for (const other of $("scenario-menu").querySelectorAll(".topology-group"))
+              if (other !== group) other.open = false;
+          });
+          $("scenario-menu").append(group);
+        }
+      }
       function showScenario(status) {
+        liveNetwork = status;
+        if (chatStarted) {
+          if (chatSettings?.topology) {
+            scenarioTopology = chatSettings.topology;
+            $("scenario").value = chatSettings.scenario || "";
+            updatePicker("scenario");
+          } else {
+            $("scenario-name").textContent = "Network not recorded";
+          }
+          networkError = Boolean(status?.network_error);
+          $("scenario-note").textContent =
+            "Model, thinking, topology and fault are locked for this chat. " +
+            (networkMismatch() ? "The current network differs or was not recorded. Start a new conversation to continue." :
+              "Use New conversation to change them.");
+          return;
+        }
         if (!status) {
           $("scenario-note").textContent = scenarioHint;
           return;
         }
+        if (status.topologies) {
+          topologies = status.topologies;
+          renderScenarios();
+        }
+        scenarioTopology = status.topology || scenarioTopology;
+        networkError = Boolean(status.network_error);
+        const name = topologies.find(t => t.id === scenarioTopology)?.label || scenarioTopology;
         if (status.active && status.scenario_id) {
           $("scenario").value = status.scenario_id;
           updatePicker("scenario");
           $("scenario-note").textContent =
-            "Network has " +
+            name + " has " +
             status.scenario_id +
             " active (operator view only). " +
             scenarioHint;
@@ -1515,30 +1644,37 @@
         $("scenario").value = "";
         updatePicker("scenario");
         $("scenario-note").textContent =
-          (status.error ? status.error + " " : "No catalogue fault is active. ") +
+          (status.network_error || status.error ||
+            (status.running ? name + ": no catalogue fault is active." : name + " is not running.")) + " " +
           scenarioHint;
       }
       async function refreshScenario() {
         if (location.protocol === "file:") return;
         showScenario(await api("/api/scenario"));
       }
-      $("scenario").onchange = async () => {
-        const scenario = $("scenario").value;
-        if (!scenario || busy || loading) return;
-        updatePicker("scenario");
+      async function loadNetwork(topology, scenario) {
+        if (settingsLocked()) return;
+        $("scenario-picker").open = false;
+        $("scenario-trigger").focus();
+        if (location.protocol === "file:") {
+          notice("Preview only. Start the agent server to load a topology or fault.");
+          return;
+        }
         loading = true;
         lock(false);
+        const name = topologies.find(t => t.id === topology)?.label || topology;
+        $("scenario-note").textContent = "Loading " + name +
+          (scenario ? " · " + scenario : " · Healthy") + "…";
         try {
-          const status = await api("/api/scenario/load", {
+          const status = await api(scenario ? "/api/scenario/load" : "/api/topology/load", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scenario }),
+            body: JSON.stringify(scenario ? { topology, scenario } : { topology }),
           });
           showScenario(status);
           notice(
-            "Loaded " +
-              scenario +
-              " on the network. The assistant is not told the scenario id — describe a symptom. Start a new conversation for a clean run.",
+            "Loaded " + name + (scenario ? " · " + scenario : " · Healthy") +
+              ". Describe a symptom and start a new conversation for a clean run.",
           );
         } catch (e) {
           // A failed injection may have reset the previous fault; show live state.
@@ -1553,9 +1689,10 @@
           loading = false;
           lock(false);
         }
-      };
+      }
+      $("scenario").onchange = () => loadNetwork(scenarioTopology, $("scenario").value);
       $("reset-scenario").onclick = async () => {
-        if (busy || loading) return;
+        if (settingsLocked()) return;
         loading = true;
         lock(false);
         try {
@@ -1570,21 +1707,36 @@
             "Catalogue fault reset. Start a new conversation so old tool results are not reused.",
           );
         } catch (e) {
+          try { await refreshScenario(); } catch { /* Keep the last known state. */ }
           notice(e.message, true);
         } finally {
           loading = false;
           lock(false);
         }
       };
-      $("new").onclick = () => {
+      $("new").onclick = async () => {
         if (busy || loading) return;
+        loading = true;
         currentId = null;
+        chatStarted = false;
+        chatSettings = null;
         empty();
+        notice("");
+        lock(false);
         document
           .querySelectorAll(".conversation")
           .forEach((el) => el.classList.remove("active"));
         $("input").value = "";
-        $("input").focus();
+        try {
+          await refreshScenario();
+        } catch (e) {
+          networkError = true;
+          notice(e.message, true);
+        } finally {
+          loading = false;
+          lock(false);
+          $("input").focus();
+        }
       };
       $("stop").onclick = () => controller?.abort();
       $("input").onkeydown = (event) => {
@@ -1596,7 +1748,7 @@
       $("composer").onsubmit = async (event) => {
         event.preventDefault();
         const text = $("input").value.trim();
-        if (!text || busy || loading || !config?.configured) return;
+        if (!text || busy || loading || networkError || networkMismatch() || !config?.configured) return;
         lock(true);
         controller = new AbortController();
         const signal = controller.signal;
@@ -1637,6 +1789,11 @@
           }
           if (!response.body)
             throw new Error("Streaming is unavailable in this browser.");
+          chatStarted = true;
+          chatSettings ||= { model: $("model").value, effort: $("effort").value,
+            topology: scenarioTopology, scenario: $("scenario").value || null };
+          notice("");
+          showScenario(liveNetwork);
           const reader = response.body.getReader(),
             decoder = new TextDecoder();
           let buffer = "",
@@ -1649,7 +1806,11 @@
               .join("\n");
             if (!raw) return;
             const data = JSON.parse(raw);
-            if (data.type === "text") {
+            if (data.type === "settings") {
+              chatSettings = data.settings;
+              showScenario(liveNetwork);
+            }
+            else if (data.type === "text") {
               view.raw += data.text;
               renderBody(view);
             }
@@ -1699,6 +1860,11 @@
         } finally {
           controller = null;
           try {
+            await refreshScenario();
+            if (currentId) {
+              const saved = await api(`/api/conversations/${encodeURIComponent(currentId)}`);
+              if (saved.messages?.length) restoreChatSettings(saved);
+            }
             await list();
           } catch (e) {
             notice(e.message, true);
@@ -1729,11 +1895,7 @@
       (async () => {
         empty();
         renderModels();
-        $("scenario-menu").replaceChildren(
-          ...Array.from($("scenario").options)
-            .filter(option => !option.disabled)
-            .map(option => pickerOption("scenario", option.value, option.text)),
-        );
+        renderScenarios();
         updatePicker("scenario");
         if (location.protocol === "file:") {
           notice("Preview only. From the repository root, run uv run --project agent python -m agent, then open http://127.0.0.1:8000 to chat.");

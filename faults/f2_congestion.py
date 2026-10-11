@@ -15,6 +15,7 @@ from faults.common import (
     tc_replace_tbf,
     tc_show,
     validate_iface_bridge,
+    which,
 )
 from faults.scenarios import CongestionScenario, host_ip
 from faults.state import clear_state, utc_now, write_state
@@ -73,6 +74,9 @@ def _kill_tracked(pids: list[int]) -> None:
 
 def inject_f2(scenario: CongestionScenario) -> dict[str, Any]:
     require_root()
+    # Check dependencies before writing PENDING state or changing a queue.
+    which("tc")
+    which("iperf3")
     iface = scenario.shape_iface
     row = validate_iface_bridge(iface, scenario.shape_switch)
     if row["operstate"] != "up":
