@@ -79,6 +79,8 @@ def test_missing_credentials_and_conversation_crud(client):
     assert cfg["configured"] is False
     assert cfg["default_model"] == cfg["models"][0]["id"] == "gpt-6.1-sol"
     assert cfg["default_effort"] == cfg["models"][0]["efforts"][0] == "low"
+    mini = next(m for m in cfg["models"] if m["id"] == "gpt-4.1-mini")
+    assert mini["efforts"] == ["none"] and not mini.get("deprecated")
     assert cfg["max_tool_calls"] == 14
     assert cfg["max_turn_seconds"] == 300
     assert cfg["tool_delay_min_seconds"] == 0
@@ -103,6 +105,7 @@ def test_missing_credentials_and_conversation_crud(client):
     ("gpt-5.6-luna", "medium"),
     ("gpt-6.1-sol", "medium"),
     ("gpt-6-luna", "none"),
+    ("gpt-4.1-mini", "none"),
 ])
 def test_completed_turn_persists_text_and_statistics(client, monkeypatch, model, effort):
     seen = []
@@ -133,11 +136,15 @@ def test_completed_turn_persists_text_and_statistics(client, monkeypatch, model,
     server.app.state.client = None
 
 
-def test_sol_rejects_unsupported_none_effort(client, monkeypatch):
+@pytest.mark.parametrize("model,effort", [
+    ("gpt-6.1-sol", "none"),
+    ("gpt-4.1-mini", "medium"),
+])
+def test_rejects_unsupported_effort(client, monkeypatch, model, effort):
     monkeypatch.setattr(server.app.state, "client", object())
     cid = client.post("/api/conversations").json()["id"]
     result = client.post("/api/chat", json={
-        **body(cid), "model": "gpt-6.1-sol", "effort": "none",
+        **body(cid), "model": model, "effort": effort,
     })
     assert result.status_code == 422
     assert store.get(cid)["messages"] == []
@@ -205,6 +212,7 @@ def test_model_catalogue_groups_legacy_models(client):
     models = client.get("/api/config").json()["models"]
     assert [m["id"] for m in models if not m.get("deprecated")] == [
         "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+        "gpt-4.1-mini",
     ]
     assert {m["id"] for m in models if m.get("deprecated")} == {
         "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol",

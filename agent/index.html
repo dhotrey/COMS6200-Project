@@ -594,10 +594,21 @@
       .tool-panel[hidden] {
         display: none !important;
       }
-      details.metrics-requests {
+      .diagnostics {
+        margin-top: 6px;
+        color: var(--muted);
+        font: 11px/1.8 ui-monospace, monospace;
+      }
+      details.diagnostic-group {
         border: 0;
         background: transparent;
-        font-size: 12px;
+        margin-top: 4px;
+      }
+      .diagnostic-group > summary {
+        width: fit-content;
+      }
+      .diagnostic-group > summary:hover {
+        color: var(--accent);
       }
       summary {
         cursor: pointer;
@@ -855,6 +866,7 @@
               <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
               <option value="gpt-6-luna">GPT-6 Luna</option>
               <option value="gpt-6-astra">GPT-6 Astra</option>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
               <option value="gpt-5.6-luna" data-deprecated="true">GPT-5.6 Luna</option>
               <option value="gpt-5.6-terra" data-deprecated="true">GPT-5.6 Terra</option>
               <option value="gpt-5.6-sol" data-deprecated="true">GPT-5.6 Sol</option>
@@ -927,7 +939,8 @@
             id: option.value,
             label: option.text,
             deprecated: option.dataset.deprecated === "true",
-            efforts: ["gpt-6-astra", "gpt-6.1-sol"].includes(option.value)
+            efforts: option.value === "gpt-4.1-mini" ? ["none"]
+              : ["gpt-6-astra", "gpt-6.1-sol"].includes(option.value)
               ? ["low", "medium", "high", "xhigh", "max"]
               : ["none", "low", "medium", "high", "xhigh", "max"],
           })),
@@ -1163,6 +1176,21 @@
         if (el.scrollHeight - el.scrollTop - el.clientHeight < 180)
           el.scrollTop = el.scrollHeight;
       }
+      function scenarioPrompt() {
+        // Symptom-only prompts shared by the three topology judge rubrics.
+        const prompts = {
+          F1: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F2: "Transfers from h1 to h5 are very slow. Investigate and localise the cause.",
+          F3: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F4: "h1 can no longer reach h5. Diagnose and localise the fault.",
+          F5: "h1 and h2 can no longer reach h5. Diagnose and localise the fault.",
+        };
+        return prompts[$("scenario").value] || "Help me investigate a connectivity issue";
+      }
+      function updateScenarioSuggestion() {
+        const suggestion = $("scenario-suggestion");
+        if (suggestion) suggestion.textContent = scenarioPrompt();
+      }
       function empty() {
         $("messages").replaceChildren();
         const el = node("div", "empty");
@@ -1177,13 +1205,14 @@
           ),
         );
         const suggestions = node("div", "suggestions");
-        for (const text of [
-          "Inspect the network topology",
-          "Help me investigate a connectivity issue",
+        for (const [id, prompt] of [
+          ["topology-suggestion", () => "Inspect the network topology"],
+          ["scenario-suggestion", scenarioPrompt],
         ]) {
-          const b = node("button", "", text);
+          const b = node("button", "", prompt());
+          b.id = id;
           b.onclick = () => {
-            $("input").value = text;
+            $("input").value = prompt();
             $("input").focus();
           };
           suggestions.append(b);
@@ -1196,15 +1225,23 @@
         const el = node("article", `message ${role}`),
           body = node("div", role === "user" ? "body" : "body md"),
           tools = node("div", "tools"),
-          metrics = node("div", "metrics");
+          metrics = node("div", "metrics"),
+          diagnostics = node("div", "diagnostics"),
+          toolDetails = node("details", "diagnostic-group tool-history"),
+          toolSummary = node("summary", "", "Tool calls");
+        toolDetails.hidden = true;
+        diagnostics.hidden = true;
+        toolDetails.append(toolSummary, tools);
+        diagnostics.append(toolDetails);
         el.append(
           node("div", "role", role === "user" ? "You" : "Network assistant"),
           body,
-          tools,
           metrics,
+          diagnostics,
         );
         $("messages").append(el);
-        const view = { el, body, tools, metrics, calls: new Map(), raw: text };
+        const view = { el, body, tools, metrics, diagnostics, toolDetails, toolSummary,
+          calls: new Map(), raw: text };
         renderBody(view);
         return view;
       }
@@ -1224,16 +1261,21 @@
             args = node("pre"),
             result = node("pre");
           chip.type = "button";
+          chip.setAttribute("aria-expanded", "false");
           panel.hidden = true;
           panel.append(args, result);
           wrap.append(chip, panel);
           chip.onclick = () => {
             wrap.classList.toggle("open");
             panel.hidden = !wrap.classList.contains("open");
+            chip.setAttribute("aria-expanded", String(!panel.hidden));
           };
           view.tools.append(wrap);
           entry = { wrap, chip, args, result, name: data.name || "Tool" };
           view.calls.set(id, entry);
+          view.toolDetails.hidden = false;
+          view.diagnostics.hidden = false;
+          view.toolSummary.textContent = `${view.calls.size} tool call${view.calls.size === 1 ? "" : "s"}`;
         }
         if (data.name) entry.name = data.name;
         if (data.arguments !== undefined)
@@ -1282,8 +1324,9 @@
             );
           }
         if (data.requests?.length) {
-          const details = node("details", "metrics-requests");
-          details.style.width = "100%";
+          const details = view.requests || node("details", "diagnostic-group metrics-requests");
+          view.requests = details;
+          details.replaceChildren();
           details.append(
             node(
               "summary",
@@ -1308,7 +1351,8 @@
             row.append(metrics);
             details.append(row);
           }
-          view.metrics.append(details);
+          (view.diagnostics || view.metrics).append(details);
+          if (view.diagnostics) view.diagnostics.hidden = false;
         }
       }
       function startRename(row, item, choose) {
@@ -1506,6 +1550,7 @@
             button.setAttribute("aria-pressed", String(
               button.dataset.topology === scenarioTopology && button.dataset.value === fault,
             ));
+          updateScenarioSuggestion();
           return;
         }
         $(id + "-name").textContent = $(id).selectedOptions[0]?.text || "Choose an option";

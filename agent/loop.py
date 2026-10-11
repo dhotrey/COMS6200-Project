@@ -7,12 +7,13 @@ import time
 
 import logfire
 
-from .config import PRICES, ROOT
+from .config import MODELS, PRICES, ROOT
 from .limits import runtime_limits
 from .tools import TOOLS, execute_tool
 
 
 async def run(client, history, model, effort, state):
+    supports_reasoning = next((m for m in MODELS if m["id"] == model), {}).get("reasoning", True)
     started = time.perf_counter()
     prompt = (ROOT / "prompt.md").read_text()
     stats = state["stats"]
@@ -38,12 +39,15 @@ async def run(client, history, model, effort, state):
                     if max_tokens > 0:
                         output_limit = min(8192, max(1, max_tokens - stats["total_tokens"]))
                     payload = {
-                        "model": model, "reasoning": {"effort": effort}, "instructions": prompt,
+                        "model": model, "instructions": prompt,
                         "input": history, "tools": TOOLS, "parallel_tool_calls": False, "store": False,
-                        "include": ["reasoning.encrypted_content"], "stream": True,
+                        "stream": True,
                         "tool_choice": "none" if stats["tool_calls"] >= max_calls else "auto",
                         "max_output_tokens": output_limit,
                     }
+                    if supports_reasoning:
+                        payload["reasoning"] = {"effort": effort}
+                        payload["include"] = ["reasoning.encrypted_content"]
                     async for event in client.stream_events(payload):
                         if event.get("type") in ("response.output_text.delta", "response.refusal.delta"):
                             if stats["first_token_seconds"] is None:
@@ -67,7 +71,7 @@ async def run(client, history, model, effort, state):
                         for key in ("input_tokens", "output_tokens", "cached_tokens", "reasoning_tokens", "total_tokens"):
                             stats[key] += record[key]
                         inp, cache, out = PRICES[model]
-                        if record["input_tokens"] > 272000:
+                        if model != "gpt-4.1-mini" and record["input_tokens"] > 272000:
                             inp, cache, out = inp * 2, cache * 2, out * 1.5
                         stats["cost_usd"] += ((record["input_tokens"]-cached)*inp + cached*cache + record["output_tokens"]*out)/1e6
                     else:

@@ -32,6 +32,7 @@ MODELS = [
     {"id": "gpt-6.1-sol", "label": "GPT-6.1 Sol", "efforts": EFFORTS[1:]},
     {"id": "gpt-6-luna", "label": "GPT-6 Luna", "efforts": EFFORTS},
     {"id": "gpt-6-astra", "label": "GPT-6 Astra", "efforts": EFFORTS[1:]},
+    {"id": "gpt-4.1-mini", "label": "GPT-4.1 Mini", "efforts": ["none"], "reasoning": False},
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": EFFORTS, "deprecated": True},
     {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "efforts": EFFORTS, "deprecated": True},
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "efforts": EFFORTS, "deprecated": True},
@@ -41,6 +42,7 @@ PRICES = {"gpt-5.6-luna": (.2, .02, 1.2), "gpt-5.6-terra": (2, .2, 12),
           "gpt-5.6-sol": (4, .4, 20), "gpt-6-astra": (10, 1, 50)}
 # New model Standard prices reviewed 2026-10-11 against the OpenAI model pages.
 PRICES.update({"gpt-6.1-sol": (2, .1, 10), "gpt-6-luna": (.1, .01, .5)})
+PRICES["gpt-4.1-mini"] = (.4, .1, 1.6)
 
 
 def dev_mode():

@@ -46,6 +46,7 @@ class FakeClient:
     ("gpt-5.6-luna", (.2, .02, 1.2)),
     ("gpt-6.1-sol", (2, .1, 10)),
     ("gpt-6-luna", (.1, .01, .5)),
+    ("gpt-4.1-mini", (.4, .1, 1.6)),
 ])
 def test_multiround_usage_and_tool_pairing(monkeypatch, model, prices):
     async def execute(name, arguments):
@@ -57,7 +58,8 @@ def test_multiround_usage_and_tool_pairing(monkeypatch, model, prices):
     state = {"content": "", "tools": [], "stats": {}}
 
     async def collect():
-        return [event async for event in loop.run(client, history, model, "medium", state)]
+        effort = "none" if model == "gpt-4.1-mini" else "medium"
+        return [event async for event in loop.run(client, history, model, effort, state)]
 
     events = asyncio.run(collect())
     stats = state["stats"]
@@ -66,6 +68,12 @@ def test_multiround_usage_and_tool_pairing(monkeypatch, model, prices):
     inp, cached, out = prices
     assert stats["cost_usd"] == pytest.approx((25 * inp + 5 * cached + 12 * out) / 1e6)
     assert all(request["model"] == model for request in client.requests)
+    for request in client.requests:
+        if model == "gpt-4.1-mini":
+            assert "reasoning" not in request and "include" not in request
+        else:
+            assert request["reasoning"] == {"effort": "medium"}
+            assert request["include"] == ["reasoning.encrypted_content"]
     assert stats["model_calls"] == 2 and stats["tool_calls"] == 1
     assert len(stats["requests"]) == 2 and stats["duration_seconds"] >= 0
     assert stats["first_token_seconds"] is not None
@@ -74,6 +82,17 @@ def test_multiround_usage_and_tool_pairing(monkeypatch, model, prices):
     assert observation["call_id"] == "call-1"
     assert json.loads(observation["output"]) == {"ok": True, "data": {"switches": []}, "error": None}
     assert [e["type"] for e in events] == ["tool_start", "tool_end", "stats", "text"]
+
+
+def test_mini_long_context_keeps_standard_prices():
+    client = FakeClient(response(message("Done"), tokens=(300000, 7, 10000, 0)))
+    state = {"content": "", "tools": [], "stats": {}}
+
+    async def collect():
+        return [event async for event in loop.run(client, [], "gpt-4.1-mini", "none", state)]
+
+    asyncio.run(collect())
+    assert state["stats"]["cost_usd"] == pytest.approx((290000 * .4 + 10000 * .1 + 7 * 1.6) / 1e6)
 
 
 def test_tool_budget_never_executes_excess_calls(monkeypatch):
