@@ -60,6 +60,7 @@
       select:focus-visible,
       textarea:focus-visible,
       input:focus-visible,
+      .benchmark-link:focus-visible,
       summary:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 3px;
@@ -247,11 +248,26 @@
       .topbar {
         padding: 18px 30px;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 16px;
         border-bottom: 1px solid var(--line);
         background: var(--panel);
+      }
+      .benchmark-link {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px 12px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .benchmark-link:hover {
+        border-color: var(--accent);
       }
       .workspace-title {
         font-weight: 600;
@@ -707,6 +723,49 @@
         font-size: 12px;
       }
       #scenario-label { font-weight: 600; }
+      .evaluation-card {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        font-size: 13px;
+      }
+      .evaluation-line { display: flex; align-items: center; gap: 9px; margin: 6px 0; }
+      .evaluation-criteria { margin: 6px 0 12px; color: var(--muted); }
+      .verdict-symbol { font-size: 20px; line-height: 1; font-weight: 700; }
+      .verdict-symbol.correct { color: #27a76e; }
+      .verdict-symbol.incorrect { color: #e15454; }
+      .verdict-symbol.partially_correct { color: #ed9439; }
+      .verdict-symbol.mostly_correct { color: #d2b333; }
+      .evaluation-spinner {
+        display: inline-block; width: 15px; height: 15px; flex-shrink: 0;
+        border: 2px solid var(--line); border-top-color: var(--accent);
+        border-radius: 50%; animation: evaluation-spin .8s linear infinite;
+      }
+      @keyframes evaluation-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .evaluation-spinner { animation: none; } }
+      .evaluation-details { color: var(--muted); font-size: 11px; margin-top: 12px; }
+      .evaluation-details pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .layout.evaluation-open {
+        grid-template-columns: var(--sidebar-width, 244px) 5px minmax(0, 1fr) minmax(320px, 410px);
+      }
+      .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 56px 0 minmax(0, 1fr) minmax(320px, 410px); }
+      .evaluation-panel {
+        grid-column: 4; min-width: 0; min-height: 0; overflow: auto;
+        border-left: 1px solid var(--line); background: var(--panel); padding: 22px;
+      }
+      .evaluation-panel[hidden] { display: none; }
+      .evaluation-panel header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+      .evaluation-panel h2 { margin: 0; font-size: 18px; }
+      .evaluation-panel .md { font-size: 13px; overflow-wrap: anywhere; }
+      .evaluation-panel .evaluation-notice { font-size: 12px; color: var(--muted); margin: 8px 0 20px; }
+      @media (max-width: 1050px) {
+        .layout.evaluation-open { grid-template-columns: var(--sidebar-width, 244px) 5px minmax(0, 1fr); }
+        .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 56px 0 minmax(0, 1fr); }
+        .evaluation-panel { position: fixed; z-index: 30; right: 0; top: 0; height: 100dvh;
+          width: min(100vw, 410px); box-shadow: -12px 0 40px #0003; }
+      }
       .scenario-picker .selector-picker > summary {
         max-width: 100%;
       }
@@ -730,6 +789,7 @@
         .layout.sidebar-collapsed {
           grid-template-columns: 1fr;
         }
+        .layout.evaluation-open, .layout.sidebar-collapsed.evaluation-open { grid-template-columns: 1fr; }
         main {
           grid-column: 1;
         }
@@ -856,6 +916,7 @@
               An assistant for understanding your network
             </div>
           </div>
+          <a class="benchmark-link" href="/results.html">Benchmarks / Evals →</a>
           <div class="selectors">
             <div class="selector-field"><span id="model-label">Model</span>
             <details class="selector-picker" id="model-picker">
@@ -923,6 +984,14 @@
           </p>
         </div>
       </main>
+      <aside class="evaluation-panel" id="evaluation-panel" hidden aria-labelledby="evaluation-title">
+        <header>
+          <div><div class="eyebrow">LLM-as-judge</div><h2 id="evaluation-title">Evaluation explanation</h2></div>
+          <button id="evaluation-close" type="button" aria-label="Close evaluation panel">×</button>
+        </header>
+        <p class="evaluation-notice">Separate from the diagnosis chat. This assessment and explanation are never sent to the diagnosing agent.</p>
+        <div id="evaluation-content"></div>
+      </aside>
     </div>
     <div class="chat-tooltip" id="chat-tooltip" role="tooltip" hidden>
       <span class="eyebrow">Last updated</span>
@@ -959,6 +1028,18 @@
       let chatStarted = false;
       let chatSettings = null;
       let liveNetwork = null;
+      let activeEvaluationView = null;
+      const evaluationSymbols = { correct: "✓", mostly_correct: "●", partially_correct: "●", incorrect: "✕" };
+      function closeEvaluation() {
+        $("evaluation-panel").hidden = true;
+        document.querySelector(".layout").classList.remove("evaluation-open");
+        activeEvaluationView?.explainButton?.focus();
+        activeEvaluationView = null;
+      }
+      $("evaluation-close").onclick = closeEvaluation;
+      $("evaluation-panel").onkeydown = event => {
+        if (event.key === "Escape") closeEvaluation();
+      };
       function settingsLocked() {
         return busy || loading || chatStarted;
       }
@@ -1192,6 +1273,7 @@
         if (suggestion) suggestion.textContent = scenarioPrompt();
       }
       function empty() {
+        closeEvaluation();
         $("messages").replaceChildren();
         const el = node("div", "empty");
         el.append(
@@ -1244,6 +1326,124 @@
           calls: new Map(), raw: text };
         renderBody(view);
         return view;
+      }
+      function evaluationLine(data) {
+        const line = node("div", "evaluation-line");
+        if (data.status === "pending") {
+          line.append(node("span", "evaluation-spinner"), node("span", "", "Analysing answer…"));
+        } else if (data.status === "completed") {
+          const symbol = node("span", "verdict-symbol " + data.verdict, evaluationSymbols[data.verdict] || "");
+          symbol.setAttribute("aria-hidden", "true");
+          line.append(symbol, node("strong", "", data.label));
+        } else {
+          line.append(node("strong", "", "Evaluation failed"));
+        }
+        return line;
+      }
+      function evaluationDetails(data) {
+        const details = node("details", "evaluation-details");
+        details.append(node("summary", "", "Evaluation details"));
+        const metadata = { model: data.model, confidence: data.confidence,
+          duration_seconds: data.duration_seconds, usage: data.usage, cost_usd: data.cost_usd,
+          rubric_path: data.rubric_path, rubric_sha256: data.rubric_sha256,
+          grading_sha256: data.grading_sha256, decision_api_result: data.raw_result };
+        details.append(node("pre", "", JSON.stringify(metadata, null, 2)));
+        return details;
+      }
+      function renderEvaluation(view, data, cid, messageId) {
+        if (!data || data.status === "skipped") return;
+        view.cid = cid;
+        view.messageId = messageId;
+        view.evaluation = data;
+        if (!view.evaluationCard) {
+          view.evaluationCard = node("section", "evaluation-card");
+          view.evaluationCard.setAttribute("aria-label", "Diagnosis assessment");
+          view.evaluationCard.setAttribute("aria-live", "polite");
+          view.el.append(view.evaluationCard);
+        }
+        const card = view.evaluationCard;
+        card.replaceChildren(node("div", "eyebrow", "LLM-as-judge · Diagnosis assessment"), evaluationLine(data));
+        card.append(node("p", "evaluation-criteria", data.criteria_text || data.error || "Checking this answer against the selected fault’s rubric."));
+        const button = node("button", "explain-decision", "▶ Explain decision");
+        button.type = "button";
+        button.disabled = data.status !== "completed" || view.explanationRequest;
+        view.explainButton = button;
+        button.onclick = async () => {
+          activeEvaluationView = view;
+          $("evaluation-panel").hidden = false;
+          document.querySelector(".layout").classList.add("evaluation-open");
+          $("evaluation-close").focus();
+          renderEvaluationPanel(view);
+          if (data.explanation?.status === "completed" || data.explanation?.status === "pending") return;
+          view.explanationRequest = true;
+          button.disabled = true;
+          $("evaluation-content").append(node("div", "status", "Preparing explanation…"));
+          try {
+            const next = await api(evaluationURL(view) + "/explain", {method: "POST"});
+            if (!view.el.isConnected || view.cid !== currentId) return;
+            renderEvaluation(view, next, cid, messageId);
+            watchEvaluation(view);
+          } catch (e) {
+            if (activeEvaluationView === view)
+              $("evaluation-content").append(node("p", "status", e.message));
+          } finally {
+            view.explanationRequest = false;
+            view.explainButton.disabled = view.evaluation.status !== "completed";
+          }
+        };
+        card.append(button);
+        if (data.status === "completed") card.append(evaluationDetails(data));
+        if (activeEvaluationView === view) renderEvaluationPanel(view);
+      }
+      function renderEvaluationPanel(view) {
+        if (activeEvaluationView !== view) return;
+        const data = view.evaluation;
+        const content = $("evaluation-content");
+        const topology = topologies.find(t => t.id === data.topology)?.label || data.topology;
+        content.replaceChildren(node("div", "eyebrow", `${topology} · ${data.fault}`), evaluationLine(data),
+          node("p", "evaluation-criteria", data.criteria_text || data.error || ""));
+        const explanation = data.explanation;
+        if (!explanation) return;
+        content.append(node("div", "eyebrow", "Explanation · GPT-6.1 Sol · high"));
+        if (explanation.status === "pending") {
+          const line = node("div", "evaluation-line");
+          line.append(node("span", "evaluation-spinner"), node("span", "", "Explaining decision…"));
+          content.append(line);
+        } else if (explanation.status === "completed") {
+          const body = node("div", "md");
+          body.innerHTML = markdown(explanation.content);
+          content.append(body);
+          const details = node("details", "evaluation-details");
+          details.append(node("summary", "", "Explanation usage"), node("pre", "", JSON.stringify({
+            model: explanation.model, effort: explanation.effort, usage: explanation.usage,
+            cost_usd: explanation.cost_usd, duration_seconds: explanation.duration_seconds,
+          }, null, 2)));
+          content.append(details);
+        } else content.append(node("p", "status", explanation.error || "Explanation failed."));
+      }
+      function evaluationURL(view) {
+        return `/api/conversations/${encodeURIComponent(view.cid)}/messages/${encodeURIComponent(view.messageId)}/evaluation`;
+      }
+      function watchEvaluation(view) {
+        if (view.polling || !view.el.isConnected || view.cid !== currentId) return;
+        if (view.evaluation?.status !== "pending" && view.evaluation?.explanation?.status !== "pending") return;
+        view.polling = true;
+        const poll = async () => {
+          if (!view.el.isConnected || view.cid !== currentId) { view.polling = false; return; }
+          try {
+            const data = await api(evaluationURL(view), {cache: "no-store"});
+            if (!view.el.isConnected || view.cid !== currentId) { view.polling = false; return; }
+            renderEvaluation(view, data, view.cid, view.messageId);
+            if (data.status === "pending" || data.explanation?.status === "pending") {
+              setTimeout(poll, 1000);
+              return;
+            }
+          } catch (e) {
+            view.evaluationCard.append(node("p", "status", "Assessment status unavailable. Reopen this conversation to check it."));
+          }
+          view.polling = false;
+        };
+        setTimeout(poll, 500);
       }
       function toolLabel(entry, finished, data) {
         const duration = data.duration_seconds ?? data.latency_seconds;
@@ -1479,6 +1679,9 @@
               });
               if (currentId === item.id) {
                 currentId = null;
+                const url = new URL(location.href);
+                url.searchParams.delete("conversation");
+                window.history.replaceState(null, "", url);
                 chatStarted = false;
                 chatSettings = null;
                 empty();
@@ -1506,6 +1709,9 @@
             `/api/conversations/${encodeURIComponent(id)}`,
           );
           currentId = id;
+          const url = new URL(location.href);
+          url.searchParams.set("conversation", id);
+          window.history.replaceState(null, "", url);
           await refreshScenario();
           restoreChatSettings(data);
           notice("");
@@ -1514,6 +1720,10 @@
             const view = message(saved.role, saved.content || "");
             for (const call of saved.tools || []) tool(view, call, true);
             if (saved.stats) stats(view, saved.stats);
+            if (saved.evaluation) {
+              renderEvaluation(view, saved.evaluation, id, saved.id);
+              watchEvaluation(view);
+            }
           }
           await list();
           $("timeline").scrollTop = $("timeline").scrollHeight;
@@ -1763,6 +1973,9 @@
         if (busy || loading) return;
         loading = true;
         currentId = null;
+        const url = new URL(location.href);
+        url.searchParams.delete("conversation");
+        window.history.replaceState(null, "", url);
         chatStarted = false;
         chatSettings = null;
         empty();
@@ -1862,6 +2075,10 @@
             else if (data.type === "tool_start") tool(view, data);
             else if (data.type === "tool_end") tool(view, data, true);
             else if (data.type === "stats") stats(view, data.stats);
+            else if (data.type === "evaluation") {
+              renderEvaluation(view, data.evaluation, currentId, data.message_id);
+              watchEvaluation(view);
+            }
             else if (data.type === "error")
               view.el.append(
                 node("div", "status", data.message || "The request failed."),
@@ -1965,6 +2182,8 @@
           loading = false;
           lock(false);
         }
+        const requestedChat = new URLSearchParams(location.search).get("conversation");
+        if (requestedChat) await open(requestedChat);
       })();
       (function collapseSidebar() {
         const layout = document.querySelector(".layout");

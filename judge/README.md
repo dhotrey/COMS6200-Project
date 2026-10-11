@@ -27,5 +27,21 @@ Sources:
 
 The tree rubrics use the current seven-switch forwarding plan for supporting symptoms. Some tree catalogue scope descriptions still refer to the earlier layout: F1 partitions h1–h4 from h5–h8; F5 prevents h1–h4 from reaching h5 through s2.
 
-These files prepare a future LLM judge only. No judge API calls, UI integration or changes to `experiments/evaluator.py` are included. That evaluator continues to use main-topology locations. Ring/tree rubrics describe the implemented catalogues and do not certify a live testbed run.
+The chat UI now automatically evaluates successfully completed answers when F1–F5
+is selected. `agent/judge.py` sends a typed choice question to the Decisions API
+(`gpt-6-luna`) through the existing Cloudflare BYOK gateway. It combines the
+scenario's factual criteria with [shared four-level criteria](grading.md), omitting
+the legacy **Judge output** JSON instructions from the API prompt. The verdict's
+criteria appear immediately in the UI. Optional observations are never mandatory.
+
+**Explain decision** makes a separate, tool-free Responses request using
+`gpt-6.1-sol` / `high`. It explains the assessment against the captured rubric,
+and may flag an apparent disagreement; it never changes the recorded verdict.
+Rubrics, verdicts and explanations stay out of the diagnosis provider history.
+The complete result, rubric snapshot/hash and separate usage measurements are
+saved with the assistant answer. Reopening an answer does not rerun grading.
+
+`experiments/evaluator.py` and the frozen protocol's binary scoring are unchanged.
+That evaluator continues to use main-topology locations. Ring/tree rubrics describe
+the implemented catalogues and do not certify a live testbed run.
 

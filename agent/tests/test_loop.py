@@ -95,6 +95,48 @@ def test_mini_long_context_keeps_standard_prices():
     assert state["stats"]["cost_usd"] == pytest.approx((290000 * .4 + 10000 * .1 + 7 * 1.6) / 1e6)
 
 
+def test_usage_callback_records_each_request_before_tools():
+    client = FakeClient(response(call()), response(message("Done"), tokens=(20, 7, 3, 2)))
+    state = {"content": "", "tools": [], "stats": {}}
+    snapshots = []
+
+    async def record_usage():
+        snapshots.append(copy.deepcopy(state["stats"]))
+
+    async def execute(name, arguments):
+        assert len(snapshots) == 1 and snapshots[0]["model_calls"] == 1
+        return {"ok": True, "data": {}}
+
+    async def collect():
+        return [event async for event in loop.run(client, [], "gpt-6.1-sol", "low", state,
+                tool_executor=execute, on_usage=record_usage)]
+
+    asyncio.run(collect())
+    assert [s["total_tokens"] for s in snapshots] == [15, 42]
+    assert [s["model_calls"] for s in snapshots] == [1, 2]
+    assert snapshots[0]["cost_usd"] == pytest.approx((8 * 2 + 2 * .1 + 5 * 10) / 1e6)
+    assert snapshots[1]["cost_usd"] == pytest.approx((25 * 2 + 5 * .1 + 12 * 10) / 1e6)
+
+
+def test_missing_usage_marks_known_total_partial():
+    first = response(call())
+    second = response(message("Done"))
+    second.pop("usage")
+    client = FakeClient(first, second)
+    state = {"content": "", "tools": [], "stats": {}}
+
+    async def execute(name, arguments):
+        return {"ok": True, "data": {}}
+
+    async def collect():
+        return [event async for event in loop.run(client, [], "gpt-6.1-sol", "low", state,
+                                                 tool_executor=execute)]
+
+    asyncio.run(collect())
+    assert state["stats"]["usage_complete"] is False
+    assert state["stats"]["cost_usd"] == pytest.approx((8 * 2 + 2 * .1 + 5 * 10) / 1e6)
+
+
 def test_tool_budget_never_executes_excess_calls(monkeypatch):
     monkeypatch.setenv("MAX_TOOL_CALLS", "1")
     executed = []

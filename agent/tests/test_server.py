@@ -131,6 +131,7 @@ def test_completed_turn_persists_text_and_statistics(client, monkeypatch, model,
     assert saved["title"] == "Check the network"
     assert saved["messages"][1]["stats"]["total_tokens"] == 42
     assert saved["messages"][1]["stats"]["status"] == "completed"
+    assert saved["messages"][1]["evaluation"]["status"] == "skipped"
     assert saved["history"][-1]["content"] == "Network looks healthy."
     assert server.busy is False
     server.app.state.client = None
@@ -252,6 +253,7 @@ def test_development_version_tracks_ui_and_server_changes(client, monkeypatch, t
 
 @pytest.mark.parametrize("failure", [RuntimeError("Tool failed"), asyncio.CancelledError()])
 def test_failed_or_cancelled_turn_drops_unpaired_tools(client, monkeypatch, failure):
+    monkeypatch.setattr(server, "network_settings", lambda: {"topology": "main6s8h", "scenario": "F1"})
     async def fake_run(provider, history, model, effort, state):
         history.append({"type": "function_call", "call_id": "unfinished", "name": "ping", "arguments": "{}"})
         state["content"] = "Investigating."
@@ -274,6 +276,7 @@ def test_failed_or_cancelled_turn_drops_unpaired_tools(client, monkeypatch, fail
     assert [item["role"] for item in saved["history"]] == ["user", "assistant"]
     assert saved["messages"][1]["stats"]["status"] == ("cancelled" if isinstance(failure, asyncio.CancelledError) else "error")
     assert saved["messages"][1]["stats"]["usage_complete"] is False
+    assert saved["messages"][1]["evaluation"]["status"] == "skipped"
     assert server.busy is False
     server.app.state.client = None
 

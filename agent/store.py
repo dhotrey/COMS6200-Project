@@ -296,8 +296,130 @@ def rename(cid: str, title: str) -> dict[str, str] | None:
     return {"id": cid, "title": title}
 
 
+def update_evaluation(cid: str, message_id: str, evaluation: dict) -> bool:
+    """Update operator metadata only; never alter provider history or newer turns."""
+    batches = _db().batch([
+        ("""UPDATE messages SET payload = json_set(payload, '$.evaluation', json(?))
+           WHERE conversation_id = ? AND json_extract(payload, '$.id') = ?
+           AND json_extract(payload, '$.role') = 'assistant' RETURNING id""",
+         [json.dumps(evaluation), cid, message_id]),
+        ("""UPDATE benchmark_results SET payload = json_set(payload, '$.evaluation', json(?))
+            WHERE json_extract(payload, '$.conversation_id') = ?
+            AND json_extract(payload, '$.message_id') = ?""",
+         [json.dumps(evaluation), cid, message_id]),
+    ])
+    return bool(batches[0])
+
+
 def delete(cid: str) -> None:
     _db().query("DELETE FROM conversations WHERE id = ?", [cid])
+
+
+def create_benchmark(run: dict, cells: list[dict]) -> None:
+    # Keep batches bounded; a whole catalogue has hundreds of cells.
+    _db().query("INSERT INTO benchmark_runs(id, payload) VALUES(?, ?)",
+                [run["id"], json.dumps(run)])
+    for offset in range(0, len(cells), 40):
+        _db().batch([("INSERT INTO benchmark_results(run_id, cell_id, payload) VALUES(?, ?, ?)",
+                      [run["id"], cell["id"], json.dumps(cell)]) for cell in cells[offset:offset + 40]])
+
+
+def save_benchmark(run: dict) -> None:
+    _db().query("UPDATE benchmark_runs SET payload = ? WHERE id = ?",
+                [json.dumps(run), run["id"]])
+
+
+def save_benchmark_cell(run_id: str, cell: dict) -> None:
+    # Chat owns its assessment, including explanations requested while the
+    # coordinator is finishing this cell. Never overwrite that newer metadata.
+    _db().query("""UPDATE benchmark_results SET payload = CASE
+                WHEN ? IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM messages WHERE conversation_id = ?
+                    AND json_extract(payload, '$.id') = ?)
+                THEN json_set(json(?), '$.evaluation', json((
+                    SELECT json_extract(payload, '$.evaluation') FROM messages
+                    WHERE conversation_id = ? AND json_extract(payload, '$.id') = ?)))
+                ELSE json(?) END WHERE run_id = ? AND cell_id = ?""",
+                [cell.get("conversation_id"), cell.get("conversation_id"), cell.get("message_id"),
+                 json.dumps(cell), cell.get("conversation_id"), cell.get("message_id"),
+                 json.dumps(cell), run_id, cell["id"]])
+
+
+def save_benchmark_chat(run_id: str, cell: dict, title: str, user: dict,
+                        assistant: dict, history: list[dict]) -> None:
+    """Publish a diagnosis and its matrix link together, before grading begins."""
+    cid = cell["conversation_id"]
+    _db().batch([
+        ("INSERT INTO conversations(id, title, history) VALUES(?, ?, ?)",
+         [cid, title, json.dumps(history)]),
+        ("INSERT INTO messages(conversation_id, payload) VALUES(?, ?), (?, ?)",
+         [cid, json.dumps(user), cid, json.dumps(assistant)]),
+        ("UPDATE benchmark_results SET payload = ? WHERE run_id = ? AND cell_id = ?",
+         [json.dumps(cell), run_id, cell["id"]]),
+    ])
+
+
+def save_benchmark_cells(run_id: str, cells: list[dict]) -> None:
+    for offset in range(0, len(cells), 40):
+        _db().batch([("UPDATE benchmark_results SET payload = ? WHERE run_id = ? AND cell_id = ?",
+                      [json.dumps(cell), run_id, cell["id"]]) for cell in cells[offset:offset + 40]])
+
+
+def benchmark_listing() -> list[dict]:
+    rows = _db().query("SELECT json_remove(payload, '$.system_prompt') AS payload "
+                       "FROM benchmark_runs ORDER BY created_at DESC, rowid DESC LIMIT 50")
+    return [json.loads(row["payload"]) for row in rows]
+
+
+def get_benchmark(run_id: str, detail: bool = True) -> dict | None:
+    rows = _db().query("SELECT payload FROM benchmark_runs WHERE id = ?", [run_id])
+    if not rows:
+        return None
+    run = json.loads(rows[0]["payload"])
+    # Matrix polling must not download hundreds of full tool traces/rubrics.
+    payload = "payload" if detail else """json_set(json_remove(payload, '$.content', '$.tools', '$.stats',
+        '$.evaluation.rubric', '$.evaluation.grading', '$.evaluation.criteria',
+        '$.evaluation.context', '$.evaluation.question', '$.evaluation.answer',
+        '$.evaluation.raw_result', '$.evaluation.explanation'), '$.stats', json_object(
+            'cost_usd', json_extract(payload, '$.stats.cost_usd'),
+            'usage_complete', json_extract(payload, '$.stats.usage_complete'),
+            'model_calls', json_extract(payload, '$.stats.model_calls')),
+        '$.evaluation.explanation', CASE WHEN json_type(payload, '$.evaluation.explanation') = 'object'
+            THEN json_object('status', json_extract(payload, '$.evaluation.explanation.status'),
+                             'cost_usd', json_extract(payload, '$.evaluation.explanation.cost_usd'))
+            ELSE NULL END)"""
+    run["cells"] = [json.loads(row["payload"]) for row in _db().query(
+        f"SELECT {payload} AS payload FROM benchmark_results WHERE run_id = ? ORDER BY cell_id", [run_id])]
+    return run
+
+
+def get_benchmark_cell(run_id: str, cell_id: str) -> dict | None:
+    rows = _db().query("SELECT payload FROM benchmark_results WHERE run_id = ? AND cell_id = ?",
+                       [run_id, cell_id])
+    return json.loads(rows[0]["payload"]) if rows else None
+
+
+def save_benchmark_evaluation(run_id: str, cell_id: str, evaluation: dict) -> None:
+    _db().query("""UPDATE benchmark_results SET payload = json_set(payload, '$.evaluation', json(?))
+                   WHERE run_id = ? AND cell_id = ?""", [json.dumps(evaluation), run_id, cell_id])
+
+
+def interrupt_benchmarks() -> None:
+    """Recover metadata only. A restart never launches a model or network command."""
+    _db().query("""UPDATE benchmark_runs SET payload = json_set(payload, '$.status', 'interrupted',
+                   '$.error', 'Server restarted. Check the testbed before starting a new run.')
+                   WHERE json_extract(payload, '$.status') IN ('starting', 'running', 'stopping', 'pausing')""")
+    _db().query("""UPDATE benchmark_results SET payload = json_set(payload, '$.status', 'interrupted',
+                   '$.error', 'Server restarted before this cell finished.')
+                   WHERE json_extract(payload, '$.status') IN ('pending', 'running', 'grading')""")
+    _db().query("""UPDATE benchmark_results SET payload = json_set(payload,
+                   '$.evaluation.status', 'error', '$.evaluation.error', 'Grading interrupted by server restart.')
+                   WHERE json_extract(payload, '$.status') = 'interrupted'
+                   AND json_extract(payload, '$.evaluation.status') = 'pending'""")
+    _db().query("""UPDATE benchmark_results SET payload = json_set(payload,
+                   '$.evaluation.explanation.status', 'error',
+                   '$.evaluation.explanation.error', 'Explanation interrupted by server restart.')
+                   WHERE json_extract(payload, '$.evaluation.explanation.status') = 'pending'""")
 
 
 def close() -> None:

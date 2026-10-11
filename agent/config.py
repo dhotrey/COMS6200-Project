@@ -82,6 +82,24 @@ class GatewayClient:
     def __init__(self, http_client):
         self.http = http_client
 
+    async def create_decision(self, payload):
+        return await self._json_request("decisions", payload)
+
+    async def create_response(self, payload):
+        return await self._json_request("responses", payload)
+
+    async def _json_request(self, endpoint, payload):
+        response = await self.http.post(endpoint, json=payload)
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError(f"Gateway {endpoint} request failed with status {response.status_code}.")
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Gateway returned malformed {endpoint} data.") from exc
+        if not isinstance(result, dict) or result.get("error"):
+            raise RuntimeError(f"Gateway returned invalid {endpoint} data.")
+        return result
+
     async def stream_events(self, payload):
         async with self.http.stream("POST", "responses", json=payload) as response:
             if not 200 <= response.status_code < 300:

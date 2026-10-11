@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 import logfire
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from faults import state as fault_state
 
-from . import config, topology_control, fault_control, store, tools
+from . import config, topology_control, fault_control, store, tools, judge, benchmark
 from .loop import run
 
 busy = False
@@ -21,10 +22,13 @@ DEV_STARTED = time.time_ns()
 
 @asynccontextmanager
 async def lifespan(app):
+    app.state.explanation_lock = asyncio.Lock()
     await asyncio.to_thread(store.initialize)
+    await asyncio.to_thread(store.interrupt_benchmarks)
     logfire.configure(service_name="network-agent", send_to_logfire="if-token-present",
                       console=False)
     app.state.client = config.make_client() if config.configured() else None
+    app.state.benchmark = benchmark.Benchmark(app.state.client)
     if app.state.client:
         logfire.instrument_httpx(app.state.client.http, capture_all=False, capture_headers=False,
                                  capture_request_body=False, capture_response_body=False)
@@ -32,6 +36,8 @@ async def lifespan(app):
         yield
     finally:
         try:
+            await app.state.benchmark.shutdown()
+            await judge.shutdown()
             if app.state.client:
                 await app.state.client.close()
         finally:
@@ -44,6 +50,123 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 def index():
     return FileResponse(config.ROOT / "index.html")
+
+
+@app.get("/results")
+@app.get("/results.html")
+def results():
+    return FileResponse(config.ROOT / "results.html")
+
+
+def benchmark_active():
+    manager = getattr(app.state, "benchmark", None)
+    return bool(manager and manager.active)
+
+
+class BenchmarkVariant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    model: str
+    effort: str
+
+
+class BenchmarkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    variants: list[BenchmarkVariant] = Field(min_length=1, max_length=50)
+    concurrency: int = Field(default=3, ge=1, le=4)
+    repeats: int = Field(default=benchmark.DEFAULT_REPEATS, ge=1, le=benchmark.MAX_REPEATS, strict=True)
+
+
+@app.get("/api/benchmarks/config")
+def benchmark_config():
+    active = app.state.benchmark.active
+    return {"variants": benchmark.variants(), "topologies": list(topology_control.TOPOLOGIES),
+            "scenarios": list(benchmark.SCENARIOS), "configured": config.configured(),
+            "repeats": {"default": benchmark.DEFAULT_REPEATS, "min": 1, "max": benchmark.MAX_REPEATS},
+            "active_id": active["id"] if active else None,
+            "active_run": {"id": active["id"], "status": active["status"],
+                           "variants": active.get("variants", []), "repeats": active.get("repeats", 1),
+                           "phase": active.get("phase")} if active else None}
+
+
+@app.get("/api/benchmarks")
+async def benchmark_listing():
+    return [benchmark.public_run(item) for item in await asyncio.to_thread(store.benchmark_listing)]
+
+
+@app.post("/api/benchmarks")
+async def benchmark_start(body: BenchmarkRequest):
+    if busy or network_changing or benchmark_active():
+        raise HTTPException(409, "Wait for the current diagnosis, benchmark or network change to finish")
+    try:
+        return await app.state.benchmark.start([v.model_dump() for v in body.variants], body.concurrency, body.repeats)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@app.get("/api/benchmarks/{run_id}")
+async def benchmark_status(run_id: str):
+    item = await asyncio.to_thread(store.get_benchmark, run_id, False)
+    if not item:
+        raise HTTPException(404, "Benchmark not found")
+    if benchmark_active() and app.state.benchmark.active["id"] == run_id:
+        item.update(app.state.benchmark.active)
+    return benchmark.public_run(item)
+
+
+@app.post("/api/benchmarks/{run_id}/stop")
+async def benchmark_stop(run_id: str):
+    manager = app.state.benchmark
+    if not manager.active or manager.active["id"] != run_id:
+        raise HTTPException(409, "This benchmark is no longer running")
+    manager.stop()
+    return {"status": manager.active["status"]}
+
+
+@app.post("/api/benchmarks/{run_id}/pause")
+async def benchmark_pause(run_id: str):
+    manager = app.state.benchmark
+    if not manager.active or manager.active["id"] != run_id:
+        raise HTTPException(409, "This benchmark is no longer running")
+    manager.stop(paused=True)
+    return {"status": "pausing"}
+
+
+@app.get("/api/benchmarks/{run_id}/export")
+async def benchmark_export(run_id: str):
+    item = await asyncio.to_thread(store.get_benchmark, run_id)
+    if not item:
+        raise HTTPException(404, "Benchmark not found")
+    item.update(benchmark.run_costs(item["cells"]))
+    item.setdefault("repeats", 1)
+    item["matrix"] = benchmark.aggregate_cells(item["cells"])
+    return item
+
+
+@app.get("/api/benchmarks/{run_id}/cells/{cell_id}")
+async def benchmark_cell(run_id: str, cell_id: str):
+    cell = await asyncio.to_thread(store.get_benchmark_cell, run_id, cell_id)
+    if not cell:
+        raise HTTPException(404, "Benchmark cell not found")
+    return benchmark.public_cell(cell, detail=True)
+
+
+@app.post("/api/benchmarks/{run_id}/cells/{cell_id}/explain")
+async def benchmark_explain(run_id: str, cell_id: str):
+    cell = await asyncio.to_thread(store.get_benchmark_cell, run_id, cell_id)
+    if cell and cell.get("conversation_id"):
+        # Both views use the chat's existing job key and explanation lock.
+        evaluation = await explain_evaluation(cell["conversation_id"], cell["message_id"])
+        result = benchmark.public_cell(cell, detail=True)
+        result["evaluation"] = evaluation
+        return result
+    try:
+        return await app.state.benchmark.explain(run_id, cell_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @app.get("/api/config")
@@ -61,7 +184,7 @@ def dev_version():
     if not config.dev_mode():
         raise HTTPException(404, "Development reload is disabled")
     return {"version": f"{DEV_STARTED}:{(config.ROOT / 'index.html').stat().st_mtime_ns}",
-            "busy": busy or network_changing}
+            "busy": busy or network_changing or benchmark_active()}
 
 
 @app.get("/api/conversations")
@@ -79,8 +202,52 @@ def conversation(cid: str):
     item = store.get(cid)
     if not item:
         raise HTTPException(404, "Conversation not found")
-    return {**{k: v for k, v in item.items() if k != "history"},
+    messages = [{**m, "evaluation": judge.public(m.get("evaluation"))} for m in item["messages"]]
+    return {**{k: v for k, v in item.items() if k != "history"}, "messages": messages,
             "settings": conversation_settings(item)}
+
+
+async def message_evaluation(cid, message_id):
+    item = await asyncio.to_thread(store.get, cid)
+    if not item:
+        raise HTTPException(404, "Conversation not found")
+    message = next((m for m in item["messages"] if m.get("id") == message_id and m.get("role") == "assistant"), None)
+    if not message or not message.get("evaluation"):
+        raise HTTPException(404, "Evaluation not found")
+    evaluation = message["evaluation"]
+    live_benchmark_grade = (evaluation.get("status") == "pending" and benchmark_active()
+                            and (message.get("benchmark") or {}).get("run_id") == app.state.benchmark.active["id"])
+    if not live_benchmark_grade:
+        evaluation = await judge.recover(cid, message_id, evaluation)
+    if (cid, message_id, "explain") in judge.JOBS and not evaluation.get("explanation"):
+        evaluation["explanation"] = {"status": "pending", "model": judge.EXPLAIN_MODEL, "effort": "high"}
+    return evaluation
+
+
+@app.get("/api/conversations/{cid}/messages/{message_id}/evaluation")
+async def evaluation_status(cid: str, message_id: str):
+    return judge.public(await message_evaluation(cid, message_id))
+
+
+@app.post("/api/conversations/{cid}/messages/{message_id}/evaluation/explain")
+async def explain_evaluation(cid: str, message_id: str):
+    async with app.state.explanation_lock:
+        return await _explain_evaluation(cid, message_id)
+
+
+async def _explain_evaluation(cid, message_id):
+    evaluation = await message_evaluation(cid, message_id)
+    if evaluation["status"] != "completed":
+        raise HTTPException(409, "Wait for a completed evaluation before explaining it")
+    result = evaluation.get("explanation") or {}
+    if result.get("status") in {"pending", "completed"}:
+        return judge.public(evaluation)
+    if not app.state.client:
+        raise HTTPException(503, "Configure the AI Gateway and restart the server.")
+    # Reserve synchronously before yielding, so repeated clicks cannot bill twice.
+    evaluation["explanation"] = {"status": "pending", "model": judge.EXPLAIN_MODEL, "effort": "high"}
+    judge.launch(cid, message_id, "explain", judge.explain(app.state.client, cid, message_id, evaluation))
+    return judge.public(evaluation)
 
 
 def conversation_settings(item: dict) -> dict | None:
@@ -107,8 +274,8 @@ def network_settings() -> dict:
 
 @app.delete("/api/conversations/{cid}")
 async def delete(cid: str):
-    if busy:
-        raise HTTPException(409, "Stop the current turn before deleting a conversation")
+    if busy or benchmark_active():
+        raise HTTPException(409, "Stop the current turn or benchmark before deleting a conversation")
     await asyncio.to_thread(store.delete, cid)
     return {"ok": True}
 
@@ -150,7 +317,7 @@ class LoadTopologyRequest(BaseModel):
 async def change_network(function, *args):
     """Reserve network access before yielding; finish cleanup on disconnect."""
     global network_changing
-    if busy or network_changing:
+    if busy or network_changing or benchmark_active():
         raise HTTPException(409, "Wait for the current diagnosis or network change to finish")
     network_changing = True
     worker = asyncio.create_task(asyncio.to_thread(function, *args))
@@ -224,6 +391,8 @@ async def scenario_reset():
 @app.post("/api/chat")
 async def chat(body: ChatRequest):
     global busy
+    if benchmark_active():
+        raise HTTPException(409, "Wait for the benchmark to finish or stop it before chatting")
     if network_changing:
         raise HTTPException(409, "Wait for the topology or fault change to finish")
     if topology_control.error:
@@ -238,7 +407,7 @@ async def chat(body: ChatRequest):
     item = await asyncio.to_thread(store.get, body.conversation_id)
     if item is None:
         raise HTTPException(404, "Conversation not found")
-    if busy or network_changing:
+    if busy or network_changing or benchmark_active():
         raise HTTPException(409, "Another diagnostic turn is running. Wait for it to finish.")
     # D1 lookup yielded: setup may have failed while the conversation was read.
     if topology_control.error:
@@ -247,10 +416,13 @@ async def chat(body: ChatRequest):
     saved_settings = conversation_settings(item)
     if item["messages"] and saved_settings != settings:
         raise HTTPException(409, "This chat's settings or network differ. Start a new conversation to change them.")
+    evaluation = judge.prepare(settings, body.message.strip(), item["messages"])
+    message_id = uuid.uuid4().hex
     busy = True
 
     async def events():
         global busy
+        nonlocal evaluation
         state = {"content": "", "tools": [], "stats": {}}
         user = {"role": "user", "content": body.message.strip()}
         history = [*item["history"], user]
@@ -281,13 +453,23 @@ async def chat(body: ChatRequest):
                 history = [*item["history"], user]
                 if state["content"]:
                     history.append({"role": "assistant", "content": state["content"]})
-            assistant = {"role": "assistant", **state, "settings": settings}
+            if completed:
+                evaluation["answer"] = state["content"]
+            else:
+                evaluation = {"status": "skipped", "reason": "Diagnosis did not complete."}
+            assistant = {"id": message_id, "role": "assistant", **state, "settings": settings,
+                         "evaluation": evaluation}
             try:
                 await asyncio.to_thread(
                     store.save, body.conversation_id, user, assistant, history
                 )
+                if completed and evaluation["status"] == "pending":
+                    judge.launch(body.conversation_id, message_id, "judge",
+                                 judge.evaluate(app.state.client, body.conversation_id, message_id, evaluation))
             finally:
                 busy = False
+        yield "data: " + json.dumps({"type": "evaluation", "message_id": message_id,
+                                    "evaluation": judge.public(evaluation)}) + "\n\n"
         yield "data: " + json.dumps({"type": "stats", "stats": state["stats"]}) + "\n\n"
         yield 'data: {"type":"done"}\n\n'
 

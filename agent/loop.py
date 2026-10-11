@@ -12,18 +12,19 @@ from .limits import runtime_limits
 from .tools import TOOLS, execute_tool
 
 
-async def run(client, history, model, effort, state):
+async def run(client, history, model, effort, state, *, tool_executor=None, prompt=None, limits=None, on_usage=None):
     supports_reasoning = next((m for m in MODELS if m["id"] == model), {}).get("reasoning", True)
     started = time.perf_counter()
-    prompt = (ROOT / "prompt.md").read_text()
+    prompt = prompt if prompt is not None else (ROOT / "prompt.md").read_text()
+    tool_executor = tool_executor or execute_tool
     stats = state["stats"]
     stats.update(model=model, effort=effort, prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
                  input_tokens=0, output_tokens=0, cached_tokens=0, reasoning_tokens=0,
                  total_tokens=0, model_calls=0, tool_calls=0, invalid_tool_calls=0,
                  cost_usd=0.0, first_token_seconds=None, requests=[], usage_complete=True)
-    limits = runtime_limits()
+    limits = limits if limits is not None else runtime_limits()
     max_calls = int(limits["max_tool_calls"])
-    max_tokens = int(os.getenv("MAX_TURN_TOKENS", "0"))
+    max_tokens = int(limits.get("max_turn_tokens", os.getenv("MAX_TURN_TOKENS", "0")))
     try:
         async with asyncio.timeout(float(limits["max_turn_seconds"])):
             while True:
@@ -63,6 +64,8 @@ async def run(client, history, model, effort, state):
                     record = {"response_id": response.get("id"), "model": response.get("model", model),
                               "duration_seconds": time.perf_counter() - call_started}
                     if usage:
+                        if "input_tokens" not in usage or "output_tokens" not in usage:
+                            stats["usage_complete"] = False
                         cached = (usage.get("input_tokens_details") or {}).get("cached_tokens", 0) or 0
                         reasoning = (usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0) or 0
                         record.update(input_tokens=usage.get("input_tokens", 0),
@@ -78,6 +81,8 @@ async def run(client, history, model, effort, state):
                         stats["usage_complete"] = False
                     stats["requests"].append(record)
                     span.set_attributes(record)
+                if on_usage is not None:
+                    await on_usage()
                 if response.get("status") != "completed":
                     raise RuntimeError(f"Model response ended with status {response.get('status')}.")
                 history.extend(response.get("output", []))
@@ -91,7 +96,7 @@ async def run(client, history, model, effort, state):
                         stats["tool_calls"] += 1
                         yield {"type": "tool_start", "name": call["name"], "call_id": call["call_id"], "arguments": call["arguments"]}
                         with logfire.span("tool {name}", name=call["name"]) as span:
-                            result = await execute_tool(call["name"], call["arguments"])
+                            result = await tool_executor(call["name"], call["arguments"])
                             span.set_attributes(result)
                         stats["invalid_tool_calls"] += int(result.get("invalid", False))
                         state["tools"].append({"call_id": call["call_id"], **result})
