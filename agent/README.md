@@ -20,7 +20,9 @@ model/thinking pickers work, but chat and saved history require the server. With
 D1 configured, the UI and history work without AI Gateway credentials; sending
 messages requires AI Gateway configuration. Keep one server process/worker.
 Assistant replies render Markdown. Tool calls are faint until hovered or clicked.
-The sidebar is resizable, and conversations can be renamed from the list.
+The sidebar is resizable and can be collapsed with its hamburger button; both
+its width and collapsed state persist across page refreshes. Conversations can
+be renamed from the list.
 
 For automatic reload during development, start with:
 

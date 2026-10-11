@@ -84,6 +84,40 @@
         background: transparent;
         touch-action: none;
       }
+      .sidebar-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .sidebar-toggle {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        font-size: 20px;
+        line-height: 1;
+      }
+      .sidebar-content {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+      }
+      .sidebar-content[hidden] {
+        display: none;
+      }
+      .layout.sidebar-collapsed {
+        grid-template-columns: 56px 0 minmax(0, 1fr);
+      }
+      .sidebar-collapsed .sidebar {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .sidebar-collapsed .brand {
+        display: none;
+      }
       .sidebar-resizer:hover,
       .sidebar-resizer.dragging {
         background: var(--accent);
@@ -170,6 +204,7 @@
         color: var(--muted);
       }
       main {
+        grid-column: 3;
         display: flex;
         flex-direction: column;
         min-width: 0;
@@ -596,6 +631,12 @@
           grid-template-columns: 1fr;
           grid-template-rows: auto minmax(0, 1fr);
         }
+        .layout.sidebar-collapsed {
+          grid-template-columns: 1fr;
+        }
+        main {
+          grid-column: 1;
+        }
         .sidebar-resizer {
           display: none;
         }
@@ -605,6 +646,13 @@
           align-items: center;
           border-right: 0;
           border-bottom: 1px solid var(--line);
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .sidebar-content {
+          flex-basis: 100%;
+          flex-direction: row;
+          align-items: center;
           gap: 12px;
         }
         .sidebar footer,
@@ -673,7 +721,13 @@
   <body>
     <div class="layout">
       <aside class="sidebar">
-        <div class="brand"><span>◈</span> Network Lab</div>
+        <div class="sidebar-heading">
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button"
+            aria-label="Collapse sidebar" title="Collapse sidebar"
+            aria-expanded="true" aria-controls="sidebar-content"><span aria-hidden="true">☰</span></button>
+          <div class="brand"><span>◈</span> Network Lab</div>
+        </div>
+        <div class="sidebar-content" id="sidebar-content">
         <button class="new" id="new">＋ New conversation</button>
         <div class="eyebrow">Conversations</div>
         <nav
@@ -685,6 +739,7 @@
           Observe. Investigate. Understand.<br />Network troubleshooting
           workspace
         </footer>
+        </div>
       </aside>
       <div
         class="sidebar-resizer"
@@ -815,7 +870,7 @@
             ".sidebar button, .selectors select, .model-option, #scenario, #reset-scenario",
           )
           .forEach((el) => {
-            if (el.classList.contains("rename")) return;
+            if (el.classList.contains("rename") || el.id === "sidebar-toggle") return;
             el.disabled = value || loading;
           });
         $("send").hidden = value;
@@ -1525,6 +1580,21 @@
           loading = false;
           lock(false);
         }
+      })();
+      (function collapseSidebar() {
+        const layout = document.querySelector(".layout");
+        const toggle = $("sidebar-toggle");
+        const apply = (collapsed) => {
+          layout.classList.toggle("sidebar-collapsed", collapsed);
+          $("sidebar-content").hidden = collapsed;
+          $("sidebar-resizer").hidden = collapsed;
+          toggle.setAttribute("aria-expanded", String(!collapsed));
+          toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+          toggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+          localStorage.setItem("sidebar-collapsed", String(collapsed));
+        };
+        apply(localStorage.getItem("sidebar-collapsed") === "true");
+        toggle.onclick = () => apply(!layout.classList.contains("sidebar-collapsed"));
       })();
       (function resizeSidebar() {
         const layout = document.querySelector(".layout");
