@@ -96,8 +96,16 @@ def test_missing_credentials_and_conversation_crud(client):
     assert client.get(f"/api/conversations/{cid}").status_code == 404
 
 
-def test_completed_turn_persists_text_and_statistics(client, monkeypatch):
+@pytest.mark.parametrize("model,effort", [
+    ("gpt-5.6-luna", "medium"),
+    ("gpt-6.1-sol", "medium"),
+    ("gpt-6-luna", "none"),
+])
+def test_completed_turn_persists_text_and_statistics(client, monkeypatch, model, effort):
+    seen = []
+
     async def fake_run(provider, history, model, effort, state):
+        seen.append((model, effort))
         state["content"] = "Network looks healthy."
         state["stats"].update(total_tokens=42, duration_seconds=.5)
         history.append({"role": "assistant", "content": state["content"]})
@@ -106,8 +114,9 @@ def test_completed_turn_persists_text_and_statistics(client, monkeypatch):
     monkeypatch.setattr(server, "run", fake_run)
     monkeypatch.setattr(server.app.state, "client", object())
     cid = client.post("/api/conversations").json()["id"]
-    result = client.post("/api/chat", json=body(cid))
+    result = client.post("/api/chat", json={**body(cid), "model": model, "effort": effort})
     assert result.status_code == 200
+    assert seen == [(model, effort)]
     events = [json.loads(line[6:]) for line in result.text.splitlines() if line.startswith("data: ")]
     assert events[-1] == {"type": "done"}
     # Rechecking D1 reads durable messages and provider history.
@@ -119,6 +128,27 @@ def test_completed_turn_persists_text_and_statistics(client, monkeypatch):
     assert saved["history"][-1]["content"] == "Network looks healthy."
     assert server.busy is False
     server.app.state.client = None
+
+
+def test_sol_rejects_unsupported_none_effort(client, monkeypatch):
+    monkeypatch.setattr(server.app.state, "client", object())
+    cid = client.post("/api/conversations").json()["id"]
+    result = client.post("/api/chat", json={
+        **body(cid), "model": "gpt-6.1-sol", "effort": "none",
+    })
+    assert result.status_code == 422
+    assert store.get(cid)["messages"] == []
+    server.app.state.client = None
+
+
+def test_model_catalogue_groups_legacy_models(client):
+    models = client.get("/api/config").json()["models"]
+    assert [m["id"] for m in models if not m.get("deprecated")] == [
+        "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
+    ]
+    assert {m["id"] for m in models if m.get("deprecated")} == {
+        "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol",
+    }
 
 
 @pytest.mark.parametrize("failure", [RuntimeError("Tool failed"), asyncio.CancelledError()])

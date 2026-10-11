@@ -195,7 +195,8 @@
         display: flex;
         gap: 12px;
       }
-      .selectors label {
+      .selectors label,
+      .model-field {
         font-size: 10px;
         letter-spacing: 0.8px;
         color: var(--muted);
@@ -203,7 +204,8 @@
         display: flex;
         flex-direction: column;
       }
-      .selectors select {
+      .selectors select,
+      .model-picker > summary {
         font-size: 12px;
         letter-spacing: 0;
         text-transform: none;
@@ -212,6 +214,83 @@
         border-radius: 7px;
         padding: 5px 8px;
         max-width: 210px;
+      }
+      .model-picker {
+        position: relative;
+        color: var(--ink);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .model-picker summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        cursor: pointer;
+        list-style: none;
+        font-size: 12px;
+      }
+      .model-picker summary::-webkit-details-marker {
+        display: none;
+      }
+      .model-picker summary::after {
+        content: "›";
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1;
+      }
+      .model-picker details[open] > summary::after,
+      .model-picker[open] > summary::after {
+        transform: rotate(90deg);
+      }
+      .model-picker > summary[aria-disabled="true"] {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .model-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 10;
+        width: 220px;
+        max-width: calc(100vw - 30px);
+        max-height: 65vh;
+        overflow-y: auto;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: 0 8px 28px #0002;
+      }
+      .model-option,
+      .model-deprecated > summary {
+        width: 100%;
+        border: 0;
+        border-radius: 7px;
+        padding: 8px 10px;
+        font-size: 12px;
+        text-align: left;
+      }
+      .model-option {
+        display: flex;
+        justify-content: space-between;
+      }
+      .model-option[aria-pressed="true"]::after {
+        content: "✓";
+        color: var(--accent);
+      }
+      .model-option:hover:not(:disabled),
+      .model-option[aria-pressed="true"],
+      .model-deprecated > summary:hover {
+        background: var(--soft);
+      }
+      .model-deprecated {
+        border-top: 1px solid var(--line);
+        margin-top: 5px;
+        padding-top: 5px;
+      }
+      .model-deprecated .model-option {
+        padding-left: 22px;
       }
       .banner {
         padding: 10px 30px;
@@ -565,7 +644,8 @@
         .selectors {
           width: 100%;
         }
-        .selectors label {
+        .selectors label,
+        .model-field {
           flex: 1;
         }
         .selectors select {
@@ -622,13 +702,19 @@
             </div>
           </div>
           <div class="selectors">
-            <label>Model<select id="model" aria-label="Model">
-              <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
-              <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
-              <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+            <div class="model-field"><span id="model-label">Model</span>
+            <details class="model-picker" id="model-picker">
+              <summary id="model-trigger" aria-labelledby="model-label model-name"><span id="model-name">GPT-5.6 Sol</span></summary>
+              <div class="model-menu" id="model-menu" role="group" aria-label="Models"></div>
+            </details>
+            <select id="model" hidden>
+              <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
+              <option value="gpt-6-luna">GPT-6 Luna</option>
               <option value="gpt-6-astra">GPT-6 Astra</option>
-            </select></label
-            ><label
+              <option value="gpt-5.6-luna" data-deprecated="true">GPT-5.6 Luna</option>
+              <option value="gpt-5.6-terra" data-deprecated="true">GPT-5.6 Terra</option>
+              <option value="gpt-5.6-sol" data-deprecated="true">GPT-5.6 Sol</option>
+            </select></div><label
               >Thinking<select id="effort" aria-label="Thinking level"></select
             ></label>
           </div>
@@ -685,7 +771,8 @@
           models: Array.from($("model").options, option => ({
             id: option.value,
             label: option.text,
-            efforts: option.value === "gpt-6-astra"
+            deprecated: option.dataset.deprecated === "true",
+            efforts: ["gpt-6-astra", "gpt-6.1-sol"].includes(option.value)
               ? ["low", "medium", "high", "xhigh", "max"]
               : ["none", "low", "medium", "high", "xhigh", "max"],
           })),
@@ -722,9 +809,11 @@
       }
       function lock(value) {
         busy = value;
+        if (value || loading) $("model-picker").open = false;
+        $("model-trigger").setAttribute("aria-disabled", String(value || loading));
         document
           .querySelectorAll(
-            ".sidebar button, .selectors select, #scenario, #load-scenario, #reset-scenario",
+            ".sidebar button, .selectors select, .model-option, #scenario, #load-scenario, #reset-scenario",
           )
           .forEach((el) => {
             if (el.classList.contains("rename")) return;
@@ -1131,7 +1220,59 @@
             ? config.default_effort
             : available[0] || "";
       }
-      $("model").onchange = efforts;
+      function updateModel() {
+        $("model-name").textContent =
+          config.models.find((m) => m.id === $("model").value)?.label || "Choose a model";
+        for (const button of $("model-menu").querySelectorAll(".model-option"))
+          button.setAttribute("aria-pressed", String(button.dataset.model === $("model").value));
+        efforts();
+      }
+      function renderModels() {
+        $("model").replaceChildren(
+          ...config.models.map((model) => {
+            const option = node("option", "", model.label);
+            option.value = model.id;
+            return option;
+          }),
+        );
+        $("model").value = config.models.some((m) => m.id === config.default_model)
+          ? config.default_model : config.models[0]?.id || "";
+        $("model-menu").replaceChildren();
+        const deprecated = node("details", "model-deprecated");
+        deprecated.append(node("summary", "", "Deprecated"));
+        for (const model of config.models) {
+          const button = node("button", "model-option", model.label);
+          button.type = "button";
+          button.dataset.model = model.id;
+          button.onclick = () => {
+            if (busy || loading) return;
+            $("model").value = model.id;
+            updateModel();
+            $("model-picker").open = false;
+            $("model-trigger").focus();
+          };
+          (model.deprecated ? deprecated : $("model-menu")).append(button);
+        }
+        if (deprecated.querySelector("button")) $("model-menu").append(deprecated);
+        updateModel();
+      }
+      $("model").onchange = updateModel;
+      $("model-trigger").onclick = (event) => {
+        if (busy || loading) event.preventDefault();
+      };
+      $("model-picker").onkeydown = (event) => {
+        if (event.key === "Escape") {
+          $("model-picker").open = false;
+          $("model-trigger").focus();
+          event.preventDefault();
+        }
+      };
+      document.addEventListener("click", (event) => {
+        if (!$("model-picker").contains(event.target)) $("model-picker").open = false;
+      });
+      $("model-picker").addEventListener("focusout", (event) => {
+        if (!$("model-picker").contains(event.relatedTarget)) $("model-picker").open = false;
+      });
       const scenarioHint =
         "Loads F1–F5 onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
       function showScenario(status) {
@@ -1335,7 +1476,7 @@
       };
       (async () => {
         empty();
-        efforts();
+        renderModels();
         if (location.protocol === "file:") {
           notice("Preview only. From the repository root, run uv run --project agent python -m agent, then open http://127.0.0.1:8000 to chat.");
           lock(false);
@@ -1345,17 +1486,7 @@
         lock(false);
         try {
           config = await api("/api/config");
-          $("model").replaceChildren(
-            ...config.models.map((model) => {
-              const option = node("option", "", model.label);
-              option.value = model.id;
-              return option;
-            }),
-          );
-          $("model").value = config.default_model;
-          if (!$("model").value && config.models.length)
-            $("model").value = config.models[0].id;
-          efforts();
+          renderModels();
           await refreshScenario();
           if (!config.configured)
             notice(

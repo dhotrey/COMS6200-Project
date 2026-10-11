@@ -128,6 +128,15 @@ output cap of 8,192 tokens remains. This is not a billing cap; set gateway spend
 limits for a financial cap. A final answer is requested after the tool budget is
 exhausted.
 
+The model picker lists GPT-6.1 Sol, GPT-6 Luna and GPT-6 Astra, with the
+GPT-5.6 series inside an expandable **Deprecated** group. This is a UI grouping;
+the legacy models remain selectable and the protocol default stays GPT-5.6 Sol.
+GPT-6.1 Sol supports reasoning efforts `low` through `max`; GPT-6 Luna also
+supports `none`. New model efforts and Standard cost estimates follow the
+[Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol) and
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model pages,
+reviewed on 2026-10-11.
+
 Cloudflare D1 stores conversations, provider context, tool results and statistics.
 Logfire receives model/tool timing spans and turn metrics when configured. Tool
 observations may be exported to that Logfire project.

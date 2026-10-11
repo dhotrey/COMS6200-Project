@@ -42,7 +42,12 @@ class FakeClient:
         yield {"type": "response.completed", "response": result}
 
 
-def test_multiround_usage_and_tool_pairing(monkeypatch):
+@pytest.mark.parametrize("model,prices", [
+    ("gpt-5.6-luna", (.2, .02, 1.2)),
+    ("gpt-6.1-sol", (2, .1, 10)),
+    ("gpt-6-luna", (.1, .01, .5)),
+])
+def test_multiround_usage_and_tool_pairing(monkeypatch, model, prices):
     async def execute(name, arguments):
         return {"name": name, "ok": True, "data": {"switches": []}, "duration_seconds": 2}
 
@@ -52,13 +57,15 @@ def test_multiround_usage_and_tool_pairing(monkeypatch):
     state = {"content": "", "tools": [], "stats": {}}
 
     async def collect():
-        return [event async for event in loop.run(client, history, "gpt-5.6-luna", "medium", state)]
+        return [event async for event in loop.run(client, history, model, "medium", state)]
 
     events = asyncio.run(collect())
     stats = state["stats"]
     assert (stats["input_tokens"], stats["output_tokens"], stats["total_tokens"]) == (30, 12, 42)
     assert (stats["cached_tokens"], stats["reasoning_tokens"]) == (5, 3)
-    assert stats["cost_usd"] == pytest.approx((25 * .2 + 5 * .02 + 12 * 1.2) / 1e6)
+    inp, cached, out = prices
+    assert stats["cost_usd"] == pytest.approx((25 * inp + 5 * cached + 12 * out) / 1e6)
+    assert all(request["model"] == model for request in client.requests)
     assert stats["model_calls"] == 2 and stats["tool_calls"] == 1
     assert len(stats["requests"]) == 2 and stats["duration_seconds"] >= 0
     assert stats["first_token_seconds"] is not None
