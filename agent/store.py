@@ -213,7 +213,8 @@ def create() -> dict[str, str]:
 
 def listing() -> list[dict[str, Any]]:
     return _db().query(
-        "SELECT id, title FROM conversations ORDER BY created_at DESC, rowid DESC"
+        "SELECT id, title, created_at, updated_at FROM conversations "
+        "ORDER BY created_at DESC, rowid DESC"
     )
 
 

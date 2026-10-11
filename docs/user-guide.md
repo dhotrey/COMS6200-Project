@@ -1149,18 +1149,29 @@ privileges, limits, Logfire, and offline tests. Run one server worker. Bring
 the testbed up with `./scripts/testbed.sh start` (or interactive `mn`) before
 sending diagnosis prompts.
 
-The model picker offers Luna, Terra, Sol and Astra. The default selection is Sol
-(`gpt-5.6-sol`) at thinking level `medium`.
-A separate fault picker can **Load** or **Reset** F1–F5 on the live network.
+The model picker lists GPT-6.1 Sol, GPT-6 Luna and GPT-6 Astra, with the GPT-5.6
+series inside **Deprecated**. Both model and thinking pickers select their first
+entry by default (currently `gpt-6.1-sol` / `low`). Model, Thinking and Fault
+scenario share the same dropdown styling, selection checkmarks and closing
+controls (Escape or clicking outside). Selecting a fault loads it immediately;
+**Reset** clears it and restores “Choose a scenario…”.
 That mutation is operator-only: the selected id is not sent in chat requests,
 saved as assistant context, or written into the system prompt. Describe a
 symptom; do not name F1–F5. Start a new conversation after changing the fault.
 `./scripts/testbed.sh inject Fn` (F1–F5) remains valid.
 Conversation history and turn measurements are stored in Cloudflare D1.
-The chat window renders assistant Markdown (lists, emphasis, code). Tool calls
+The chat window renders assistant Markdown (lists, emphasis, code and tables).
+Tables have styled headers, alternating rows and column alignment; wide tables
+scroll horizontally within the message. Inline formatting also works in cells.
+Tool calls
 appear as faint one-line labels until hovered or clicked. The conversation
-sidebar is drag-resizable; double-click a title or use the pencil control to
+sidebar is drag-resizable and can be collapsed with the hamburger button. The
+**+** button remains available while collapsed to start a new conversation.
+Double-click a title or use the pencil control to
 rename it (`PATCH /api/conversations/{id}`).
+Hover over or focus a chat title in the sidebar to see a styled popup with only
+its last-update date and time, displayed in your browser's local timezone.
+Last updated includes saved turns and title changes. Escape dismisses the popup.
 Tool delays default to 0. Protocol v1 keeps `TOOL_DELAY_MIN_SECONDS` and
 `TOOL_DELAY_MAX_SECONDS` at 0, `MAX_TOOL_CALLS` at 14, and `MAX_TURN_SECONDS` at 300.
 Execution and artificial-delay timings are recorded separately. Stop cancels

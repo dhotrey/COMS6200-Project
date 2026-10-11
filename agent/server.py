@@ -48,7 +48,8 @@ def index():
 def settings():
     payload = {"configured": config.configured(), "models": config.MODELS,
                "dev_mode": config.dev_mode(),
-               "default_model": "gpt-5.6-sol", "default_effort": "medium"}
+               "default_model": config.MODELS[0]["id"],
+               "default_effort": config.MODELS[0]["efforts"][0]}
     payload.update(config.runtime_limits())
     return payload
 

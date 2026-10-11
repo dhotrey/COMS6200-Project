@@ -118,6 +118,17 @@
       .sidebar-collapsed .brand {
         display: none;
       }
+      .layout.sidebar-collapsed .new {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        text-align: center;
+        font-size: 20px;
+        line-height: 1;
+      }
+      .sidebar-collapsed .new-label {
+        display: none;
+      }
       .sidebar-resizer:hover,
       .sidebar-resizer.dragging {
         background: var(--accent);
@@ -199,6 +210,29 @@
       .conversation.editing .rename {
         display: none;
       }
+      .chat-tooltip {
+        position: fixed;
+        z-index: 30;
+        pointer-events: none;
+        max-width: calc(100vw - 24px);
+        padding: 11px 14px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        color: var(--ink);
+        box-shadow: 0 6px 24px #0003;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 12px;
+      }
+      .chat-tooltip .eyebrow {
+        font-size: 9px;
+        letter-spacing: 0.8px;
+        margin-bottom: 3px;
+      }
+      #chat-tooltip-date { font-weight: 600; }
+      #chat-tooltip-time { color: var(--muted); }
       .sidebar footer {
         font-size: 11px;
         color: var(--muted);
@@ -231,7 +265,7 @@
         gap: 12px;
       }
       .selectors label,
-      .model-field {
+      .selector-field {
         font-size: 10px;
         letter-spacing: 0.8px;
         color: var(--muted);
@@ -239,8 +273,7 @@
         display: flex;
         flex-direction: column;
       }
-      .selectors select,
-      .model-picker > summary {
+      .selector-picker > summary {
         font-size: 12px;
         letter-spacing: 0;
         text-transform: none;
@@ -248,15 +281,17 @@
         border: 1px solid var(--line);
         border-radius: 7px;
         padding: 5px 8px;
+        min-height: 31px;
+        min-width: 100px;
         max-width: 210px;
       }
-      .model-picker {
+      .selector-picker {
         position: relative;
         color: var(--ink);
         letter-spacing: 0;
         text-transform: none;
       }
-      .model-picker summary {
+      .selector-picker summary {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -265,24 +300,24 @@
         list-style: none;
         font-size: 12px;
       }
-      .model-picker summary::-webkit-details-marker {
+      .selector-picker summary::-webkit-details-marker {
         display: none;
       }
-      .model-picker summary::after {
+      .selector-picker summary::after {
         content: "›";
         color: var(--muted);
         font-size: 18px;
         line-height: 1;
       }
-      .model-picker details[open] > summary::after,
-      .model-picker[open] > summary::after {
+      .selector-picker details[open] > summary::after,
+      .selector-picker[open] > summary::after {
         transform: rotate(90deg);
       }
-      .model-picker > summary[aria-disabled="true"] {
+      .selector-picker > summary[aria-disabled="true"] {
         opacity: 0.5;
         cursor: default;
       }
-      .model-menu {
+      .selector-menu {
         position: absolute;
         top: calc(100% + 6px);
         right: 0;
@@ -297,7 +332,7 @@
         background: var(--panel);
         box-shadow: 0 8px 28px #0002;
       }
-      .model-option,
+      .selector-option,
       .model-deprecated > summary {
         width: 100%;
         border: 0;
@@ -306,16 +341,16 @@
         font-size: 12px;
         text-align: left;
       }
-      .model-option {
+      .selector-option {
         display: flex;
         justify-content: space-between;
       }
-      .model-option[aria-pressed="true"]::after {
+      .selector-option[aria-pressed="true"]::after {
         content: "✓";
         color: var(--accent);
       }
-      .model-option:hover:not(:disabled),
-      .model-option[aria-pressed="true"],
+      .selector-option:hover:not(:disabled),
+      .selector-option[aria-pressed="true"],
       .model-deprecated > summary:hover {
         background: var(--soft);
       }
@@ -324,7 +359,7 @@
         margin-top: 5px;
         padding-top: 5px;
       }
-      .model-deprecated .model-option {
+      .model-deprecated .selector-option {
         padding-left: 22px;
       }
       .banner {
@@ -452,6 +487,41 @@
       }
       .body.md a {
         color: var(--accent);
+      }
+      .body.md .md-table {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 0.7em 0 1em;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+      }
+      .md-table table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .md-table:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .md-table th,
+      .md-table td {
+        min-width: 100px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .md-table th {
+        background: var(--soft);
+        font-weight: 600;
+      }
+      .md-table tbody tr:nth-child(even) {
+        background: color-mix(in srgb, var(--soft) 30%, transparent);
+      }
+      .md-table tbody tr:last-child td {
+        border-bottom: 0;
       }
       .tools {
         display: flex;
@@ -611,13 +681,14 @@
         border-bottom: 1px solid var(--line);
         font-size: 12px;
       }
-      .scenario-picker label { font-weight: 600; }
-      .scenario-picker select {
+      #scenario-label { font-weight: 600; }
+      .scenario-picker .selector-picker > summary {
         max-width: 100%;
-        padding: 6px 8px;
-        border: 1px solid var(--line);
-        border-radius: 7px;
-        background: var(--panel);
+      }
+      .scenario-picker .selector-menu {
+        left: 0;
+        right: auto;
+        width: 280px;
       }
       .scenario-picker p {
         flex-basis: 100%;
@@ -693,12 +764,16 @@
           width: 100%;
         }
         .selectors label,
-        .model-field {
+        .selector-field {
           flex: 1;
         }
-        .selectors select {
+        .selector-picker > summary {
           max-width: 100%;
           width: 100%;
+        }
+        .selector-field:first-child .selector-menu {
+          left: 0;
+          right: auto;
         }
         .timeline {
           padding: 24px 18px;
@@ -727,8 +802,8 @@
             aria-expanded="true" aria-controls="sidebar-content"><span aria-hidden="true">☰</span></button>
           <div class="brand"><span>◈</span> Network Lab</div>
         </div>
+        <button class="new" id="new" type="button" aria-label="New conversation" title="New conversation"><span aria-hidden="true">＋</span><span class="new-label"> New conversation</span></button>
         <div class="sidebar-content" id="sidebar-content">
-        <button class="new" id="new">＋ New conversation</button>
         <div class="eyebrow">Conversations</div>
         <nav
           class="conversations"
@@ -757,10 +832,10 @@
             </div>
           </div>
           <div class="selectors">
-            <div class="model-field"><span id="model-label">Model</span>
-            <details class="model-picker" id="model-picker">
-              <summary id="model-trigger" aria-labelledby="model-label model-name"><span id="model-name">GPT-5.6 Sol</span></summary>
-              <div class="model-menu" id="model-menu" role="group" aria-label="Models"></div>
+            <div class="selector-field"><span id="model-label">Model</span>
+            <details class="selector-picker" id="model-picker">
+              <summary id="model-trigger" aria-labelledby="model-label model-name"><span id="model-name">Choose a model</span></summary>
+              <div class="selector-menu" id="model-menu" role="group" aria-label="Models"></div>
             </details>
             <select id="model" hidden>
               <option value="gpt-6.1-sol">GPT-6.1 Sol</option>
@@ -769,14 +844,23 @@
               <option value="gpt-5.6-luna" data-deprecated="true">GPT-5.6 Luna</option>
               <option value="gpt-5.6-terra" data-deprecated="true">GPT-5.6 Terra</option>
               <option value="gpt-5.6-sol" data-deprecated="true">GPT-5.6 Sol</option>
-            </select></div><label
-              >Thinking<select id="effort" aria-label="Thinking level"></select
-            ></label>
+            </select></div>
+            <div class="selector-field"><span id="effort-label">Thinking</span>
+              <details class="selector-picker" id="effort-picker">
+                <summary id="effort-trigger" aria-labelledby="effort-label effort-name"><span id="effort-name">Choose a level</span></summary>
+                <div class="selector-menu" id="effort-menu" role="group" aria-label="Thinking levels"></div>
+              </details>
+              <select id="effort" hidden></select>
+            </div>
           </div>
         </header>
         <section class="scenario-picker" aria-label="Fault scenario controls">
-          <label for="scenario">Fault scenario</label>
-          <select id="scenario" aria-describedby="scenario-note">
+          <span id="scenario-label">Fault scenario</span>
+          <details class="selector-picker" id="scenario-picker">
+            <summary id="scenario-trigger" aria-labelledby="scenario-label scenario-name" aria-describedby="scenario-note"><span id="scenario-name">Choose a scenario…</span></summary>
+            <div class="selector-menu" id="scenario-menu" role="group" aria-label="Fault scenarios"></div>
+          </details>
+          <select id="scenario" hidden>
             <option value="" disabled selected>Choose a scenario…</option>
             <option value="F1">F1 · Link failure</option>
             <option value="F2">F2 · Congestion</option>
@@ -814,14 +898,17 @@
         </div>
       </main>
     </div>
+    <div class="chat-tooltip" id="chat-tooltip" role="tooltip" hidden>
+      <span class="eyebrow">Last updated</span>
+      <span id="chat-tooltip-date"></span>
+      <span id="chat-tooltip-time"></span>
+    </div>
     <script>
       "use strict";
       const $ = (id) => document.getElementById(id);
       // Static options keep the file preview usable; the server is authoritative when connected.
       let config = {
           configured: false,
-          default_model: "gpt-5.6-sol",
-          default_effort: "medium",
           models: Array.from($("model").options, option => ({
             id: option.value,
             label: option.text,
@@ -863,11 +950,13 @@
       }
       function lock(value) {
         busy = value;
-        if (value || loading) $("model-picker").open = false;
-        $("model-trigger").setAttribute("aria-disabled", String(value || loading));
+        for (const id of ["model", "effort", "scenario"]) {
+          if (value || loading) $(id + "-picker").open = false;
+          $(id + "-trigger").setAttribute("aria-disabled", String(value || loading));
+        }
         document
           .querySelectorAll(
-            ".sidebar button, .selectors select, .model-option, #scenario, #reset-scenario",
+            ".sidebar button, .selectors select, .selector-option, #scenario, #reset-scenario",
           )
           .forEach((el) => {
             if (el.classList.contains("rename") || el.id === "sidebar-toggle") return;
@@ -901,14 +990,51 @@
           );
         return html.replace(/\0C(\d+)\0/g, (_, index) => codes[Number(index)]);
       }
+      function tableCells(line) {
+        const text = line.trim(), cells = [];
+        let cell = "";
+        for (let i = 0; i < text.length; i += 1) {
+          if (text[i] === "\\" && text[i + 1] === "|") {
+            cell += "|";
+            i += 1;
+          } else if (text[i] === "|") {
+            cells.push(cell.trim());
+            cell = "";
+          } else cell += text[i];
+        }
+        cells.push(cell.trim());
+        if (text.startsWith("|")) cells.shift();
+        if (text.endsWith("|") && cells.at(-1) === "") cells.pop();
+        return cells;
+      }
       function markdownBlocks(text) {
         const lines = text.replace(/\r\n/g, "\n").split("\n");
+        const tableAt = (index) => {
+          if (!lines[index]?.includes("|") || !lines[index + 1]) return null;
+          const headers = tableCells(lines[index]), dividers = tableCells(lines[index + 1]);
+          if (!headers.length || headers.length !== dividers.length || !dividers.every(cell => /^:?-{3,}:?$/.test(cell))) return null;
+          return { headers, align: dividers.map(cell => cell.endsWith(":") ? (cell.startsWith(":") ? "center" : "right") : "left") };
+        };
         let html = "",
           i = 0;
         while (i < lines.length) {
           const line = lines[i];
           if (!line.trim()) {
             i += 1;
+            continue;
+          }
+          const table = tableAt(i);
+          if (table) {
+            const row = (cells, tag) => `<tr>${table.headers.map((_, column) =>
+              `<${tag}${tag === "th" ? ' scope="col"' : ""} style="text-align:${table.align[column]}">${inlineMarkdown(cells[column] || "")}</${tag}>`,
+            ).join("")}</tr>`;
+            html += `<div class="md-table" tabindex="0" role="region" aria-label="Table"><table><thead>${row(table.headers, "th")}</thead><tbody>`;
+            i += 2;
+            while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+              html += row(tableCells(lines[i]), "td");
+              i += 1;
+            }
+            html += "</tbody></table></div>";
             continue;
           }
           const heading = line.match(/^(#{1,4}) (.+)/);
@@ -935,6 +1061,7 @@
           while (
             i < lines.length &&
             lines[i].trim() &&
+            !tableAt(i) &&
             !/^#{1,4} /.test(lines[i]) &&
             !/^[-*] /.test(lines[i]) &&
             !/^\d+\. /.test(lines[i])
@@ -1154,7 +1281,6 @@
             );
             item.title = updated.title;
             choose.textContent = updated.title;
-            choose.title = updated.title;
             await list();
           } catch (e) {
             notice(e.message, true);
@@ -1175,8 +1301,42 @@
         field.focus();
         field.select();
       }
+      function hideConversationTooltip() {
+        $("chat-tooltip").hidden = true;
+        document.querySelector('[aria-describedby="chat-tooltip"]')?.removeAttribute("aria-describedby");
+      }
+      function attachConversationTooltip(choose, updatedAt) {
+        if (!updatedAt) return;
+        // D1 CURRENT_TIMESTAMP is UTC, with no timezone suffix.
+        const date = new Date(updatedAt.replace(" ", "T") + "Z");
+        if (Number.isNaN(date.getTime())) return;
+        const show = () => {
+          hideConversationTooltip();
+          $("chat-tooltip-date").textContent = date.toLocaleDateString(undefined, { dateStyle: "medium" });
+          $("chat-tooltip-time").textContent = date.toLocaleTimeString(undefined, {
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+          });
+          const tooltip = $("chat-tooltip");
+          tooltip.hidden = false;
+          choose.setAttribute("aria-describedby", tooltip.id);
+          const anchor = choose.getBoundingClientRect(), box = tooltip.getBoundingClientRect();
+          tooltip.style.left = `${Math.max(12, Math.min(anchor.right + 10, innerWidth - box.width - 12))}px`;
+          tooltip.style.top = `${Math.max(12, Math.min(anchor.top, innerHeight - box.height - 12))}px`;
+        };
+        choose.onpointerenter = choose.onfocus = show;
+        choose.onpointerleave = () => {
+          if (document.activeElement !== choose) hideConversationTooltip();
+        };
+        choose.onblur = choose.onpointerdown = hideConversationTooltip;
+        choose.addEventListener("keydown", event => {
+          if (event.key === "Escape") hideConversationTooltip();
+        });
+      }
+      $("conversations").onscroll = hideConversationTooltip;
+      window.addEventListener("resize", hideConversationTooltip);
       async function list() {
         const items = await api("/api/conversations");
+        hideConversationTooltip();
         $("conversations").replaceChildren();
         for (const item of items) {
           const row = node(
@@ -1187,7 +1347,7 @@
             rename = node("button", "rename", "✎"),
             remove = node("button", "delete", "×");
           const label = item.title || "New conversation";
-          choose.title = label;
+          attachConversationTooltip(choose, item.updated_at);
           choose.onclick = () => open(item.id);
           rename.title = "Rename conversation";
           rename.setAttribute("aria-label", `Rename ${label}`);
@@ -1260,7 +1420,6 @@
       function efforts() {
         const available =
           config.models.find((m) => m.id === $("model").value)?.efforts || [];
-        const previous = $("effort").value;
         $("effort").replaceChildren(
           ...available.map((value) => {
             const el = node("option", "", value);
@@ -1268,17 +1427,32 @@
             return el;
           }),
         );
-        $("effort").value = available.includes(previous)
-          ? previous
-          : available.includes(config.default_effort)
-            ? config.default_effort
-            : available[0] || "";
+        $("effort").value = available[0] || "";
+        $("effort-menu").replaceChildren(
+          ...available.map(value => pickerOption("effort", value, value)),
+        );
+        updatePicker("effort");
+      }
+      function updatePicker(id) {
+        $(id + "-name").textContent = $(id).selectedOptions[0]?.text || "Choose an option";
+        for (const button of $(id + "-menu").querySelectorAll(".selector-option"))
+          button.setAttribute("aria-pressed", String(button.dataset.value === $(id).value));
+      }
+      function pickerOption(id, value, label) {
+        const button = node("button", "selector-option", label);
+        button.type = "button";
+        button.dataset.value = value;
+        button.onclick = () => {
+          if (busy || loading) return;
+          $(id).value = value;
+          $(id + "-picker").open = false;
+          $(id + "-trigger").focus();
+          $(id).onchange?.();
+        };
+        return button;
       }
       function updateModel() {
-        $("model-name").textContent =
-          config.models.find((m) => m.id === $("model").value)?.label || "Choose a model";
-        for (const button of $("model-menu").querySelectorAll(".model-option"))
-          button.setAttribute("aria-pressed", String(button.dataset.model === $("model").value));
+        updatePicker("model");
         efforts();
       }
       function renderModels() {
@@ -1289,44 +1463,38 @@
             return option;
           }),
         );
-        $("model").value = config.models.some((m) => m.id === config.default_model)
-          ? config.default_model : config.models[0]?.id || "";
+        $("model").value = config.models[0]?.id || "";
         $("model-menu").replaceChildren();
         const deprecated = node("details", "model-deprecated");
         deprecated.append(node("summary", "", "Deprecated"));
         for (const model of config.models) {
-          const button = node("button", "model-option", model.label);
-          button.type = "button";
-          button.dataset.model = model.id;
-          button.onclick = () => {
-            if (busy || loading) return;
-            $("model").value = model.id;
-            updateModel();
-            $("model-picker").open = false;
-            $("model-trigger").focus();
-          };
+          const button = pickerOption("model", model.id, model.label);
           (model.deprecated ? deprecated : $("model-menu")).append(button);
         }
         if (deprecated.querySelector("button")) $("model-menu").append(deprecated);
         updateModel();
       }
       $("model").onchange = updateModel;
-      $("model-trigger").onclick = (event) => {
-        if (busy || loading) event.preventDefault();
-      };
-      $("model-picker").onkeydown = (event) => {
-        if (event.key === "Escape") {
-          $("model-picker").open = false;
-          $("model-trigger").focus();
-          event.preventDefault();
-        }
-      };
-      document.addEventListener("click", (event) => {
-        if (!$("model-picker").contains(event.target)) $("model-picker").open = false;
-      });
-      $("model-picker").addEventListener("focusout", (event) => {
-        if (!$("model-picker").contains(event.relatedTarget)) $("model-picker").open = false;
-      });
+      $("effort").onchange = () => updatePicker("effort");
+      for (const id of ["model", "effort", "scenario"]) {
+        const picker = $(id + "-picker"), trigger = $(id + "-trigger");
+        trigger.onclick = (event) => {
+          if (busy || loading) event.preventDefault();
+        };
+        picker.onkeydown = (event) => {
+          if (event.key === "Escape") {
+            picker.open = false;
+            trigger.focus();
+            event.preventDefault();
+          }
+        };
+        document.addEventListener("click", (event) => {
+          if (!picker.contains(event.target)) picker.open = false;
+        });
+        picker.addEventListener("focusout", (event) => {
+          if (!picker.contains(event.relatedTarget)) picker.open = false;
+        });
+      }
       const scenarioHint =
         "Selecting a scenario loads it onto the live network. The assistant is not told which scenario you chose — describe a symptom in chat. Start a new conversation after changing the fault.";
       function showScenario(status) {
@@ -1336,6 +1504,7 @@
         }
         if (status.active && status.scenario_id) {
           $("scenario").value = status.scenario_id;
+          updatePicker("scenario");
           $("scenario-note").textContent =
             "Network has " +
             status.scenario_id +
@@ -1344,6 +1513,7 @@
           return;
         }
         $("scenario").value = "";
+        updatePicker("scenario");
         $("scenario-note").textContent =
           (status.error ? status.error + " " : "No catalogue fault is active. ") +
           scenarioHint;
@@ -1355,6 +1525,7 @@
       $("scenario").onchange = async () => {
         const scenario = $("scenario").value;
         if (!scenario || busy || loading) return;
+        updatePicker("scenario");
         loading = true;
         lock(false);
         try {
@@ -1375,6 +1546,7 @@
             await refreshScenario();
           } catch {
             $("scenario").value = "";
+            updatePicker("scenario");
           }
           notice(e.message, true);
         } finally {
@@ -1557,6 +1729,12 @@
       (async () => {
         empty();
         renderModels();
+        $("scenario-menu").replaceChildren(
+          ...Array.from($("scenario").options)
+            .filter(option => !option.disabled)
+            .map(option => pickerOption("scenario", option.value, option.text)),
+        );
+        updatePicker("scenario");
         if (location.protocol === "file:") {
           notice("Preview only. From the repository root, run uv run --project agent python -m agent, then open http://127.0.0.1:8000 to chat.");
           lock(false);
@@ -1585,6 +1763,7 @@
         const layout = document.querySelector(".layout");
         const toggle = $("sidebar-toggle");
         const apply = (collapsed) => {
+          hideConversationTooltip();
           layout.classList.toggle("sidebar-collapsed", collapsed);
           $("sidebar-content").hidden = collapsed;
           $("sidebar-resizer").hidden = collapsed;

@@ -75,8 +75,8 @@ def body(cid):
 def test_missing_credentials_and_conversation_crud(client):
     cfg = client.get("/api/config").json()
     assert cfg["configured"] is False
-    assert cfg["default_model"] == "gpt-5.6-sol"
-    assert cfg["default_effort"] == "medium"
+    assert cfg["default_model"] == cfg["models"][0]["id"] == "gpt-6.1-sol"
+    assert cfg["default_effort"] == cfg["models"][0]["efforts"][0] == "low"
     assert cfg["max_tool_calls"] == 14
     assert cfg["max_turn_seconds"] == 300
     assert cfg["tool_delay_min_seconds"] == 0
@@ -150,6 +150,15 @@ def test_model_catalogue_groups_legacy_models(client):
     assert {m["id"] for m in models if m.get("deprecated")} == {
         "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol",
     }
+
+
+def test_picker_defaults_follow_catalogue_order(client, monkeypatch):
+    models = [dict(server.config.MODELS[1], efforts=["high", "none"]),
+              server.config.MODELS[0]]
+    monkeypatch.setattr(server.config, "MODELS", models)
+    cfg = client.get("/api/config").json()
+    assert cfg["default_model"] == "gpt-6-luna"
+    assert cfg["default_effort"] == "high"
 
 
 def test_development_version_tracks_ui_and_server_changes(client, monkeypatch, tmp_path):

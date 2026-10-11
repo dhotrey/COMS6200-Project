@@ -51,7 +51,14 @@ def test_conversation_crud_and_schema(database):
 
     first = store.create()
     second = store.create()
+    database.query(
+        "UPDATE conversations SET created_at = ?, updated_at = ? WHERE id = ?",
+        ["2026-01-02 03:04:05", "2026-01-03 06:07:08", first["id"]],
+    )
     assert [item["id"] for item in store.listing()] == [second["id"], first["id"]]
+    listed = next(item for item in store.listing() if item["id"] == first["id"])
+    assert listed["created_at"] == "2026-01-02 03:04:05"
+    assert listed["updated_at"] == "2026-01-03 06:07:08"
     assert store.get(first["id"]) == {
         "id": first["id"],
         "title": "New conversation",

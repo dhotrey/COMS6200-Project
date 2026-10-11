@@ -135,8 +135,10 @@ sent to the model. One turn runs at a time to avoid overlapping network probes.
 Stop closes model streaming; an already-running bounded diagnostic finishes its
 cleanup before another turn can start.
 
-Defaults: 14 tool calls and 300 seconds per turn. The UI model default is
-`gpt-5.6-sol` at reasoning effort `medium`. The per-turn token stop is
+Defaults: 14 tool calls and 300 seconds per turn. The UI selects the first model
+in the list and its first reasoning effort (currently `gpt-6.1-sol` / `low`).
+Changing models selects that model's first supported effort. Both pickers use the
+same expandable menu style. The per-turn token stop is
 off (`MAX_TURN_TOKENS=0`). Set a positive value to restore it. A per-request
 output cap of 8,192 tokens remains. This is not a billing cap; set gateway spend
 limits for a financial cap. A final answer is requested after the tool budget is
@@ -144,7 +146,8 @@ exhausted.
 
 The model picker lists GPT-6.1 Sol, GPT-6 Luna and GPT-6 Astra, with the
 GPT-5.6 series inside an expandable **Deprecated** group. This is a UI grouping;
-the legacy models remain selectable and the protocol default stays GPT-5.6 Sol.
+the legacy models remain selectable. Protocol v1 separately pins GPT-5.6 Sol /
+`medium`; its formal preflight still requires those runtime defaults.
 GPT-6.1 Sol supports reasoning efforts `low` through `max`; GPT-6 Luna also
 supports `none`. New model efforts and Standard cost estimates follow the
 [Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol) and
