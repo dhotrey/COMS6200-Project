@@ -100,10 +100,10 @@ Open **Benchmarks / Evals** from the homepage's top bar, or visit
 http://127.0.0.1:8000/results.html. The page has one 3 × 5 matrix per selected
 model/thinking combination: Main, Ring and Tree against F1–F5. The catalogue
 comes from `config.MODELS`: reasoning models use low, medium, high and xhigh
-where supported; GPT-4.1 Mini uses none. All seven configured models, including
-the deprecated group, currently give 25 combinations and **375 matrix cells**.
+where supported; GPT-4.1 Mini and Nano use none. All eight configured models, including
+the deprecated group, currently give 26 combinations and **390 matrix cells**.
 **Runs per cell**, next to Run all, defaults to 3 and accepts integers from 1
-through 50: all models at 3 repeats means **1,125 diagnoses**, or 1,500 at 4.
+through 50: all models at 3 repeats means **1,170 diagnoses**, or 1,560 at 4.
 The run button count includes repeats. Each trial is saved separately, with a
 fresh conversation and its own chat, grade, usage and cost. Existing saved
 single-trial runs remain readable. More repeats expose output variability;

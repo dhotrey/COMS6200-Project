@@ -33,6 +33,7 @@ MODELS = [
     {"id": "gpt-6-luna", "label": "GPT-6 Luna", "efforts": EFFORTS},
     {"id": "gpt-6-astra", "label": "GPT-6 Astra", "efforts": EFFORTS[1:]},
     {"id": "gpt-4.1-mini", "label": "GPT-4.1 Mini", "efforts": ["none"], "reasoning": False},
+    {"id": "gpt-4.1-nano", "label": "GPT-4.1 Nano", "efforts": ["none"], "reasoning": False},
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "efforts": EFFORTS, "deprecated": True},
     {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "efforts": EFFORTS, "deprecated": True},
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "efforts": EFFORTS, "deprecated": True},
@@ -43,6 +44,11 @@ PRICES = {"gpt-5.6-luna": (.2, .02, 1.2), "gpt-5.6-terra": (2, .2, 12),
 # New model Standard prices reviewed 2026-10-11 against the OpenAI model pages.
 PRICES.update({"gpt-6.1-sol": (2, .1, 10), "gpt-6-luna": (.1, .01, .5)})
 PRICES["gpt-4.1-mini"] = (.4, .1, 1.6)
+# Standard price checked 2026-10-13 via trackers citing the OpenAI pricing page
+# (cached input at 25% of input, as for gpt-4.1-mini).
+PRICES["gpt-4.1-nano"] = (.1, .025, .4)
+# The GPT-4.1 family is priced flat; no long-context surcharge.
+FLAT_PRICED = {"gpt-4.1-mini", "gpt-4.1-nano"}
 
 
 def dev_mode():

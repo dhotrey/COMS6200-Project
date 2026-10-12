@@ -60,10 +60,10 @@ def harness(monkeypatch):
 
 def test_catalogue_filters_efforts():
     options = benchmark.variants()
-    mini = [v for v in options if v["model"] == "gpt-4.1-mini"]
-    assert [v["effort"] for v in mini] == ["none"]
-    assert len(options) == 25
-    assert len(options) * 15 == 375
+    for model in ("gpt-4.1-mini", "gpt-4.1-nano"):
+        assert [v["effort"] for v in options if v["model"] == model] == ["none"]
+    assert len(options) == 26
+    assert len(options) * 15 == 390
     assert {v["effort"] for v in options if v["model"] == "gpt-6.1-sol"} == set(benchmark.EFFORTS)
 
 
@@ -267,7 +267,7 @@ def test_results_page_and_active_benchmark_exclusion(client):
     assert 'link.href = `/?conversation=' in page
     assert 'id="repeats"' in page and 'id="cell-details"' in page
     assert 'get("conversation")' in client.get("/").text
-    assert len(client.get("/api/benchmarks/config").json()["variants"]) == 25
+    assert len(client.get("/api/benchmarks/config").json()["variants"]) == 26
     server.app.state.benchmark.active = {"id": "active", "status": "running"}
     try:
         assert client.post("/api/benchmarks", json={"variants": [{"model": "gpt-4.1-mini", "effort": "none"}]}).status_code == 409
