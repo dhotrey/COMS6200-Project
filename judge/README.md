@@ -41,6 +41,10 @@ Rubrics, verdicts and explanations stay out of the diagnosis provider history.
 The complete result, rubric snapshot/hash and separate usage measurements are
 saved with the assistant answer. Reopening an answer does not rerun grading.
 
+The command-line sweep (`experiments/sweep.py`) grades every trial, the scripted
+baseline's included, with the same judge and rubrics, alongside its rule-based
+cross-check.
+
 `experiments/evaluator.py` and the frozen protocol's binary scoring are unchanged.
 That evaluator continues to use main-topology locations. Ring/tree rubrics describe
 the implemented catalogues and do not certify a live testbed run.

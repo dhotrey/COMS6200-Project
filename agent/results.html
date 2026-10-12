@@ -143,6 +143,11 @@
         view.button.title = running ? 'Pause the current benchmark, wait for cleanup and keep its results' : `${previous ? 'Rerun' : 'Run'} ${repeats ? view.variants.length * 15 * repeats : '—'} trials for ${view.label} (${repeats || '—'} per cell)`;
         view.button.setAttribute('aria-label', `${view.button.textContent} ${view.label}`);
         view.button.disabled = preview || busy || !cfg?.configured || (!activeId && !repeats) || (activeId ? !running || ending || (runId && runId !== activeId) : false);
+        if (item?.mode === 'sweep' && !running) {
+          // Command-line sweeps restart the network per trial and include the scripted baseline.
+          view.button.textContent = 'CLI sweep'; view.button.disabled = true;
+          view.button.title = 'Sweep runs are started with python3 -m experiments.sweep run';
+        }
         showCost(view.cost, item?.costs_by_model?.[model], item?.id === activeId);
       }
       showCost($('run-cost'), item?.cost, item?.id === activeId);
@@ -231,7 +236,9 @@
       $('status').textContent = `${run.status}${run.phase ? ` · ${run.phase}` : ''}${run.current ? ` · ${names[run.current.topology]} / ${run.current.scenario} · trial ${run.current.trial || 1}/${run.repeats}` : ''}${activeId && activeId !== run.id ? ' · Another benchmark is running' : ''}`;
       $('counts').textContent = `${finished}/${run.total} trials finished · ${completed} graded · ${errors} errors`;
       $('progress').max = run.total; $('progress').value = finished;
-      $('run-meta').textContent = `${new Date(run.started_at).toLocaleString()} · ${run.repeats} runs per cell · ${run.concurrency} concurrent · Exploratory`;
+      $('run-meta').textContent = run.mode === 'sweep'
+        ? `${new Date(run.started_at).toLocaleString()} · command-line sweep ${run.sweep?.run_id || ''} · ${run.repeats} rounds per cell · network restarted per trial · Exploratory`
+        : `${new Date(run.started_at).toLocaleString()} · ${run.repeats} runs per cell · ${run.concurrency} concurrent · Exploratory`;
       $('run-error').hidden = !run.error; $('run-error').textContent = run.error || '';
       controls();
       if ($('cell-details').open) renderCellDetails();
@@ -242,7 +249,7 @@
       if ($('history').dataset.signature !== signature) {
         $('history').dataset.signature = signature;
         $('history').replaceChildren(new Option('New benchmark',''));
-        for (const run of runs) $('history').append(new Option(`${new Date(run.started_at).toLocaleString()} · ${run.status} · ${run.repeats}× · ${run.total} trials`, run.id));
+        for (const run of runs) $('history').append(new Option(`${run.mode === 'sweep' ? 'Sweep · ' : ''}${new Date(run.started_at).toLocaleString()} · ${run.status} · ${run.repeats}× · ${run.total} trials`, run.id));
         $('history').value = runId || '';
       }
       return runs;

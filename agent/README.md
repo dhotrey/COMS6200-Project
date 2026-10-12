@@ -177,6 +177,13 @@ testbed. Inspect that testbed before starting another run. The normal formal
 protocol runner is unchanged; these matrix comparisons are exploratory,
 and the ring/tree catalogues remain draft pending live verification.
 
+The command-line sweep (`python -m experiments.sweep`, see the user guide's
+"Multi-topology model sweep") also publishes here. It restarts the network
+before every trial, includes the scripted baseline (shown as **Scripted baseline**)
+and runs one topology per session in rounds, graded by the same judge. Its runs
+appear in the history as **Sweep · …**, each round as one trial per cell, with
+**CLI sweep** in place of Run/Rerun.
+
 ## Cloudflare D1
 
 The harness follows the same official Cloudflare Python SDK pattern used by

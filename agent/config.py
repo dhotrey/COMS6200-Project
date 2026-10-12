@@ -51,6 +51,11 @@ PRICES["gpt-4.1-nano"] = (.1, .025, .4)
 FLAT_PRICED = {"gpt-4.1-mini", "gpt-4.1-nano"}
 
 
+def model_option(model: str) -> dict:
+    """The MODELS entry for a model id ({} if unknown)."""
+    return next((option for option in MODELS if option["id"] == model), {})
+
+
 def dev_mode():
     return os.getenv("COMS6200_AGENT_DEV", "") == "1"
 

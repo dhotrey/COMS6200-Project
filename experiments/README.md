@@ -20,3 +20,37 @@ python3 -m experiments formal
 metadata that this tree does not have: approved model id, effort `medium`,
 14 tool calls, 300 seconds, zero tool delay, frozen commit, baseline version,
 scoring version, and seeds 6200 and 6201. The approved model id in metadata must be `gpt-5.6-sol`.
+
+## Exploratory multi-topology sweep (not protocol v1)
+
+`experiments/sweep.py` compares the scripted baseline and the study models
+(`gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra`, `gpt-4.1-mini`,
+`gpt-4.1-nano`) on every topology (`main6s8h`, `ring5s5h`, `tree5s8h`) and fault
+(F1–F5). Records are labelled `EXPLORATORY SWEEP / NOT PROTOCOL V1` and go to
+`evidence/experiments/sweep/<run-id>/`. The protocol v1 runner above is unchanged
+and still main6s8h-only.
+
+It runs in rounds. Each `run` runs one round on one topology (every method on
+every fault once, freshly shuffled) and adds it to the same sweep; repeating the
+command adds the next round, and `summary` pools them. Each trial: restart the
+network, healthy gate, inject, one diagnosis from the symptom prompt only (new
+conversation for models), reset, then score. A preflight first sends each model
+one tiny tool-free turn. Infrastructure failures are retried once, then excluded
+and reported.
+
+Scoring: the agent's LLM judge (`agent/judge.py` with the `judge/` rubrics) is
+primary; `experiments/sweep_scoring.py` applies the protocol v1 keyword rubric
+with each catalogue's locations as a cross-check (on main6s8h it matches
+`evaluator.py`, checked in `tests/test_sweep.py`). Trials are published to the
+agent's D1 benchmark tables (`experiments/sweep_publish.py`), so sweeps appear on
+the results page next to its own benchmarks.
+
+```bash
+~/.venvs/coms6200-agent/bin/python -m experiments.sweep plan
+sudo ~/.venvs/coms6200-agent/bin/python -m experiments.sweep run --run-id sweep-2026-10 --topology ring5s5h
+~/.venvs/coms6200-agent/bin/python -m experiments.sweep publish --run-id sweep-2026-10
+python3 -m experiments.sweep summary --run-id sweep-2026-10
+```
+
+Setup, options and outputs: `docs/user-guide.md`, section "Multi-topology model
+sweep".
