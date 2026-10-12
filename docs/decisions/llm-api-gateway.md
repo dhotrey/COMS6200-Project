@@ -14,7 +14,7 @@ the repository.
 
 ## Decision
 
-LLM traffic will use the OpenAI Responses API **through Cloudflare AI Gateway**:
+Diagnosis and optional explanation traffic use the OpenAI Responses API **through Cloudflare AI Gateway**:
 
 ```
 LLM Agent
@@ -78,3 +78,19 @@ history, Logfire and per-call metrics; formal experiments and structured scoring
 remain out of scope. D1 uses a separate account API token with D1 Write access;
 the local SQLite history was not migrated. Artificial tool latency defaults to
 1–10 seconds and must be disabled for actual timing measurements.
+
+## Diagnosis judge API swap (11 October 2026)
+
+Automatic four-level grading in chat and exploratory benchmarks now calls
+TypeSafe's System One endpoint (`https://api.typesafe.ai/v1/systemone`) directly,
+using the pinned model `jev-1.13.0`. This replaces the OpenAI Decisions grading
+call. Diagnosis and tool-free explanation calls still use the gateway's existing
+Responses route and stored BYOK key.
+
+The root `.env` holds a separate server-side `TYPESAFE_API_KEY`; only a blank
+placeholder is version-controlled in `.env.example`. The same rubric snapshots,
+verdict labels and separate usage/cost records are preserved. Saved older grades
+remain unchanged. This is a code/configuration change: it does not provision
+services, alter Cloudflare or D1, or migrate the database schema. See
+[agent grading](../../agent/README.md#automatic-diagnosis-assessment) and the
+[TypeSafe API](https://docs.typesafe.ai/api).

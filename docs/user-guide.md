@@ -1073,7 +1073,11 @@ tc qdisc del dev s3-eth5 root 2>/dev/null || true
 
 Use the repository-root `.env` with mode `600`; it is Git-ignored. It contains
 the D1 account API token and AI Gateway authentication token, while the OpenAI
-provider key remains in Cloudflare BYOK. See
+provider key remains in Cloudflare BYOK. Automatic diagnosis grading uses Jev
+(`jev-1.13.0`) directly through TypeSafe, with a separate `TYPESAFE_API_KEY` in
+the same `.env`. Optional explanations continue through Cloudflare. Restart the
+agent after changing credentials. This API swap requires no D1 schema or
+infrastructure change. See [agent credentials](../agent/README.md#credentials) and
 `docs/decisions/llm-api-gateway.md`. Do not commit API keys.
 
 Developer notes: `faults/README.md`.
