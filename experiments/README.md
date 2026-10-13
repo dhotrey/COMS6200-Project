@@ -30,6 +30,12 @@ scoring version, and seeds 6200 and 6201. The approved model id in metadata must
 `evidence/experiments/sweep/<run-id>/`. The protocol v1 runner above is unchanged
 and still main6s8h-only.
 
+The committed run is `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 525 completed trials, 527 `trials.jsonl` rows, two retried infrastructure failures. Its judge verdicts came from the OpenAI Decisions judge (`gpt-6-luna`) used when the sweep ran. Current UI grading uses TypeSafe Jev (`jev-1.13.0`) and does not rewrite those files.
+
+The rule cross-check and the semantic judge are different instruments. The rule scorer reads one conclusion paragraph. The judge reads the answer against a rubric and cannot see the tool trace. Disagreement is expected. Neither score is protocol-v1 formal data.
+
+On `ring5s5h`, baseline v1 looks for F1 and F2 on the shortest configured path. Ring forwarding does not use that shortcut, so those two faults sit off the path the baseline checks. That is a baseline limitation, not a testbed failure. The baseline was not changed to match the sweep.
+
 It runs in rounds. Each `run` runs one round on one topology (every method on
 every fault once, freshly shuffled) and adds it to the same sweep; repeating the
 command adds the next round, and `summary` pools them. Each trial: restart the

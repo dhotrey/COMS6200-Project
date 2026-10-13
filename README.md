@@ -42,7 +42,7 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M4 | Structured Telemetry Gateway | **Completed** |
 | M5 | First Automated Fault + Reset | **Completed** (F1) |
 | M5B | Complete Fault Catalogue v1 | **Completed** (F1–F5 frozen) |
-| M6 | First LLM Tool-Calling Diagnosis | **In progress** ([results](docs/results/llm-diagnosis.md)) |
+| M6 | First LLM Tool-Calling Diagnosis | **Implemented** ([results](docs/results/llm-diagnosis.md)). Formal 80-trial collection has not started. |
 
 The scripted baseline, evaluator, and dry-run runner are implemented. The 80-trial formal comparison has not started.
 
@@ -56,19 +56,16 @@ Completed so far:
 - structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
 - Fault Catalogue v1 frozen: F1–F5 inject/reset verified (`scripts/verify_fault_catalogue.sh` ALL FIVE PASSED, 27 August 2026)
 
-In progress:
+Implemented, and not the formal dataset:
 
-- LLM tool-calling diagnosis through the chat harness (`agent/`): UI loads F1–F5; first tests recorded in [LLM diagnosis test results](docs/results/llm-diagnosis.md)
-
-Implemented, not yet used for formal results:
-
-- scripted troubleshooting baseline (`baseline/`)
-- protocol v1 evaluator and dry-run runner (`experiments/`)
-- exploratory multi-topology sweep of every fault × model × topology (`experiments/sweep.py`; judge-graded, published to the results page; not protocol v1; first live round run on ring5s5h)
+- LLM tool-calling diagnosis (`agent/`): operator UI for topology, F1–F5, benchmarks, and grading. Early tests are in [LLM diagnosis test results](docs/results/llm-diagnosis.md).
+- scripted troubleshooting baseline v1 (`baseline/`)
+- protocol v1 rule evaluator and dry-run runner (`experiments/`)
+- exploratory multi-topology sweep (`experiments/sweep.py`). Committed evidence: `evidence/experiments/sweep/sweep-2026-10/`. Label: **EXPLORATORY SWEEP / NOT PROTOCOL V1**. 525 completed trials (3 topologies × 5 faults × 7 methods × 5 rounds). Two infrastructure first attempts were retried.
 
 Not started:
 
-- the 80-trial formal comparison
+- the 80-trial protocol-v1 formal comparison
 
 [Experimental Protocol v1](docs/experiments/protocol-v1.md) is still pre-collection. Formal mode refuses to run. The approved primary model is `gpt-5.6-sol` at effort `medium`. Formal trials have not been collected.
 
@@ -95,22 +92,25 @@ Fault injector (F1–F5) → Mininet/OVS / ONOS experiment flows
 Fault injector → evaluator ground truth (/run/coms6200/fault-state.json)
 ```
 
-Full comparison pipeline (LLM path implemented; the rest still planned):
+Comparison pipeline (implemented; formal collection not started):
 
 ```
 Telemetry / Tool Gateway
        ↙                        ↘
-OpenAI LLM agent             deterministic baseline
-(implemented)                (planned)
+OpenAI LLM agent             deterministic baseline v1
        ↘                        ↙
-   structured diagnosis (planned; LLM answers are free text today)
+   free-text diagnosis
                 ↓
-   evaluator / logger (planned; scoring is manual today)
+   protocol-v1 rule evaluator, and a separate exploratory judge
                 ↓
-   optional constrained repair (optional extension)
+   optional constrained repair (not implemented)
 ```
 
-The LLM will **not** receive unrestricted ONOS REST access or controller credentials. The telemetry / tool gateway exposes a bounded structured interface (`get_topology()`, `ping()`, `get_port_status()`, `get_port_stats()`, `get_link_metrics()`, `get_flow_table()`, `iperf()`). Hidden ground truth from the fault injector remains evaluator-only.
+The LLM does **not** receive unrestricted ONOS REST access, controller credentials, or fault labels. The gateway tools are `get_topology`, `ping`, `nmap`, `get_port_status`, `get_port_stats`, `get_link_metrics`, `get_flow_table`, and `iperf`. Allow-lists follow the selected topology. Gateway iperf uses port 5201. F2 background load uses port 5202 and lasts until reset.
+
+**Application default** (what `/api/config` advertises): `gpt-6.1-sol`, reasoning `low`. **Protocol-v1 frozen pair**, unchanged: `gpt-5.6-sol` / `medium`, 14 calls, 300 seconds, delay 0/0, topology `main6s8h`. The formal runner still requires that frozen pair and is disarmed.
+
+Topologies: `main6s8h` is primary (6 switches, 8 hosts). `ring5s5h` (5 switches, 5 hosts) and `tree5s8h` are additional catalogues. The selector `tree5s8h` names the current binary tree, which has 7 switches and 8 hosts. Part A is an earlier milestone report and does not describe this later work.
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
@@ -400,8 +400,10 @@ COMS6200-Project/
 ├── topologies/
 │   ├── main_topology.py
 │   ├── spec.py                     # shared host/switch/port identities
-│   ├── ring_topology.py            # ring5s5h (in development; not in protocol v1)
-│   ├── ring_spec.py                # ring5s5h identities and port map
+│   ├── ring_topology.py            # ring5s5h (optional; not protocol v1)
+│   ├── ring_spec.py
+│   ├── tree_topology.py            # selector tree5s8h: 7 switches, 8 hosts
+│   ├── tree_spec.py
 │   ├── active.py                   # COMS6200_TOPOLOGY selection (default main6s8h)
 │   ├── progress_custom_topology.py
 │   └── progress_tc_topology.py
@@ -432,17 +434,17 @@ COMS6200-Project/
 │   └── results/                    # LLM diagnosis test results summary
 │       └── part-a/
 │
-├── agent/                         # conversational starter harness
-└── (planned)
-    ├── baseline/
-    └── experiments/
+├── agent/                          # chat harness, operator UI, Jev grading client
+├── baseline/                       # scripted troubleshooting baseline v1
+├── experiments/                    # protocol-v1 evaluator/runner and exploratory sweep
+└── judge/                          # evaluator-only rubrics (not model tools)
 ```
 
 `controllers/main_controller.py` is retained as a forwarding-design reference only. It is not the runtime controller.
 
 ## 14. Current Milestone
 
-**M6 — OpenAI + Cloudflare AI Gateway Integration and First LLM Tool-Calling Diagnosis** (in progress)
+**M6 — LLM tool-calling diagnosis** is implemented. Formal protocol-v1 collection has not started.
 
 M5B is complete: Fault Catalogue **v1** is frozen (F1–F5) on the Ubuntu reference
 server (27 August 2026). Evidence: `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`.

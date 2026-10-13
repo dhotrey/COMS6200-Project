@@ -47,8 +47,12 @@ See [agent setup and grading](../agent/README.md#automatic-diagnosis-assessment)
 and the [TypeSafe API reference](https://docs.typesafe.ai/api).
 
 The command-line sweep (`experiments/sweep.py`) grades every trial, the scripted
-baseline's included, with the same judge and rubrics, alongside its rule-based
-cross-check.
+baseline included, with the judge configured at run time and the same rubrics,
+alongside its rule-based cross-check.
+
+`evidence/experiments/sweep/sweep-2026-10/` was graded by the previous OpenAI
+Decisions judge (`gpt-6-luna`). Those verdicts were not produced by Jev and are
+not recomputed when this grader changes.
 
 `experiments/evaluator.py` and the frozen protocol's binary scoring are unchanged.
 That evaluator continues to use main-topology locations. Ring/tree rubrics describe
