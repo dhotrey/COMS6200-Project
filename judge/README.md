@@ -28,8 +28,8 @@ Sources:
 The tree rubrics use the current seven-switch forwarding plan for supporting symptoms. Some tree catalogue scope descriptions still refer to the earlier layout: F1 partitions h1–h4 from h5–h8; F5 prevents h1–h4 from reaching h5 through s2.
 
 The chat UI now automatically evaluates successfully completed answers when F1–F5
-is selected. `agent/judge.py` sends a typed choice question to the Decisions API
-(`gpt-6-luna`) through the existing Cloudflare BYOK gateway. It combines the
+is selected. `agent/judge.py` sends a typed Choice question directly to TypeSafe's
+System One API (`jev-1.13.0`), using the server-side `TYPESAFE_API_KEY`. It combines the
 scenario's factual criteria with [shared four-level criteria](grading.md), omitting
 the legacy **Judge output** JSON instructions from the API prompt. The verdict's
 criteria appear immediately in the UI. Optional observations are never mandatory.
@@ -40,10 +40,19 @@ and may flag an apparent disagreement; it never changes the recorded verdict.
 Rubrics, verdicts and explanations stay out of the diagnosis provider history.
 The complete result, rubric snapshot/hash and separate usage measurements are
 saved with the assistant answer. Reopening an answer does not rerun grading.
+The existing four verdicts and operator payload are preserved, including a
+probability list adapted from Jev's probability map. Old Decisions results are
+left intact. No database schema or infrastructure changes are required.
+See [agent setup and grading](../agent/README.md#automatic-diagnosis-assessment)
+and the [TypeSafe API reference](https://docs.typesafe.ai/api).
 
 The command-line sweep (`experiments/sweep.py`) grades every trial, the scripted
-baseline's included, with the same judge and rubrics, alongside its rule-based
-cross-check.
+baseline included, with the judge configured at run time and the same rubrics,
+alongside its rule-based cross-check.
+
+`evidence/experiments/sweep/sweep-2026-10/` was graded by the previous OpenAI
+Decisions judge (`gpt-6-luna`). Those verdicts were not produced by Jev and are
+not recomputed when this grader changes.
 
 `experiments/evaluator.py` and the frozen protocol's binary scoring are unchanged.
 That evaluator continues to use main-topology locations. Ring/tree rubrics describe

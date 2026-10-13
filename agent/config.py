@@ -1,5 +1,6 @@
 from .limits import runtime_limits
-"""Local settings. Provider keys stay in Cloudflare; secrets never reach the UI."""
+"""Local settings. OpenAI uses Cloudflare BYOK; TypeSafe's key stays server-side."""
+import asyncio
 import json
 import os
 import sys
@@ -20,7 +21,7 @@ _SUDO_ENV = (
     "ONOS_USER", "ONOS_PASSWORD", "ONOS_URL", "ONOS_HOST", "ONOS_OF_PORT",
     "CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_D1_DATABASE_ID",
     "CLOUDFLARE_AI_GATEWAY_ID", "CLOUDFLARE_AI_GATEWAY_API_TOKEN",
-    "CLOUDFLARE_BYOK_ALIAS", "LOGFIRE_TOKEN",
+    "CLOUDFLARE_BYOK_ALIAS", "LOGFIRE_TOKEN", "TYPESAFE_API_KEY",
     "TOOL_DELAY_MIN_SECONDS", "TOOL_DELAY_MAX_SECONDS",
     "MAX_TOOL_CALLS", "MAX_TURN_SECONDS", "MAX_TURN_TOKENS",
     "PYTHONPATH",
@@ -49,6 +50,8 @@ PRICES["gpt-4.1-mini"] = (.4, .1, 1.6)
 PRICES["gpt-4.1-nano"] = (.1, .025, .4)
 # The GPT-4.1 family is priced flat; no long-context surcharge.
 FLAT_PRICED = {"gpt-4.1-mini", "gpt-4.1-nano"}
+# TypeSafe model pricing reviewed 2026-10-11; output is free, no cache discount.
+PRICES["jev-1.13.0"] = (.042, .042, 0)
 
 
 def model_option(model: str) -> dict:
@@ -92,9 +95,6 @@ def ensure_mininet_privileges() -> None:
 class GatewayClient:
     def __init__(self, http_client):
         self.http = http_client
-
-    async def create_decision(self, payload):
-        return await self._json_request("decisions", payload)
 
     async def create_response(self, payload):
         return await self._json_request("responses", payload)
@@ -149,3 +149,45 @@ def make_client(transport=None):
         transport=transport,
     )
     return GatewayClient(http_client)
+
+
+class TypeSafeClient:
+    """Direct Jev grading, isolated from the diagnosis gateway and its credentials."""
+    def __init__(self, http_client):
+        self.http = http_client
+
+    async def create_judgment(self, payload):
+        for attempt in range(3):
+            response = await self.http.post("systemone", json=payload)
+            if response.status_code not in {429, 529} or attempt == 2:
+                break
+            delay = 2 ** attempt
+            try:
+                delay = max(delay, float(response.headers.get("retry-after", delay)))
+            except ValueError:
+                pass
+            await asyncio.sleep(min(delay, 120))
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError(f"TypeSafe judgment request failed with status {response.status_code}.")
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError("TypeSafe returned malformed judgment data.") from exc
+        if not isinstance(result, dict) or result.get("error"):
+            raise RuntimeError("TypeSafe returned invalid judgment data.")
+        return result
+
+    async def close(self):
+        await self.http.aclose()
+
+
+def make_judge_client(transport=None):
+    key = os.getenv("TYPESAFE_API_KEY", "").strip()
+    if not key:
+        return None
+    return TypeSafeClient(httpx.AsyncClient(
+        base_url="https://api.typesafe.ai/v1/",
+        headers={"Authorization": "Bearer " + key},
+        timeout=120,
+        transport=transport,
+    ))

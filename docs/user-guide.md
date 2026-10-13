@@ -36,13 +36,25 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5). WSL2 F1–F5 and Ubuntu F2 runs are pilots, not the formal dataset. See [results](results/llm-diagnosis.md), [F2 observability pilot](results/f2-observability-pilot.md), and [F2 link-metrics pilot](results/f2-link-metrics-pilot.md). |
 | Experimental Protocol v1 | 🟡 Frozen candidate ([protocol](experiments/protocol-v1.md)). Primary model `gpt-5.6-sol` / `medium` is approved. Formal trials have not been collected. |
 | Repeated evaluation experiments | 🟡 Not started. Formal collection is blocked. |
-| Multi-topology model sweep | 🟡 First live round run on ring5s5h ([sweep](#multi-topology-model-sweep)): baseline + six models, judge-graded, published to the results page. Exploratory, not protocol v1. main6s8h and tree5s8h not yet run. |
-| Ring topology `ring5s5h` | 🟡 Topology, `COMS6200_TOPOLOGY` selection, ring baseline forwarding, and draft fault catalogue `ring5s5h-v1` (F1–F5) implemented with static tests ([ring topology](#ring-topology), [ring faults](#ring-fault-catalogue-ring5s5h-v1)). Not run against ONOS. Not part of protocol v1. |
+| Multi-topology model sweep | ✅ Evidence committed at `evidence/experiments/sweep/sweep-2026-10/`. **EXPLORATORY SWEEP / NOT PROTOCOL V1.** 525 completed trials on main, ring, and tree. |
+| Ring topology `ring5s5h` | ✅ Optional topology and catalogue `ring5s5h-v1`. Used by the exploratory sweep. Not part of protocol v1. `verify_main_openflow.sh` still checks `main6s8h` only. |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
 
 Do not treat a 🟡 or 🔬 item as **runtime-verified complete**. Unimplemented
 sections must not invent CLIs.
+
+**Application default and protocol-v1 freeze**
+
+`/api/config` follows the model catalogue. The current default is `gpt-6.1-sol` with reasoning `low`. Protocol v1 still freezes `gpt-5.6-sol` / `medium`, 14 tool calls, 300 seconds, delay 0/0, and `main6s8h`. The formal runner checks that freeze. It was not retargeted to the UI default. `gpt-5.6-sol` remains selectable and is marked deprecated in the catalogue.
+
+**Topology names**
+
+`main6s8h` is the default and the protocol-v1 topology: 6 switches, 8 hosts, 10 inter-switch links. `ring5s5h` is 5 switches and 5 hosts. The selector `tree5s8h` is the implemented binary tree: 7 switches and 8 hosts. The name was not changed, so existing commands keep working.
+
+Model-facing tools: `get_topology`, `ping`, `nmap`, `get_port_status`, `get_port_stats`, `get_link_metrics`, `get_flow_table`, `iperf`. They follow the selected topology and do not return fault labels. Gateway iperf uses port 5201. F2 background traffic uses port 5202 until reset.
+
+Jev grading (`jev-1.13.0`) needs `TYPESAFE_API_KEY` in the root `.env`. Diagnosis does not. Without the key, grading reports that it is not configured. Explanation stays a separate Cloudflare Responses call (`gpt-6.1-sol` / `high`) and does not change the verdict.
 
 **Two different “baseline” terms**
 
@@ -120,24 +132,19 @@ Structured Telemetry / Tool Gateway
 OpenAI LLM Agent (`agent/` chat harness) → conversational diagnosis
 ```
 
-The LLM agent is implemented and loads F1–F5 from its UI. Test results:
-[LLM diagnosis test results](results/llm-diagnosis.md). Runs on the Ubuntu
-reference host are still pending (🟡).
-
-Still planned:
+The LLM agent is implemented and runs on the Ubuntu reference host. Test results:
+[LLM diagnosis test results](results/llm-diagnosis.md). Formal protocol-v1 collection has not started.
 
 ```
 Structured Telemetry / Tool Gateway
     ↓
-    ├── OpenAI LLM Agent (implemented; free-text answers today)
-    └── Deterministic Scripted Troubleshooting Baseline  🟡
+    ├── OpenAI LLM Agent (free-text answers)
+    └── Deterministic scripted baseline v1
             ↓
-    Structured Diagnosis  🟡
-            ↓
-    Evaluator / Logger  🟡 (scoring is manual today)
+    Protocol-v1 rule evaluator, and a separate exploratory judge
 ```
 
-Ground truth path (injector ✅ F1–F5; evaluator 🟡; evaluator-only):
+Ground truth path (injector ✅ F1–F5; evaluator-only):
 
 ```
 Fault Injector ── inject faults ──→ Mininet / OVS
@@ -523,7 +530,7 @@ Then, from another shell with `COMS6200_TOPOLOGY=ring5s5h` exported, run `python
 
 The ring is a physical loop. Do not run it with `--controller=none`, `--switch ovsbr`, NORMAL, or `org.onosproject.fwd`. `verify_main_openflow.sh` and `verify_telemetry.sh` check `main6s8h` and do not apply. Use `sudo ovs-vsctl show`, `./scripts/verify_onos.sh`, and `baseline_forwarding.py verify` instead.
 
-Not yet runtime verified. The expected result is 5 OF_13 devices, 10 directed links, `verify` passing with 38 flows, and a working `pingall`.
+The exploratory sweep ran this topology for five rounds. A healthy ring session is 5 OF_13 devices, 10 directed links, and 38 baseline flows. `verify_main_openflow.sh` does not check the ring.
 
 Static checks (no Mininet required):
 
@@ -1075,7 +1082,11 @@ tc qdisc del dev s3-eth5 root 2>/dev/null || true
 
 Use the repository-root `.env` with mode `600`; it is Git-ignored. It contains
 the D1 account API token and AI Gateway authentication token, while the OpenAI
-provider key remains in Cloudflare BYOK. See
+provider key remains in Cloudflare BYOK. Automatic diagnosis grading uses Jev
+(`jev-1.13.0`) directly through TypeSafe, with a separate `TYPESAFE_API_KEY` in
+the same `.env`. Optional explanations continue through Cloudflare. Restart the
+agent after changing credentials. This API swap requires no D1 schema or
+infrastructure change. See [agent credentials](../agent/README.md#credentials) and
 `docs/decisions/llm-api-gateway.md`. Do not commit API keys.
 
 Developer notes: `faults/README.md`.
@@ -1295,8 +1306,7 @@ per-tool latency, per-model-request latency, whole-turn time, tokens summed over
 all model rounds, cached/reasoning tokens, estimated cost, and invalid calls.
 Cancelled or failed turns flag potentially incomplete usage.
 
-A compatible structured diagnosis contract for the future scripted baseline and
-evaluator remains planned; no automated diagnosis scoring is implemented.
+Answers stay free text. Scoring is separate: the protocol-v1 rule evaluator (`experiments/evaluator.py`) and, for the UI and the exploratory sweep, the judge. The two can disagree. Neither is a JSON diagnosis schema forced on the model.
 
 ---
 
@@ -1323,7 +1333,21 @@ python3 -m experiments formal   # refused
 
 ## Multi-topology model sweep
 
-🟡 First live round run on `ring5s5h` (2026-10-12: 35 of 35 trials final, none excluded); `main6s8h` and `tree5s8h` not yet run. Exploratory: **not protocol v1**. The protocol v1 runner (`python3 -m experiments`) is unchanged and stays main6s8h-only.
+✅ Committed run `sweep-2026-10` (`evidence/experiments/sweep/sweep-2026-10/`). Label: **EXPLORATORY SWEEP / NOT PROTOCOL V1**.
+
+| Item | Value |
+| --- | --- |
+| Topologies | `main6s8h`, `ring5s5h`, `tree5s8h` (5 rounds each) |
+| Methods | baseline, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra`, `gpt-4.1-mini`, `gpt-4.1-nano` |
+| Faults | F1–F5 |
+| Seed | 6202 |
+| Completed trials | 525 |
+| Attempt rows in `trials.jsonl` | 527 |
+| Infrastructure | 2 first attempts (ring round 3, `gpt-6-astra` F3 and F4), both completed on attempt 2 |
+| Recorded spend | about $22.98 |
+
+Those stored judge verdicts were produced by the previous OpenAI Decisions judge (`gpt-6-luna`), not by the current TypeSafe Jev grader. The protocol v1 runner is unchanged and stays `main6s8h`-only. Headline pattern, not a formal result: the stronger reasoning models outscore Mini and Nano; the baseline misses ring F1 and F2 because it searches the shortest configured path; the judge and the rule scorer often disagree.
+
 
 `experiments/sweep.py` is the command-line counterpart of the results page's **Benchmarks / Evals** runner. It differs from it in three ways:
 - it restarts the network before every trial, instead of running several models against one injection;
@@ -1379,7 +1403,7 @@ Cloudflare gateway and D1 credentials come from the `.env` in the checkout you r
 ~/.venvs/coms6200-agent/bin/python -m experiments.sweep plan
 ```
 
-One round is 35 trials. The first live round (`ring5s5h`) took 34 minutes, including a network restart per trial: about 40 s per model diagnosis, 5 s per baseline diagnosis and 20 s per restart. It cost $1.58 of diagnosis plus about $0.0002 per trial for the judge. The default target of 5 rounds on each of the 3 topologies is 525 trials, about 9 hours over 15 sessions, and roughly $25. The time estimate comes from that round, and other topologies may be slower. The cost estimate is pilot-based, at the prices in `agent/config.py`. Actual time and usage are recorded per trial.
+One round is 35 trials. The committed sweep completed 5 rounds on each topology (525 trials). Ring round 1 took 34 minutes, including a network restart per trial. The committed summary records about $22.98 for the whole sweep. Actual time and usage are in `trials.jsonl`.
 
 Stop any running testbed first, with the `COMS6200_TOPOLOGY` it was started with, and do not start a results-page benchmark, load a topology, or select a fault in the chat UI while a sweep runs: they share the testbed. The sweep refuses to start while the agent server reports a running benchmark. Then, from the repository root, run one round on one topology:
 
@@ -1428,7 +1452,7 @@ python3 -m experiments.sweep summary --run-id sweep-2026-10
 
 Three things from the first live round (`ring5s5h`) that affect how the tables read:
 
-- **Trust the judge over the rule-based cross-check.** The rule-based score reads one paragraph of the answer, picked by the protocol v1 heuristic: the last paragraph with a conclusion cue such as "therefore", or a fault keyword. Free-form answers often end with a side paragraph (why the unused s1–s5 link did not help) or a next step ("update the forwarding **policy**"), and that paragraph gets scored instead of the diagnosis. In round 1, the rule-based score agreed with the judge on only 20–40% of the trials of the four GPT-5.6 / GPT-6 models. In the disagreements reviewed by hand, the judge was right; for example, answers that clearly named the failed s3–s4 link were scored as a fail.
+- **The judge and the rule scorer measure different things.** The rule-based score reads one paragraph, picked by the protocol v1 heuristic: the last paragraph with a conclusion cue such as "therefore", or a fault keyword. Free-form answers often end with a side paragraph or a next step, and that paragraph is what gets scored. Across the committed 525 trials, both called success on 119, the judge alone on 200, and the rule scorer alone on 14. Do not treat either score as universally correct. The stored sweep verdicts came from the Decisions judge (`gpt-6-luna`), not from Jev.
 - **Small models often stop to ask the user.** A trial is one turn, so a closing question such as "Would you like me to proceed?" is never answered, and the answer is usually judged Incorrect. In round 1, 9 of the 10 `gpt-4.1-mini` and `gpt-4.1-nano` answers ended this way, often after 1–3 tool calls. The system prompt (`agent/prompt.md`) allows a next step and clarifying questions, and every model gets the same prompt, so this is scored as it stands. The summary's **Ended by asking the user** table separates this from wrong diagnoses. It changes no score.
 - **The scripted baseline cannot find F1 or F2 on `ring5s5h`.** It looks for a down link (F1) or a congested egress (F2) only on the *shortest* configured path between the two hosts' switches. On the ring, that is the direct s1–s5 link. But the ring's baseline forwarding never uses that link and sends h1→h5 the long way, s1→s2→s3→s4→s5. The F1 link (s3–s4) and the F2 bottleneck (s2–s3) are therefore off the path the baseline checks. F3–F5 are found from the flow tables and are unaffected. `tree5s8h` has only one path between any two switches, and `main6s8h` is the topology the baseline was written for. The baseline is protocol v1 code and stays unchanged, so read its ring F1/F2 results as a limit of that heuristic, not of the testbed.
 
