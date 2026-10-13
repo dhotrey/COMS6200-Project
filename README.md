@@ -453,6 +453,11 @@ loads F1–F5 from its UI. Test results and remaining runs:
 Do not start formal LLM episodes until gateway caching policy and model freeze
 are applied (`docs/decisions/llm-api-gateway.md`). Do not commit `.env` secrets.
 
+Automatic answer grading uses TypeSafe Jev (`jev-1.13.0`) directly, with
+`TYPESAFE_API_KEY` in the root `.env`. Diagnosis and optional explanations use
+the existing Cloudflare BYOK gateway. See [agent setup](agent/README.md#credentials)
+and [grading behavior](agent/README.md#automatic-diagnosis-assessment).
+
 ## 15. Project Reports
 
 The current Part A proposal/progress report, generated Word/PDF outputs, and reproducible build instructions are available under:

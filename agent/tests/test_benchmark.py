@@ -11,8 +11,9 @@ from agent.tests.test_store import database
 
 
 class Provider:
-    async def create_decision(self, payload):
-        return {"answers": [{"type": "choice", "name": "diagnosis_correctness", "choice": "correct"}],
+    async def create_judgment(self, payload):
+        return {"model": judge.MODEL, "answers": {"diagnosis_correctness": {"type": "choice", "choice": "correct",
+                "confidence": 1.0, "probabilities": {v: float(v == "correct") for v in judge.VERDICTS}}},
                 "usage": {"input_tokens": 12, "output_tokens": 0}}
 
     async def create_response(self, payload):
@@ -70,8 +71,11 @@ def test_catalogue_filters_efforts():
 def test_scenarios_wait_for_all_variants_and_histories_are_isolated(monkeypatch, harness):
     runs, cells, events = harness
     histories, active, maximum = [], 0, 0
+    second_started = asyncio.Event()
+    diagnosis_provider = object()  # Has no judge API; grading must use the other client.
     async def diagnose(client, history, model, effort, state, **kwargs):
         nonlocal active, maximum
+        assert client is diagnosis_provider
         active += 1
         maximum = max(maximum, active)
         topology = manager.active["current"]["topology"]
@@ -80,6 +84,10 @@ def test_scenarios_wait_for_all_variants_and_histories_are_isolated(monkeypatch,
         events.append(("diagnose", topology, fault, model, effort))
         assert history == [{"role": "user", "content": benchmark.PROMPTS[fault]}]
         assert "evaluation" not in kwargs and "rubric" not in kwargs
+        if len(histories) == 1:
+            await asyncio.wait_for(second_started.wait(), timeout=2)
+        elif len(histories) == 2:
+            second_started.set()
         await asyncio.sleep(.01)
         state["content"] = "The fault type and location are identified."
         history.append({"role": "assistant", "content": state["content"]})
@@ -88,7 +96,7 @@ def test_scenarios_wait_for_all_variants_and_histories_are_isolated(monkeypatch,
     monkeypatch.setattr(benchmark, "diagnose", diagnose)
     async def exercise():
         nonlocal manager
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(diagnosis_provider, Provider())
         item = await manager.start([{"model": "gpt-6.1-sol", "effort": "low"},
                                     {"model": "gpt-4.1-mini", "effort": "none"}], 2, repeats=1)
         await manager.task
@@ -121,7 +129,7 @@ def test_probe_cancellation_holds_lock_until_native_cleanup(monkeypatch):
         return {"ok": True}
     monkeypatch.setattr(tools, "_execute", execute)
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         first = asyncio.create_task(manager.probe("first", "{}"))
         assert await asyncio.to_thread(entered.wait, 5)
         first.cancel()
@@ -152,7 +160,7 @@ def test_stop_during_setup_waits_then_resets_without_diagnosing(monkeypatch, har
         yield {}
     monkeypatch.setattr(benchmark, "diagnose", diagnose)
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         item = await manager.start([{"model": "gpt-4.1-mini", "effort": "none"}], 1)
         assert await asyncio.to_thread(entered.wait, 5)
         manager.stop()
@@ -176,9 +184,9 @@ def test_judge_failure_is_error_not_incorrect(monkeypatch, harness):
     provider = Provider()
     async def refusal(payload):
         return {"answers": []}
-    provider.create_decision = refusal
+    provider.create_judgment = refusal
     async def exercise():
-        manager = benchmark.Benchmark(provider)
+        manager = benchmark.Benchmark(provider, provider)
         item = await manager.start([{"model": "gpt-4.1-mini", "effort": "none"}], 1)
         await manager.task
         assert runs[item["id"]]["status"] == "completed"
@@ -194,7 +202,7 @@ def test_setup_failure_aborts_without_model_calls_and_resets(monkeypatch, harnes
         yield {}
     monkeypatch.setattr(benchmark, "diagnose", diagnose)
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         item = await manager.start([{"model": "gpt-4.1-mini", "effort": "none"}], 1)
         await manager.task
         assert runs[item["id"]]["status"] == "error"
@@ -209,7 +217,7 @@ def test_cleanup_failure_blocks_chat_until_network_reload(monkeypatch, harness):
     monkeypatch.setattr(benchmark.fault_control, "load_scenario", lambda *args: {"ok": False, "error": "Setup failed."})
     monkeypatch.setattr(benchmark.fault_control, "reset_scenario", lambda: {"ok": False, "error": "Reset failed."})
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         item = await manager.start([{"model": "gpt-4.1-mini", "effort": "none"}], 1)
         await manager.task
         assert runs[item["id"]]["status"] == "error"
@@ -232,7 +240,7 @@ def test_explanation_is_deduplicated_and_saved(monkeypatch, harness):
         return await create_response(payload)
     provider.create_response = respond
     async def exercise():
-        manager = benchmark.Benchmark(provider)
+        manager = benchmark.Benchmark(provider, provider)
         await asyncio.gather(manager.explain("run", "cell"), manager.explain("run", "cell"))
         await asyncio.gather(*manager.explanations.values())
         await manager.explain("run", "cell")
@@ -362,7 +370,7 @@ def test_pause_safely_finishes_cleanup_then_redo_starts_fresh(monkeypatch, harne
         return {"ok": True, "scenario_id": fault, "topology": topology}
     monkeypatch.setattr(benchmark.fault_control, "load_scenario", load)
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         variants = [{"model": "gpt-6.1-sol", "effort": "low"}]
         first = await manager.start(variants, 1)
         assert await asyncio.to_thread(entered.wait, 5)
@@ -451,7 +459,7 @@ def test_repeats_reapply_scenario_and_publish_independent_chats(monkeypatch, har
         yield {}
     monkeypatch.setattr(benchmark, "diagnose", diagnose)
     async def exercise():
-        manager = benchmark.Benchmark(Provider())
+        manager = benchmark.Benchmark(Provider(), Provider())
         item = await manager.start([{"model": "gpt-6.1-sol", "effort": "low"}], 1)
         await manager.task
         saved = runs[item["id"]]

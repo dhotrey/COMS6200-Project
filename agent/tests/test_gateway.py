@@ -96,7 +96,7 @@ def test_gateway_rejects_non_success_and_invalid_events(monkeypatch, response, e
     asyncio.run(collect())
 
 
-def test_decisions_and_explanations_use_existing_byok_route(monkeypatch):
+def test_explanations_use_existing_byok_route(monkeypatch):
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
     monkeypatch.setenv("CLOUDFLARE_AI_GATEWAY_ID", "test-gateway")
     monkeypatch.setenv("CLOUDFLARE_AI_GATEWAY_API_TOKEN", "test-token")
@@ -112,18 +112,17 @@ def test_decisions_and_explanations_use_existing_byok_route(monkeypatch):
     async def collect():
         provider = config.make_client(transport=httpx.MockTransport(transport))
         try:
-            await provider.create_decision({"model": "gpt-6-luna", "questions": []})
             await provider.create_response({"model": "gpt-6.1-sol", "reasoning": {"effort": "high"}})
         finally:
             await provider.close()
     asyncio.run(collect())
-    assert [str(r.url).split("/")[-1] for r in seen] == ["decisions", "responses"]
-    assert json.loads(seen[1].content)["reasoning"] == {"effort": "high"}
+    assert [str(r.url).split("/")[-1] for r in seen] == ["responses"]
+    assert json.loads(seen[0].content)["reasoning"] == {"effort": "high"}
 
 
 @pytest.mark.parametrize("response", [httpx.Response(404), httpx.Response(200, text="bad-json"),
                                      httpx.Response(200, json={"error": {"message": "private upstream details"}})])
-def test_decisions_gateway_failures_do_not_expose_upstream_data(monkeypatch, response):
+def test_explanation_gateway_failures_do_not_expose_upstream_data(monkeypatch, response):
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "test-account")
     monkeypatch.setenv("CLOUDFLARE_AI_GATEWAY_ID", "test-gateway")
     monkeypatch.setenv("CLOUDFLARE_AI_GATEWAY_API_TOKEN", "test-token")
@@ -131,7 +130,7 @@ def test_decisions_gateway_failures_do_not_expose_upstream_data(monkeypatch, res
         provider = config.make_client(transport=httpx.MockTransport(lambda _: response))
         try:
             with pytest.raises(RuntimeError) as error:
-                await provider.create_decision({})
+                await provider.create_response({})
             assert "private upstream details" not in str(error.value)
         finally:
             await provider.close()
