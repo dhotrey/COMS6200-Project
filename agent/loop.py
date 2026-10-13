@@ -7,7 +7,7 @@ import time
 
 import logfire
 
-from .config import MODELS, PRICES, ROOT
+from .config import FLAT_PRICED, MODELS, PRICES, ROOT
 from .limits import runtime_limits
 from .tools import TOOLS, execute_tool
 
@@ -74,7 +74,7 @@ async def run(client, history, model, effort, state, *, tool_executor=None, prom
                         for key in ("input_tokens", "output_tokens", "cached_tokens", "reasoning_tokens", "total_tokens"):
                             stats[key] += record[key]
                         inp, cache, out = PRICES[model]
-                        if model != "gpt-4.1-mini" and record["input_tokens"] > 272000:
+                        if model not in FLAT_PRICED and record["input_tokens"] > 272000:
                             inp, cache, out = inp * 2, cache * 2, out * 1.5
                         stats["cost_usd"] += ((record["input_tokens"]-cached)*inp + cached*cache + record["output_tokens"]*out)/1e6
                     else:

@@ -324,6 +324,13 @@ def create_benchmark(run: dict, cells: list[dict]) -> None:
                       [run["id"], cell["id"], json.dumps(cell)]) for cell in cells[offset:offset + 40]])
 
 
+def add_benchmark_cells(run_id: str, cells: list[dict]) -> None:
+    """Add trial rows to an existing run (a command-line sweep grows by rounds)."""
+    for offset in range(0, len(cells), 40):
+        _db().batch([("INSERT INTO benchmark_results(run_id, cell_id, payload) VALUES(?, ?, ?)",
+                      [run_id, cell["id"], json.dumps(cell)]) for cell in cells[offset:offset + 40]])
+
+
 def save_benchmark(run: dict) -> None:
     _db().query("UPDATE benchmark_runs SET payload = ? WHERE id = ?",
                 [json.dumps(run), run["id"]])

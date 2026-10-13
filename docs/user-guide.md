@@ -36,6 +36,7 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5). WSL2 F1–F5 and Ubuntu F2 runs are pilots, not the formal dataset. See [results](results/llm-diagnosis.md), [F2 observability pilot](results/f2-observability-pilot.md), and [F2 link-metrics pilot](results/f2-link-metrics-pilot.md). |
 | Experimental Protocol v1 | 🟡 Frozen candidate ([protocol](experiments/protocol-v1.md)). Primary model `gpt-5.6-sol` / `medium` is approved. Formal trials have not been collected. |
 | Repeated evaluation experiments | 🟡 Not started. Formal collection is blocked. |
+| Multi-topology model sweep | 🟡 First live round run on ring5s5h ([sweep](#multi-topology-model-sweep)): baseline + six models, judge-graded, published to the results page. Exploratory, not protocol v1. main6s8h and tree5s8h not yet run. |
 | Ring topology `ring5s5h` | 🟡 Topology, `COMS6200_TOPOLOGY` selection, ring baseline forwarding, and draft fault catalogue `ring5s5h-v1` (F1–F5) implemented with static tests ([ring topology](#ring-topology), [ring faults](#ring-fault-catalogue-ring5s5h-v1)). Not run against ONOS. Not part of protocol v1. |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
@@ -72,14 +73,15 @@ sections must not invent CLIs.
 18. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
 19. [Expected diagnostic output](#expected-diagnostic-output)
 20. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
-21. [Resetting the testbed](#resetting-the-testbed)
-22. [Troubleshooting the testbed](#troubleshooting-the-testbed)
-23. [Safety and experimental controls](#safety-and-experimental-controls)
-24. [Optional extensions](#optional-extensions)
-25. [End-to-end workflow](#end-to-end-workflow)
-26. [Repository layout](#repository-layout)
-27. [Development and Git workflow](#development-and-git-workflow)
-28. [Keeping this manual current](#keeping-this-manual-current)
+21. [Multi-topology model sweep](#multi-topology-model-sweep)
+22. [Resetting the testbed](#resetting-the-testbed)
+23. [Troubleshooting the testbed](#troubleshooting-the-testbed)
+24. [Safety and experimental controls](#safety-and-experimental-controls)
+25. [Optional extensions](#optional-extensions)
+26. [End-to-end workflow](#end-to-end-workflow)
+27. [Repository layout](#repository-layout)
+28. [Development and Git workflow](#development-and-git-workflow)
+29. [Keeping this manual current](#keeping-this-manual-current)
 
 ---
 
@@ -1319,6 +1321,129 @@ python3 -m experiments formal   # refused
 
 ---
 
+## Multi-topology model sweep
+
+🟡 First live round run on `ring5s5h` (2026-10-12: 35 of 35 trials final, none excluded); `main6s8h` and `tree5s8h` not yet run. Exploratory: **not protocol v1**. The protocol v1 runner (`python3 -m experiments`) is unchanged and stays main6s8h-only.
+
+`experiments/sweep.py` is the command-line counterpart of the results page's **Benchmarks / Evals** runner. It differs from it in three ways:
+- it restarts the network before every trial, instead of running several models against one injection;
+- it includes the scripted baseline;
+- it runs one topology per session, in rounds.
+
+It reuses the agent's diagnosis loop, LLM judge and rubrics (`judge/`), and publishes every trial to the same D1 tables, so sweep runs appear on the results page.
+
+| Method | Reasoning effort | Note |
+| --- | --- | --- |
+| Scripted baseline | — | No model, no API cost; shown as **Scripted baseline** on the results page |
+| `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra` | `medium` | The original evaluation's four (the GPT-5.6 series is listed as deprecated in the UI) |
+| `gpt-4.1-mini`, `gpt-4.1-nano` | none | No reasoning support; sent without reasoning fields |
+
+The sweep runs in **rounds**. One `run` runs one round on one topology: every method on every fault once (35 trials), in a freshly seeded random order. Running it again adds the next round to the same sweep, and the summary pools all rounds. Every trial is independent (fresh network, new conversation), so five single-round runs give the same data as one five-round run. Topologies run in separate sessions, so alternate them (the runner prints the suggested next topology). That keeps day-to-day differences, such as a slow gateway, from lining up with one topology.
+
+Each trial:
+
+1. Restart the network (`testbed.sh stop`, then `start`), so port counters, ARP caches, and flow state from earlier trials cannot carry over.
+2. Healthy gate: all switches OF_13, 2 × inter-switch links directed links, every baseline flow ADDED, no experiment flows, no active fault, h1→h5 ping.
+3. Inject the scenario from that topology's catalogue.
+4. One diagnosis from the symptom prompt only. Models: new conversation, protocol v1 limits (14 tool calls, 300 s, no tool delay). Same prompts on every topology, since each catalogue breaks or slows h1→h5.
+5. Reset, then score twice: the LLM judge and the rule-based cross-check.
+
+| Isolation / caching | Setting |
+| --- | --- |
+| Network | Restarted before every trial |
+| Conversation | New per trial; nothing carried between trials |
+| Gateway response cache | Bypassed (`cf-aig-skip-cache`) |
+| Provider-side storage | Off (`store: false`) |
+| Provider prompt caching | On. It reuses computation for identical prompt text and does not change answers. Cached tokens are recorded per trial. |
+
+Before each round, a **preflight** sends each model one tiny turn through the agent loop with a zero tool budget, so no tool runs. A model the gateway rejects fails in seconds, before any trial.
+
+**Scoring.**
+- **Primary: the LLM judge** (`agent/judge.py`, `gpt-6-luna`). It grades every trial, the baseline's included, against the topology/fault rubric in `judge/` on the shared four-level scale. **Success** means Correct or Mostly correct, as the rubrics define binary success. An answer with no text at all (for example a timeout) is recorded as **Incorrect (no answer)** without a judge call.
+- **Cross-check: the rule-based score** (`experiments/sweep_scoring.py`). This is the protocol v1 keyword rubric with locations from each catalogue; on `main6s8h` it matches the frozen evaluator. The summary reports how often the two agree. It is coarse on free-form answers; see [Reading the results](#reading-the-results).
+- **Infrastructure failures** (gate, inject, gateway outage) are retried once, then excluded and reported, not scored. A provider rejecting a conversation mid-turn (HTTP 400) is the model's limit and is scored.
+
+### Setup (once, in WSL)
+
+The sweep needs a Linux Python with the agent dependencies. Create one outside the checkout so the Windows `agent/.venv` is not touched:
+
+```bash
+UV_PROJECT_ENVIRONMENT=$HOME/.venvs/coms6200-agent ~/.local/bin/uv sync --project agent --frozen
+```
+
+Cloudflare gateway and D1 credentials come from the `.env` in the checkout you run from (copy it there if it only exists in another clone). ONOS REST defaults to `onos` / `rocks`.
+
+### Plan, run, summarise
+
+```bash
+~/.venvs/coms6200-agent/bin/python -m experiments.sweep plan
+```
+
+One round is 35 trials. The first live round (`ring5s5h`) took 34 minutes, including a network restart per trial: about 40 s per model diagnosis, 5 s per baseline diagnosis and 20 s per restart. It cost $1.58 of diagnosis plus about $0.0002 per trial for the judge. The default target of 5 rounds on each of the 3 topologies is 525 trials, about 9 hours over 15 sessions, and roughly $25. The time estimate comes from that round, and other topologies may be slower. The cost estimate is pilot-based, at the prices in `agent/config.py`. Actual time and usage are recorded per trial.
+
+Stop any running testbed first, with the `COMS6200_TOPOLOGY` it was started with, and do not start a results-page benchmark, load a topology, or select a fault in the chat UI while a sweep runs: they share the testbed. The sweep refuses to start while the agent server reports a running benchmark. Then, from the repository root, run one round on one topology:
+
+```bash
+sudo ~/.venvs/coms6200-agent/bin/python -m experiments.sweep run --run-id sweep-2026-10 --topology ring5s5h
+```
+
+Repeat with the same `--run-id` and the suggested next topology. The sweep sets `COMS6200_TOPOLOGY` for every trial itself. An interrupted round is resumed by the next `run` on that topology, not restarted. After a session, reload the topology in the chat UI before chatting.
+
+| Option | Effect |
+| --- | --- |
+| `--topology` | Required: which topology this session runs |
+| `--rounds N` | Run N rounds now (default 1) |
+| `--models`, `--scenarios`, `--no-baseline`, `--effort`, `--seed` | Fixed when the sweep is created; later runs must match |
+| `--target-rounds` | Rounds per topology you plan (progress and estimate only; default 5) |
+| `--max-cost-usd` | Stop once the whole sweep's diagnosis plus judge spend reaches this (default 100) |
+| `--retry-excluded` | Rerun this topology's excluded trials before a new round |
+| `--skip-preflight` | Skip the per-model check |
+| `--no-publish` | Do not upload to the results page |
+
+A run stops by itself at the spend cap, after a failed fault reset, or after three excluded trials in a row.
+
+### Results
+
+**Results page.** **Benchmarks / Evals** lists the sweep in its history as **Sweep · …**, with one matrix per method. Each round is one trial in a cell, and every attempted trial has an **Open chat** link (answer, tool trace, verdict and **Explain decision**). Sweep runs show **CLI sweep** instead of Run/Rerun, because they are started from the command line. Publishing is best effort: if D1 is unavailable, the sweep keeps going with complete local records and prints one warning. Upload everything again later with:
+
+```bash
+~/.venvs/coms6200-agent/bin/python -m experiments.sweep publish --run-id sweep-2026-10
+```
+
+**Local records** in `evidence/experiments/sweep/<run-id>/` are the source of truth:
+
+| File | Contents |
+| --- | --- |
+| `plan.json` | Sweep settings, then every round: topology, trials in run order, git commit, system-prompt hash, catalogue version, preflight result |
+| `trials.jsonl` | One line per attempt: judge verdict, rule-based scores, whether the answer ended by asking the user, tokens (including cached), diagnosis and judge cost, timings, gate/inject/reset status |
+| `trials/<trial>.aN.json` | Full record: answer text, tool trace with observations, judge evaluation with rubric snapshot, per-request usage |
+| `logs/`, `testbed.log` | Worker and testbed output |
+| `summary.md` | Rounds per topology; judge success rates with 95% Wilson intervals by method × topology, method × scenario and per topology; answers that ended by asking the user; the rule-based cross-check and its agreement with the judge; mean usage. Warns if rounds ran on different or uncommitted code. |
+
+```bash
+python3 -m experiments.sweep summary --run-id sweep-2026-10
+```
+
+### Reading the results
+
+Three things from the first live round (`ring5s5h`) that affect how the tables read:
+
+- **Trust the judge over the rule-based cross-check.** The rule-based score reads one paragraph of the answer, picked by the protocol v1 heuristic: the last paragraph with a conclusion cue such as "therefore", or a fault keyword. Free-form answers often end with a side paragraph (why the unused s1–s5 link did not help) or a next step ("update the forwarding **policy**"), and that paragraph gets scored instead of the diagnosis. In round 1, the rule-based score agreed with the judge on only 20–40% of the trials of the four GPT-5.6 / GPT-6 models. In the disagreements reviewed by hand, the judge was right; for example, answers that clearly named the failed s3–s4 link were scored as a fail.
+- **Small models often stop to ask the user.** A trial is one turn, so a closing question such as "Would you like me to proceed?" is never answered, and the answer is usually judged Incorrect. In round 1, 9 of the 10 `gpt-4.1-mini` and `gpt-4.1-nano` answers ended this way, often after 1–3 tool calls. The system prompt (`agent/prompt.md`) allows a next step and clarifying questions, and every model gets the same prompt, so this is scored as it stands. The summary's **Ended by asking the user** table separates this from wrong diagnoses. It changes no score.
+- **The scripted baseline cannot find F1 or F2 on `ring5s5h`.** It looks for a down link (F1) or a congested egress (F2) only on the *shortest* configured path between the two hosts' switches. On the ring, that is the direct s1–s5 link. But the ring's baseline forwarding never uses that link and sends h1→h5 the long way, s1→s2→s3→s4→s5. The F1 link (s3–s4) and the F2 bottleneck (s2–s3) are therefore off the path the baseline checks. F3–F5 are found from the flow tables and are unaffected. `tree5s8h` has only one path between any two switches, and `main6s8h` is the topology the baseline was written for. The baseline is protocol v1 code and stays unchanged, so read its ring F1/F2 results as a limit of that heuristic, not of the testbed.
+
+### Adding models
+
+List the models the gateway key can reach (one read-only request; prints model IDs only, never credentials):
+
+```bash
+python3 scripts/list_models.py
+```
+
+To include one, add it to `MODELS` and `PRICES` (USD per million input, cached-input, and output tokens, from the provider's pricing page) in `agent/config.py`. For a model without reasoning support, set `"reasoning": False` and `"efforts": ["none"]`. It then also appears in the chat UI and the results-page runner. Pass it with `--models` (the sweep's default is the study set above) in a new `--run-id`, because a sweep's methods are fixed when it is created.
+
+---
+
 ## Resetting the testbed
 
 ### Session stop
@@ -1622,7 +1747,7 @@ reference host. Those records are not the formal dataset.
 | Path | Role |
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
-| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5), `verify_faults.py` (data-driven, any catalogue) |
+| `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5), `verify_faults.py` (data-driven, any catalogue), `list_models.py` (gateway model IDs) |
 | `topologies/` | `main_topology.py`, canonical `spec.py`, `ring_topology.py` + `ring_spec.py` (`ring5s5h`, in development), `active.py` (`COMS6200_TOPOLOGY` selection), plus progress-only Mininet tests |
 | `forwarding/` | ONOS baseline provisioner |
 | `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |

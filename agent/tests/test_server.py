@@ -213,7 +213,7 @@ def test_model_catalogue_groups_legacy_models(client):
     models = client.get("/api/config").json()["models"]
     assert [m["id"] for m in models if not m.get("deprecated")] == [
         "gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra",
-        "gpt-4.1-mini",
+        "gpt-4.1-mini", "gpt-4.1-nano",
     ]
     assert {m["id"] for m in models if m.get("deprecated")} == {
         "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol",

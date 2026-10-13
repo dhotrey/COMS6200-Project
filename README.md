@@ -64,6 +64,7 @@ Implemented, not yet used for formal results:
 
 - scripted troubleshooting baseline (`baseline/`)
 - protocol v1 evaluator and dry-run runner (`experiments/`)
+- exploratory multi-topology sweep of every fault × model × topology (`experiments/sweep.py`; judge-graded, published to the results page; not protocol v1; first live round run on ring5s5h)
 
 Not started:
 
@@ -281,6 +282,7 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` | Live per-scenario fault inject/observe/reset |
 | `scripts/verify_fault_catalogue.sh` | Sequential F1–F5 catalogue verifier |
 | `scripts/verify_faults.py` | Data-driven F1–F5 verifier for the selected topology's catalogue (ring5s5h draft) |
+| `scripts/list_models.py` | Lists the model IDs the Cloudflare AI Gateway key can reach |
 | `scripts/verify_agent_scenarios.sh` | F1–F5 through the chat harness path (UI load → agent tools → UI reset); no model requests |
 | `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
 | `faults/` | Operator Fault Catalogue v1 injector/reset, plus draft ring5s5h-v1 catalogue (not an LLM tool) |
@@ -392,6 +394,7 @@ COMS6200-Project/
 │   ├── verify_fault_f1.sh … verify_fault_f5.sh
 │   ├── verify_fault_catalogue.sh
 │   ├── verify_faults.py             # data-driven verifier for the selected catalogue
+│   ├── list_models.py               # model IDs reachable through the gateway
 │   └── verify_agent_scenarios.sh    # F1–F5 through the chat harness path
 │
 ├── topologies/
