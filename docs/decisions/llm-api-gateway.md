@@ -44,18 +44,17 @@ Cloudflare AI Gateway is intended to provide:
 | Mode | Caching |
 | --- | --- |
 | Development / smoke testing | Optional (may use gateway caching) |
-| Formal experimental episodes | **Must disable / bypass response caching** |
+| Repeated experimental trials | Gateway response caching bypassed |
 
-Reason: repeated research trials must represent independent model executions,
-not cached responses.
+The completed sweep bypassed gateway response caching with `cf-aig-skip-cache`,
+disabled provider storage with `store=false`, and left provider prompt caching
+on. Cached input tokens were recorded. Each trial used a new conversation after
+a network restart.
 
-Exact model identifiers and reasoning configurations will be frozen separately
-before formal LLM experiments. The team currently intends to evaluate the
-GPT-5.6 family and may optionally compare reasoning configurations; that
-comparison is **secondary**. The primary research comparison remains:
-
-- LLM troubleshooting **vs**
-- deterministic scripted troubleshooting baseline
+The completed comparison is `evidence/experiments/sweep/sweep-2026-10/`: the
+scripted baseline and six models, 525 final trials. The earlier protocol-v1
+runner, which pins `gpt-5.6-sol` at effort `medium` on `main6s8h` only, was not
+the collected dataset and remains disarmed.
 
 ## Secrets (M6 onwards)
 

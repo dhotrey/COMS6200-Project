@@ -1,11 +1,13 @@
 # Fault catalogues — operator/evaluator injector
 
-**Not an LLM tool.** Telemetry and future agents must never import this package
+**Not an LLM tool.** Telemetry and the diagnosing agent must never import this package
 or read `/run/coms6200/fault-state.json`.
 
-`COMS6200_TOPOLOGY` selects the catalogue (`registry.py`). Both catalogues use
+`COMS6200_TOPOLOGY` selects the catalogue (`registry.py`). All three catalogues use
 the same scenario IDs, families, mechanisms and handlers. Only the locations
-differ.
+differ. The tree selector `tree5s8h` is defined in `tree_scenarios.py`. Its source
+status, like the ring catalogue, remains `draft`. Both were used by the completed
+sweep. The frozen live-verifier record is still main `v1`.
 
 ## Fault Catalogue v1 — `main6s8h` (frozen)
 
@@ -19,9 +21,11 @@ differ.
 | F4 | forwarding_loop | narrow h1→h5 cycle + safety TBF on s3–s4 |
 | F5 | missing_flow | delete s3 baseline unicast for h5 |
 
-## ring5s5h-v1 — `ring5s5h` (draft, not runtime verified)
+## ring5s5h-v1 — `ring5s5h`
 
-Definitions in `ring_scenarios.py`. Same rates, priorities and workloads as v1.
+Definitions in `ring_scenarios.py`. `CATALOGUE_STATUS` remains `draft`. The
+completed sweep ran these scenarios for five rounds. Same rates, priorities and
+workloads as v1.
 Every scenario breaks or slows h1→h5, so the v1 symptom prompts still apply.
 Baseline forwarding leaves s5–s1 unused, so h1→h5 crosses s1–s2–s3–s4–s5.
 

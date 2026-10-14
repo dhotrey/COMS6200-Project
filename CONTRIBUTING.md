@@ -1,17 +1,20 @@
 # Contributing
 
-Practical Git and collaboration guidelines for the COMS6200 LLM-Based Network Troubleshooting Agent.
+Practical Git notes for the COMS6200 LLM-Based Network Troubleshooting Agent.
+
+Implementation is complete. `master` is the submission snapshot. The notes below
+describe how earlier feature work was integrated. New features are not planned.
 
 ## Before starting work
 
-Always start from the latest integration branch:
+Earlier work started from the integration branch:
 
 ```bash
 git switch develop
 git pull origin develop
 ```
 
-Do not start a new feature from stale local `develop`, and do not do normal development on `master`.
+Do not rewrite `master` history.
 
 ## Create a feature branch
 
@@ -60,7 +63,8 @@ Prefer adding specific files over `git add .` when you have unrelated local file
 - Do not commit secrets.
 - Do not commit `.env`.
 - Use `.env.example` as the committed template.
-- OpenAI credentials belong in a local `.env` or environment variable as `OPENAI_API_KEY`.
+- The OpenAI provider key stays in Cloudflare AI Gateway BYOK. It is not a local `OPENAI_API_KEY`.
+- `CLOUDFLARE_API_TOKEN` is the D1 account token. `CLOUDFLARE_AI_GATEWAY_API_TOKEN` is a different credential.
 
 ## Shared-branch safety
 

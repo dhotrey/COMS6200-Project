@@ -1,14 +1,12 @@
 # Telemetry package (M4)
 
-Bounded, structured diagnostics for `main6s8h`. This is the only agent-facing
-interface. It is used later by both the LLM agent and the scripted
-troubleshooting baseline.
-
-Host, switch and port allow-lists, tool-schema enums and configured peers come
-from `topologies/active.py`. `COMS6200_TOPOLOGY=ring5s5h` switches them to the
-ring (hosts h1–h5, switches s1–s5, ports 1–3). The default is `main6s8h`,
-whose schemas are unchanged. `sudo` drops this variable unless it is passed
-through: `sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD ...`.
+Bounded, structured diagnostics. This is the only agent-facing interface. The
+LLM agent and the scripted troubleshooting baseline both call it. Allow-lists
+follow `topologies/active.py`. The default topology is `main6s8h`.
+`COMS6200_TOPOLOGY=ring5s5h` uses hosts h1–h5, switches s1–s5 and ports 1–3.
+`COMS6200_TOPOLOGY=tree5s8h` uses the seven-switch tree. `sudo` drops this
+variable unless it is passed through:
+`sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD ...`.
 
 This package is not a fault injector, not an LLM client, and not a
 configuration API.
@@ -26,6 +24,7 @@ gw.get_link_metrics("s1", 4)  # fixed ~2 s window; s1-s6 and a known port only
 gw.get_flow_table("s3")
 gw.ping("h1", "h5")          # optional count=1..10, default 3
 gw.iperf("h1", "h5")         # duration 1..5, default 2; sender_* and receiver_* plus a receiver-preferred legacy summary
+gw.nmap("h1", "h5", "tcp", 22)  # one TCP or UDP port; primary IPv4; no host discovery
 ```
 
 Every method returns the same envelope:
@@ -55,6 +54,7 @@ python3 -m telemetry.cli schemas
 # Host-namespace tools: typically need sudo for mnexec
 sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH python3 -m telemetry.cli ping --src h1 --dst h5
 sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH python3 -m telemetry.cli iperf --src h1 --dst h5
+sudo --preserve-env=ONOS_USER,ONOS_PASSWORD,PATH python3 -m telemetry.cli nmap --src h1 --dst h5 --proto tcp --port 22
 ```
 
 `sudo` is for Mininet namespaces (`mnexec`), not Docker. JSON is written to
@@ -70,7 +70,7 @@ will not see credentials.
 | `get_port_stats` | `/statistics/ports` (two samples) plus optional delta | peer names |
 | `get_link_metrics` | kernel interface counters and filtered queue counters over a fixed ~2 s window | peer from the canonical topology; enabled from ONOS when available |
 | `get_flow_table` | `/flows` | switch → DPID |
-| `ping` / `iperf` | none | host → primary IPv4; namespace via `mininet:<host>` + `mnexec` |
+| `ping` / `iperf` / `nmap` | none | host → primary IPv4; namespace via `mininet:<host>` + `mnexec` |
 
 `get_topology()` does **not** call ONOS `/hosts`. `host_count=0` is expected
 and is not treated as an error.
@@ -84,7 +84,7 @@ queue counters are null.
 
 ## Safety
 
-- allow-listed hosts `h1`–`h8` and switches `s1`–`s6` only
+- allow-lists follow the selected topology (default hosts `h1`–`h8` and switches `s1`–`s6`)
 - no `shell=True`
 - no caller-supplied command strings, executables, PIDs, or REST paths
 - ONOS client has no generic `get(path)`

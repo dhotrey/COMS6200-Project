@@ -2,7 +2,7 @@
 
 ## User Manual
 
-Canonical operational guide for setup, testbed operation, healthy-state checks, planned diagnosis workflows, reset, and troubleshooting.
+Canonical operational guide for setup, testbed operation, diagnosis, the completed benchmark, reset and troubleshooting.
 
 The [root README](../README.md) is the concise landing page. This file is the detailed operator/developer manual.
 
@@ -30,14 +30,14 @@ Architecture diagram (Part A Figure 2): [reports/part-a/figures/figure2.png](rep
 | M5 First Automated Fault + Reset | ✅ |
 | M5B Fault Catalogue v1 (F1–F5) | ✅ Frozen |
 | Automated fault injection | ✅ F1–F5 verified |
-| Deterministic scripted troubleshooting baseline | ✅ Implemented ([baseline](../baseline/README.md)). Non-formal F1–F5 dry runs only. |
-| Diagnosis evaluator | ✅ Protocol v1 rubric ([experiments](../experiments/README.md)). |
-| Experiment runner | ✅ Dry-run mode only. Formal mode is refused. |
-| LLM tool-calling integration | ✅ Harness implemented (UI loads F1–F5). WSL2 F1–F5 and Ubuntu F2 runs are pilots, not the formal dataset. See [results](results/llm-diagnosis.md), [F2 observability pilot](results/f2-observability-pilot.md), and [F2 link-metrics pilot](results/f2-link-metrics-pilot.md). |
-| Experimental Protocol v1 | 🟡 Frozen candidate ([protocol](experiments/protocol-v1.md)). Primary model `gpt-5.6-sol` / `medium` is approved. Formal trials have not been collected. |
-| Repeated evaluation experiments | 🟡 Not started. Formal collection is blocked. |
-| Multi-topology model sweep | ✅ Evidence committed at `evidence/experiments/sweep/sweep-2026-10/`. **EXPLORATORY SWEEP / NOT PROTOCOL V1.** 525 completed trials on main, ring, and tree. |
-| Ring topology `ring5s5h` | ✅ Optional topology and catalogue `ring5s5h-v1`. Used by the exploratory sweep. Not part of protocol v1. `verify_main_openflow.sh` still checks `main6s8h` only. |
+| Deterministic scripted troubleshooting baseline | ✅ Implemented in `baseline/` and included in the 525-trial sweep. |
+| Semantic judge | ✅ OpenAI Decisions API (`gpt-6-luna`) for the UI and the completed sweep. |
+| Protocol-v1 rule scorer | ✅ Cross-check only. It is not the primary sweep metric. |
+| Protocol v1 formal runner | Historical. `python3 -m experiments formal` still refuses to start. Its 80-trial matrix was not collected. |
+| LLM tool-calling agent | ✅ Responses API through Cloudflare AI Gateway. September pilots in [results](results/llm-diagnosis.md) are not the completed dataset. |
+| Completed repeated evaluation | ✅ `evidence/experiments/sweep/sweep-2026-10/`: 525 final trials, 527 attempt rows. The files keep the label `EXPLORATORY SWEEP / NOT PROTOCOL V1`, which distinguishes them from the unused protocol-v1 matrix. |
+| Ring topology `ring5s5h` | ✅ Used for five sweep rounds. Source catalogue status remains `draft`. `verify_main_openflow.sh` checks `main6s8h` only. |
+| Tree topology `tree5s8h` | ✅ Selector name retained for a 7-switch / 8-host tree. Used for five sweep rounds. Source catalogue status remains `draft`. |
 | h6 multihoming / failover experiment | 🔬 |
 | Constrained automatic link-failure repair | 🔬 |
 
@@ -59,7 +59,7 @@ Automatic grading uses the OpenAI Decisions API (`gpt-6-luna`) through the exist
 **Two different “baseline” terms**
 
 - **Baseline forwarding** ✅ — ONOS application `org.coms6200.baseline`. Network datapath for healthy host connectivity.
-- **Scripted troubleshooting baseline** ✅ — diagnostic comparator in `baseline/`. Uses the same telemetry as the LLM. Formal trials have not been run.
+- **Scripted troubleshooting baseline** ✅ — diagnostic comparator in `baseline/`. It was one of the seven methods in the completed sweep.
 
 ---
 
@@ -74,26 +74,27 @@ Automatic grading uses the OpenAI Decisions API (`gpt-6-luna`) through the exist
 7. [Main experimental topology](#main-experimental-topology)
 8. [Host addressing](#host-addressing)
 9. [Ring topology](#ring-topology)
-10. [Starting the network](#starting-the-network) (includes [session start / stop / inject](#session-start--stop--inject))
-11. [Verifying controller integration](#verifying-controller-integration)
-12. [ONOS host discovery](#onos-host-discovery)
-13. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
-14. [Healthy network checklist](#healthy-network-checklist)
-15. [Structured telemetry gateway](#structured-telemetry-gateway)
-16. [Fault injection](#fault-injection)
-17. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
-18. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
-19. [Expected diagnostic output](#expected-diagnostic-output)
-20. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
-21. [Multi-topology model sweep](#multi-topology-model-sweep)
-22. [Resetting the testbed](#resetting-the-testbed)
-23. [Troubleshooting the testbed](#troubleshooting-the-testbed)
-24. [Safety and experimental controls](#safety-and-experimental-controls)
-25. [Optional extensions](#optional-extensions)
-26. [End-to-end workflow](#end-to-end-workflow)
-27. [Repository layout](#repository-layout)
-28. [Development and Git workflow](#development-and-git-workflow)
-29. [Keeping this manual current](#keeping-this-manual-current)
+10. [Tree topology](#tree-topology)
+11. [Starting the network](#starting-the-network) (includes [session start / stop / inject](#session-start--stop--inject))
+12. [Verifying controller integration](#verifying-controller-integration)
+13. [ONOS host discovery](#onos-host-discovery)
+14. [Deterministic baseline forwarding](#deterministic-baseline-forwarding)
+15. [Healthy network checklist](#healthy-network-checklist)
+16. [Structured telemetry gateway](#structured-telemetry-gateway)
+17. [Fault injection](#fault-injection)
+18. [Operator vs diagnostic-agent view](#operator-vs-diagnostic-agent-view)
+19. [Asking the LLM for a diagnosis](#asking-the-llm-for-a-diagnosis) (includes [diagnosis sessions per scenario](#diagnosis-sessions-per-scenario-f1f5))
+20. [Expected diagnostic output](#expected-diagnostic-output)
+21. [Scripted troubleshooting baseline](#scripted-troubleshooting-baseline)
+22. [Multi-topology model sweep](#multi-topology-model-sweep)
+23. [Resetting the testbed](#resetting-the-testbed)
+24. [Troubleshooting the testbed](#troubleshooting-the-testbed)
+25. [Safety and experimental controls](#safety-and-experimental-controls)
+26. [Optional extensions](#optional-extensions)
+27. [End-to-end workflow](#end-to-end-workflow)
+28. [Repository layout](#repository-layout)
+29. [Development and Git workflow](#development-and-git-workflow)
+30. [Keeping this manual current](#keeping-this-manual-current)
 
 ---
 
@@ -104,8 +105,7 @@ This manual is for:
 - project developers maintaining the testbed
 - course markers / demonstrators reproducing verified behaviour
 - users setting up the Linux experiment host
-- experiment operators running later diagnosis episodes
-- users who will later ask the LLM to diagnose a **symptom**
+- experiment operators running diagnosis episodes
 
 The project is a **controlled experimental/research testbed**, not a production network-management platform.
 
@@ -117,7 +117,7 @@ Research question: *How accurately and efficiently can a tool-using LLM agent di
 
 ## Architecture overview
 
-Implemented through M5B (Ubuntu live evidence 27 August 2026; F1–F5 operator injector):
+Implemented path:
 
 ```
 Mininet hosts
@@ -126,23 +126,19 @@ Open vSwitch
     ↓ OpenFlow 1.3
 ONOS 2.7.0
     ↓ read-only REST (internal to the gateway only)
-    + configured Mininet host map (`topologies/spec.py`)
+    + configured Mininet host map (`topologies/spec.py`, or the selected topology spec)
 Structured Telemetry / Tool Gateway
-    ↓
-OpenAI LLM Agent (`agent/` chat harness) → conversational diagnosis
-```
-
-The LLM agent is implemented and runs on the Ubuntu reference host. Test results:
-[LLM diagnosis test results](results/llm-diagnosis.md). Formal protocol-v1 collection has not started.
-
-```
-Structured Telemetry / Tool Gateway
-    ↓
-    ├── OpenAI LLM Agent (free-text answers)
-    └── Deterministic scripted baseline v1
+    ├── OpenAI Responses API via Cloudflare AI Gateway (`agent/`)
+    └── Deterministic scripted baseline (`baseline/`)
             ↓
-    Protocol-v1 rule evaluator, and a separate exploratory judge
+    OpenAI Decisions API (`gpt-6-luna`) and the protocol-v1 rule cross-check
+            ↓
+    Cloudflare D1, archived JSON; Logfire optional
 ```
+
+Early chat pilots are recorded in
+[LLM diagnosis test results](results/llm-diagnosis.md). The completed evaluation
+is the sweep in [Multi-topology model sweep](#multi-topology-model-sweep).
 
 Ground truth path (injector ✅ F1–F5; evaluator-only):
 
@@ -153,7 +149,7 @@ Fault Injector ── ground truth only ──→ Evaluator / Logger
 
 See [Part A Figure 2](reports/part-a/figures/figure2.png).
 
-Experimental fairness (planned, but already a project constraint):
+Experimental controls, implemented for both diagnostic methods:
 
 - neither diagnostic method receives hidden fault labels
 - neither receives injector configuration
@@ -467,16 +463,15 @@ h6 secondary is unused by baseline forwarding. No bonding, LACP, MLAG, VRRP, or 
 
 ## Ring topology
 
-🟡 File: `topologies/ring_topology.py` (built from `topologies/ring_spec.py`)  
+File: `topologies/ring_topology.py` (built from `topologies/ring_spec.py`)  
 Mininet name: `ring5s5h`  
 Layer 2, `10.0.0.0/24`, OpenFlow 1.3, `failMode=secure`. STP is not enabled.
 
-A second topology for running fault scenarios on a different shape. It does not replace `main6s8h`, and it is **not** part of Experimental Protocol v1.
+A second topology for the completed evaluation. It does not replace `main6s8h`, and it is not part of the unused protocol-v1 matrix.
 
 Five switches in one physical ring `s1–s2–s3–s4–s5–s1`, one host per switch. 5 switches, 5 hosts, 5 inter-switch links, 5 host-switch links, 10 physical links.
 
-**Implemented (static tests only):** topology and spec; topology selection with `COMS6200_TOPOLOGY=ring5s5h`, which switches the telemetry gateway, baseline forwarding, `scripts/testbed.sh`, and the fault catalogue; ring baseline forwarding (38 flows, s5–s1 link unused); draft fault catalogue `ring5s5h-v1` ([ring faults](#ring-fault-catalogue-ring5s5h-v1)).  
-**Not yet done:** run against ONOS and verify the ring faults live (`scripts/verify_faults.py`). The protocol v1 experiment runner refuses the ring.
+The topology, forwarding plan (38 flows; s5–s1 unused), telemetry allow-lists and catalogue `ring5s5h-v1` are implemented. The completed sweep ran five rounds on this topology. `scripts/verify_fault_catalogue.sh` and `verify_main_openflow.sh` remain `main6s8h` checks. The source field `CATALOGUE_STATUS` is still `draft`; that field was not promoted after the sweep. Live symptom checks for the selected topology are `scripts/verify_faults.py`.
 
 | Switch | Port 1 | Port 2 | Port 3 | ONOS device ID |
 | --- | --- | --- | --- | --- |
@@ -500,7 +495,7 @@ The DPIDs deliberately differ from `main6s8h`'s `0x1`–`0x6`, so ONOS does not 
 | `get_link_metrics` ports | 1–5 | 1–3 |
 | ONOS devices / directed links expected by `testbed.sh` | 6 / 20 | 5 / 10 |
 | Baseline flows | 56 | 38 |
-| Fault catalogue | v1 (frozen) | `ring5s5h-v1` (draft) |
+| Fault catalogue | v1 (frozen main record) | `ring5s5h-v1` (implemented; source status `draft`) |
 
 Export it once per shell and use the same value for every command in the session, including the agent server. `sudo` drops it unless passed through, so root commands need `sudo --preserve-env=COMS6200_TOPOLOGY,ONOS_USER,ONOS_PASSWORD ...`. `testbed.sh` already passes it through.
 
@@ -530,7 +525,7 @@ Then, from another shell with `COMS6200_TOPOLOGY=ring5s5h` exported, run `python
 
 The ring is a physical loop. Do not run it with `--controller=none`, `--switch ovsbr`, NORMAL, or `org.onosproject.fwd`. `verify_main_openflow.sh` and `verify_telemetry.sh` check `main6s8h` and do not apply. Use `sudo ovs-vsctl show`, `./scripts/verify_onos.sh`, and `baseline_forwarding.py verify` instead.
 
-The exploratory sweep ran this topology for five rounds. A healthy ring session is 5 OF_13 devices, 10 directed links, and 38 baseline flows. `verify_main_openflow.sh` does not check the ring.
+The completed sweep ran this topology for five rounds. A healthy ring session is 5 OF_13 devices, 10 directed links, and 38 baseline flows. `verify_main_openflow.sh` does not check the ring.
 
 Static checks (no Mininet required):
 
@@ -542,6 +537,46 @@ python3 tests/test_ring_faults.py
 ```
 
 Full port map and launch notes: `topologies/README.md`. Ring forwarding table: `forwarding/README.md`.
+
+---
+
+## Tree topology
+
+File: `topologies/tree_topology.py` (built from `topologies/tree_spec.py`)  
+Selector name: `tree5s8h`  
+Layer 2, `10.0.0.0/24`, OpenFlow 1.3, `failMode=secure`.
+
+The selector name is retained. The network is a binary tree with **7 switches and 8 hosts**: root `s1`, intermediate `s2` and `s3`, and leaf switches `s4`–`s7`. There are 6 inter-switch links and 8 host links. Baseline forwarding uses every inter-switch link. `expected_flow_count()` for this topology is 76.
+
+The completed sweep ran five rounds on this topology. Its catalogue source status remains `draft`, for the same reason as the ring. `verify_main_openflow.sh` does not check the tree.
+
+Only one topology can run at a time. Stop the current session with the `COMS6200_TOPOLOGY` it was started with.
+
+```bash
+export COMS6200_TOPOLOGY=tree5s8h
+./scripts/testbed.sh start
+./scripts/testbed.sh status
+./scripts/testbed.sh stop
+```
+
+Manual path, with ONOS already up:
+
+```bash
+sudo mn --custom topologies/tree_topology.py \
+  --topo tree5s8h \
+  --controller=remote,ip=127.0.0.1,port=6653 \
+  --switch=ovsk
+```
+
+Then, from another shell:
+
+```bash
+export COMS6200_TOPOLOGY=tree5s8h
+python3 forwarding/baseline_forwarding.py install
+python3 forwarding/baseline_forwarding.py verify
+```
+
+Run `remove`, or `./scripts/testbed.sh stop` with the same variable, before the switches disconnect. Port map: `topologies/README.md`.
 
 ---
 
@@ -947,10 +982,7 @@ Developer notes: `telemetry/README.md`.
 
 ✅ **Fault Catalogue v1 — Frozen** (Ubuntu `Aus`, 27 August 2026).
 
-All five mandatory scenarios are runtime-verified. Future LLM and scripted
-troubleshooting experiments **must** use this frozen catalogue. Changing
-targets, selectors, workloads, or reset semantics requires a new catalogue
-version.
+All five mandatory scenarios on `main6s8h` are runtime-verified. The ring and tree catalogues use the same five families at topology-specific locations. They were exercised by the completed sweep. Their source status remains `draft`, and `verify_fault_catalogue.sh` remains the frozen main record.
 
 Evidence:
 
@@ -971,7 +1003,7 @@ Catalogue v1 is defined for `main6s8h`. `COMS6200_TOPOLOGY=ring5s5h` selects the
 
 ### Ring fault catalogue (`ring5s5h-v1`)
 
-🟡 Draft, static tests only, **not runtime verified**. Not part of protocol v1. The experiment runner refuses non-`main6s8h` topologies.
+Implemented and used for five rounds of the completed sweep. The source status remains `draft`. The protocol-v1 runner still accepts only `main6s8h`. The sweep runner accepts all three topologies.
 
 Same IDs, families, mechanisms, rates and workloads as v1, at ring locations (`faults/ring_scenarios.py`). Every scenario breaks or slows h1→h5, so the v1 symptom prompts still apply. Baseline forwarding leaves s5–s1 unused, so h1→h5 crosses s1–s2–s3–s4–s5 even though s1 and s5 are directly connected.
 
@@ -1206,9 +1238,9 @@ Describe observable symptoms. Do not name the injector.
 
 ### Diagnosis sessions per scenario (F1–F5)
 
-Formal prompts, repetition count, run order, and scoring are specified in
-[Experimental Protocol v1](experiments/protocol-v1.md). That document is
-pre-collection. The table below remains the operator reference for symptom
+Formal prompts and scoring for the unused main-only design are in
+[Experimental Protocol v1](experiments/protocol-v1.md). That design was not the
+collected dataset. The table below remains the operator reference for symptom
 prompts. Do not paste the evidence or localisation columns into the chat.
 
 ✅ (WSL2) The harness loads all five catalogue faults through the same path
@@ -1291,8 +1323,7 @@ Samples, including the exact observations the model would receive
 (`observations_Fn.json`), are written to the printed `/tmp/coms6200-agent.*`
 directory.
 
-Latest run results: [LLM diagnosis test results](results/llm-diagnosis.md#harness-path-check-no-model).
-**Not yet run on the Ubuntu reference host.**
+Latest recorded no-model harness-path check: [LLM diagnosis test results](results/llm-diagnosis.md#harness-path-check-no-model). That recorded check is the WSL2 run. The completed sweep later exercised diagnosis on the Ubuntu testbed; it is a different procedure.
 
 ---
 
@@ -1306,7 +1337,7 @@ per-tool latency, per-model-request latency, whole-turn time, tokens summed over
 all model rounds, cached/reasoning tokens, estimated cost, and invalid calls.
 Cancelled or failed turns flag potentially incomplete usage.
 
-Answers stay free text. Scoring is separate: the protocol-v1 rule evaluator (`experiments/evaluator.py`) and, for the UI and the exploratory sweep, the judge. The two can disagree. Neither is a JSON diagnosis schema forced on the model.
+Answers stay free text. Scoring is separate from generation. The completed sweep's primary score is the Decisions judge. The protocol-v1 rule evaluator (`experiments/evaluator.py`, and `experiments/sweep_scoring.py` on ring and tree) is a cross-check. The two can disagree. Neither score is a JSON schema forced on the model.
 
 ---
 
@@ -1317,7 +1348,7 @@ Answers stay free text. Scoring is separate: the protocol-v1 rule evaluator (`ex
 | Term | What it is | Status |
 | --- | --- | --- |
 | Baseline forwarding | Datapath flows installed by `forwarding/baseline_forwarding.py` | ✅ |
-| Scripted troubleshooting baseline | Deterministic diagnostic comparator in `baseline/` | ✅ Dry-run only |
+| Scripted troubleshooting baseline | Deterministic diagnostic comparator in `baseline/` | ✅ Included in the 525-trial sweep |
 
 The procedure reads the symptom, then uses topology, ping, port state, flow rules, and, when the complaint is slowness, iperf plus `get_link_metrics`. It stops at 14 gateway calls or 300 seconds. It does not receive a scenario id.
 
@@ -1327,13 +1358,13 @@ python3 -m experiments dry-run --method baseline --scenario F1
 python3 -m experiments formal   # refused
 ```
 
-`formal` does not start the 80-trial matrix. Details and the scoring rules are in [Experimental Protocol v1](experiments/protocol-v1.md) and [experiments/README.md](../experiments/README.md).
+`formal` does not start the unused 80-trial protocol-v1 matrix. The completed dataset is the sweep below. Scoring rules for the earlier design are in [Experimental Protocol v1](experiments/protocol-v1.md) and [experiments/README.md](../experiments/README.md).
 
 ---
 
 ## Multi-topology model sweep
 
-✅ Committed run `sweep-2026-10` (`evidence/experiments/sweep/sweep-2026-10/`). Label: **EXPLORATORY SWEEP / NOT PROTOCOL V1**.
+✅ Completed run `sweep-2026-10` (`evidence/experiments/sweep/sweep-2026-10/`). The archived files keep the label **EXPLORATORY SWEEP / NOT PROTOCOL V1**. That label means the run is not the unused protocol-v1 matrix. It is the project's completed repeated evaluation. Do not rewrite the evidence.
 
 | Item | Value |
 | --- | --- |
@@ -1346,10 +1377,10 @@ python3 -m experiments formal   # refused
 | Infrastructure | 2 first attempts (ring round 3, `gpt-6-astra` F3 and F4), both completed on attempt 2 |
 | Recorded spend | about $22.98 |
 
-Those stored judge verdicts were produced by the OpenAI Decisions judge (`gpt-6-luna`) used by the final implementation. They remain preserved and were not regraded. The protocol v1 runner is unchanged and stays `main6s8h`-only. Headline pattern, not a formal result: the stronger reasoning models outscore Mini and Nano; the baseline misses ring F1 and F2 because it searches the shortest configured path; the judge and the rule scorer often disagree.
+Those stored judge verdicts were produced by the OpenAI Decisions judge (`gpt-6-luna`). They remain preserved and were not regraded. The protocol-v1 runner is unchanged and stays `main6s8h`-only. Headline pattern: the stronger reasoning models outscore Mini and Nano; the baseline misses ring F1 and F2 because it searches the shortest configured path; the judge and the rule scorer often disagree. Collection spanned more than one source state. Per-trial prompts, limits, traces and source metadata were preserved.
 
 
-`experiments/sweep.py` is the command-line counterpart of the results page's **Benchmarks / Evals** runner. It differs from it in three ways:
+`experiments/sweep.py` is the command-line counterpart of the results page's **Benchmarks / Evals** runner. It differs from the UI runner in three ways:
 - it restarts the network before every trial, instead of running several models against one injection;
 - it includes the scripted baseline;
 - it runs one topology per session, in rounds.
@@ -1359,7 +1390,7 @@ It reuses the agent's diagnosis loop, LLM judge and rubrics (`judge/`), and publ
 | Method | Reasoning effort | Note |
 | --- | --- | --- |
 | Scripted baseline | — | No model, no API cost; shown as **Scripted baseline** on the results page |
-| `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra` | `medium` | The original evaluation's four (the GPT-5.6 series is listed as deprecated in the UI) |
+| `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra` | `medium` | Reasoning models in the completed matrix. The GPT-5.6 series is listed as deprecated in the current UI. |
 | `gpt-4.1-mini`, `gpt-4.1-nano` | none | No reasoning support; sent without reasoning fields |
 
 The sweep runs in **rounds**. One `run` runs one round on one topology: every method on every fault once (35 trials), in a freshly seeded random order. Running it again adds the next round to the same sweep, and the summary pools all rounds. Every trial is independent (fresh network, new conversation), so five single-round runs give the same data as one five-round run. Topologies run in separate sessions, so alternate them (the runner prints the suggested next topology). That keeps day-to-day differences, such as a slow gateway, from lining up with one topology.
@@ -1742,27 +1773,20 @@ Optional one-case link-failure reroute **after** the core diagnosis experiment i
 12. Verify healthy baseline again ✅ (20 directed links; 56 baseline ADDED; 0 experiment flows; pingall 56/56)
 13. Session teardown `./scripts/testbed.sh stop` (ONOS stays up), or `python3 forwarding/baseline_forwarding.py remove` and/or `sudo mn -c`; `./scripts/testbed.sh stop --with-onos` if shutting down the controller
 
-### B. Full planned experiment workflow 🟡
+### B. Completed evaluation workflow
 
-Unfinished steps are marked.
+The 525-trial sweep followed this sequence for every trial. Re-running it spends API credits and is not required to read the archived results.
 
-1. Setup environment ✅
-2. Start ONOS ✅
-3. Start topology ✅
-4. Install baseline forwarding ✅
-5. Verify healthy baseline ✅
-6. Inject one fault ✅ (Fault Catalogue v1: F1–F5)
-7. Present **only a symptom** to the diagnostic method — LLM ✅ (the harness never sends the scenario id); scripted baseline ✅ (symptom text only; dry runs)
-8. Collect structured telemetry ✅
-9. Obtain a diagnosis — LLM ✅ (chat harness; pilots in [results](results/llm-diagnosis.md)); scripted baseline ✅ (non-formal F1–F5 dry runs)
-10. Log result — LLM ✅ (Cloudflare D1 for harness chats); dry-run records ✅ (`evidence/experiments/protocol-v1/dry-runs.jsonl`, labelled not formal)
-11. Compare diagnosis to hidden ground truth — evaluator ✅ for dry runs. Formal scores have not been collected.
-12. Reset network ✅ (`python3 -m faults.cli reset`)
-13. Verify healthy state ✅
-14. Repeat 🟡 Formal 8×2 matrix not started. One non-formal baseline pass per F1–F5 and one paired F2 dry run exist.
+1. Setup environment and start ONOS.
+2. The sweep restarts the selected topology and installs its baseline before every trial.
+3. Healthy gate.
+4. Inject one topology-specific fault. The method receives only the symptom.
+5. One diagnosis: the scripted baseline, or one model in a fresh conversation.
+6. Reset in a `finally` path, then semantic grading and the rule cross-check.
+7. Persist the attempt. Infrastructure failures were retried once.
+8. Five rounds on each of the three topologies produced 525 final trials.
 
-Harness pilots and the Phase 6–7 dry runs were exercised on the Ubuntu
-reference host. Those records are not the formal dataset.
+The earlier protocol-v1 `formal` command still does not start its 80-trial matrix. Dry-run records under `evidence/experiments/protocol-v1/` are not the completed dataset.
 
 ---
 
@@ -1772,20 +1796,20 @@ reference host. Those records are not the formal dataset.
 | --- | --- |
 | `setup/` | `setup_ubuntu.sh`, `setup_onos.sh`, `verify_environment.sh` |
 | `scripts/` | `testbed.sh` (session start/stop/inject), `run_main6s8h.py`, `verify_onos.sh`, `verify_main_openflow.sh`, `verify_telemetry.sh`, `verify_fault_f1.sh` … `verify_fault_f5.sh`, `verify_fault_catalogue.sh`, `verify_agent_scenarios.sh` (harness path, F1–F5), `verify_faults.py` (data-driven, any catalogue), `list_models.py` (gateway model IDs) |
-| `topologies/` | `main_topology.py`, canonical `spec.py`, `ring_topology.py` + `ring_spec.py` (`ring5s5h`, in development), `active.py` (`COMS6200_TOPOLOGY` selection), plus progress-only Mininet tests |
-| `forwarding/` | ONOS baseline provisioner |
-| `telemetry/` | Bounded structured diagnostic gateway (M4; Ubuntu live evidence 27 August 2026) |
-| `faults/` | Operator Fault Catalogue v1 (F1–F5) injector/reset (M5/M5B; Ubuntu live evidence 27 August 2026), plus the draft `ring5s5h-v1` catalogue — not an LLM tool |
+| `topologies/` | `main_topology.py`, `ring_topology.py`, `tree_topology.py`, their specs, and `active.py` (`COMS6200_TOPOLOGY`) |
+| `forwarding/` | ONOS baseline provisioner for the selected topology |
+| `telemetry/` | Eight bounded diagnostic tools |
+| `faults/` | Operator F1–F5 injector/reset for main, ring and tree — not an LLM tool |
 | `controllers/` | Historical Ryu-era `main_controller.py` — **not** the runtime controller |
-| `tests/` | Static topology, forwarding, telemetry, and fault tests |
-| `evidence/progress/` | Runtime evidence (ONOS, forwarding, telemetry, faults, LLM harness tests) |
-| `docs/` | This manual, ONOS setup, decisions, Part A report, `results/llm-diagnosis.md` (LLM test results) |
-| `docs/reports/part-a/` | Canonical Part A source, figures, generated DOCX/PDF |
-| `.cursor/rules/` | Always-on project constraints including this manual’s sync rule |
+| `tests/` | Offline repository tests |
+| `evidence/progress/` | Milestone and pilot evidence |
+| `evidence/experiments/sweep/sweep-2026-10/` | Completed 525-trial dataset |
+| `docs/` | This manual, ONOS setup, decisions, the historical Part A report, and September pilot notes |
+| `docs/reports/part-a/` | Part A source, figures and generated DOCX/PDF |
+| `docs/experiments/protocol-v1.md` | Earlier main-only design. Its formal runner remains disarmed. |
+| `.cursor/rules/` | Project constraints, including this manual’s sync rule |
 
-**Implemented starter:** `agent/` (chat harness, tools, Cloudflare D1, UI).
-
-**Implemented, dry-run only:** `baseline/` (scripted troubleshooter), `experiments/` (evaluator and runner). Formal `runs.jsonl` is not present.
+**Implemented:** `agent/` (chat harness, tools, Cloudflare D1, Decisions grading, UI), `baseline/` (scripted troubleshooter), `experiments/` (rule scorer, disarmed protocol-v1 runner, and the sweep that produced the completed dataset).
 
 Do not run `ryu-manager controllers/main_controller.py`. Ryu is not installed.
 
@@ -1797,19 +1821,26 @@ Progress topologies (`progress5s2h`, `progressbw10`, `progressimpaired`) are ear
 
 | Branch | Purpose |
 | --- | --- |
-| `master` | Stable / submission-ready |
-| `develop` | Integration |
-| `feature/*` | Individual work |
+| `master` | Submission snapshot. Implementation is complete. |
+| `develop` | Earlier integration branch |
+| `feature/*` | Historical individual work |
 
 ```bash
-git switch develop
-git pull origin develop
-git switch -c feature/<short-name>
+git switch master
+git pull origin master
 ```
 
-No force pushes. Do not commit `.env`, credentials, `incoming/`, or Word lock files. Commit runtime evidence only when it was actually observed.
+No force pushes. Do not commit `.env`, credentials, `incoming/`, generated report drafts, or Word lock files. Commit runtime evidence only when it was actually observed. New feature work is not planned.
 
-See `CONTRIBUTING.md` for collaboration details. This manual is an operator guide, not a full developer handbook.
+See `CONTRIBUTING.md` for the earlier collaboration workflow. This manual is an operator guide, not a full developer handbook.
+
+Offline tests do not call Cloudflare or change a network:
+
+```bash
+source .venv/bin/activate
+python3 -m pytest tests
+uv run --project agent python -m pytest agent/tests
+```
 
 ---
 

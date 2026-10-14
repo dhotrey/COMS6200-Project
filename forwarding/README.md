@@ -168,13 +168,10 @@ stays up.
 
 ## ring5s5h
 
-🟡 Implemented and covered by static tests. **Not yet runtime verified**
-against ONOS.
-
-The main6s8h tables above are hand-written and verified. The ring's tables are
-derived by `tree_forwarding()` from `topologies/ring_spec.py` and
-`RING_RESERVED_LINKS`. A static test checks that the same function reproduces
-the main6s8h tables exactly.
+Implemented. The main6s8h tables above are the August 2026 verified literals.
+The ring tables are derived by `tree_forwarding()`. The completed sweep ran this
+forwarding plan for five rounds (38 flows). `verify_main_openflow.sh` does not
+check the ring.
 
 Reserved: the **s5–s1** ring link (`s5:1` ↔ `s1:2`). The active tree is the
 chain s1–s2–s3–s4–s5, so no baseline rule outputs on `s1:2` or `s5:1`.
@@ -216,7 +213,7 @@ scripts, which count every `org.coms6200.baseline` flow.
 
 ## Relationship to later faults
 
-F4 can later override a narrow flow onto s3–s4. Failover experiments can
-later use s2 or h6-eth1. Those rules must use a higher priority than the
-baseline entries they intentionally replace. Do not implement faults in this
-module.
+F4, implemented in `faults/`, can override a narrow flow onto s3–s4. Reserved
+links such as s2 or h6-eth1 stay available for controlled experiments. Those
+rules must use a higher priority than the baseline entries they intentionally
+replace. Do not implement faults in this module.

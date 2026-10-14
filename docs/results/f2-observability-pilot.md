@@ -1,8 +1,8 @@
 # F2 observability pilot
 
-**PILOT / NOT FORMAL EXPERIMENTAL RESULTS**
+**PILOT / NOT THE 525-TRIAL EVALUATION**
 
-One run per model. This does not replace `docs/results/llm-diagnosis.md` and is not a repeated experiment.
+One run per model. This does not replace `docs/results/llm-diagnosis.md` and is not the completed sweep.
 
 ## Setup
 
