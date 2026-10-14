@@ -29,4 +29,3 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(preserve.startswith("--preserve-env="), preserve)
         self.assertIn("COMS6200_TOPOLOGY", preserve.split("=", 1)[1].split(","))
         self.assertIn("COMS6200_AGENT_DEV", preserve.split("=", 1)[1].split(","))
-        self.assertIn("TYPESAFE_API_KEY", preserve.split("=", 1)[1].split(","))

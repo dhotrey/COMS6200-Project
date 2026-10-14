@@ -1,30 +1,33 @@
-# Decision: OpenAI via Cloudflare AI Gateway (planned for M6)
+# Decision: OpenAI via Cloudflare AI Gateway
 
 Date: 27 August 2026
-Status: **Accepted; starter implemented** — live gateway verification pending.
-The `agent/` starter now routes Responses requests through the provider-specific
-Cloudflare gateway endpoint, using BYOK and a local gateway token.
+Status: **Accepted and implemented.**
+The `agent/` application routes OpenAI Responses and Decisions requests through
+the provider-specific Cloudflare gateway endpoint, using BYOK and a local
+gateway token.
 
 ## Context
 
-After Fault Catalogue v1 is complete, the project will add an OpenAI
-tool-calling diagnosis agent (M6). The team needs a controlled path for API
+The project uses an OpenAI tool-calling diagnosis agent and automated semantic
+judge. The team needs a controlled path for API
 calls that supports visibility and spend controls without embedding secrets in
 the repository.
 
 ## Decision
 
-Diagnosis and optional explanation traffic use the OpenAI Responses API **through Cloudflare AI Gateway**:
+Diagnosis and optional explanations use the OpenAI Responses API; automatic
+four-level grading uses the OpenAI Decisions API (`gpt-6-luna`). Both use
+**Cloudflare AI Gateway**:
 
 ```
-LLM Agent
-    |
-    | OpenAI Responses API
-    v
-Cloudflare AI Gateway
-    |
-    v
-OpenAI API
+LLM Agent / Semantic Judge
+           |
+           | Responses / Decisions
+           v
+ Cloudflare AI Gateway
+           |
+           v
+       OpenAI API
 ```
 
 Cloudflare AI Gateway is intended to provide:
@@ -69,28 +72,13 @@ Do not commit real `OPENAI_API_KEY` or Cloudflare tokens.
 - Do not configure Cloudflare runtime here.
 - Do not store or transmit the OpenAI API key as part of M5B.
 
-## Starter implementation (10 September 2026)
+## Final implementation
 
 See `agent/README.md` for actual configuration. The root `.env.example` lists
 gateway variables; the OpenAI key stays in Cloudflare BYOK. Gateway response
-caching is bypassed. The starter adds conversational output, Cloudflare D1
-history, Logfire and per-call metrics; formal experiments and structured scoring
-remain out of scope. D1 uses a separate account API token with D1 Write access;
-the local SQLite history was not migrated. Artificial tool latency defaults to
-1–10 seconds and must be disabled for actual timing measurements.
-
-## Diagnosis judge API swap (11 October 2026)
-
-Automatic four-level grading in chat and exploratory benchmarks now calls
-TypeSafe's System One endpoint (`https://api.typesafe.ai/v1/systemone`) directly,
-using the pinned model `jev-1.13.0`. This replaces the OpenAI Decisions grading
-call. Diagnosis and tool-free explanation calls still use the gateway's existing
-Responses route and stored BYOK key.
-
-The root `.env` holds a separate server-side `TYPESAFE_API_KEY`; only a blank
-placeholder is version-controlled in `.env.example`. The same rubric snapshots,
-verdict labels and separate usage/cost records are preserved. Saved older grades
-remain unchanged. This is a code/configuration change: it does not provision
-services, alter Cloudflare or D1, or migrate the database schema. See
-[agent grading](../../agent/README.md#automatic-diagnosis-assessment) and the
-[TypeSafe API](https://docs.typesafe.ai/api).
+caching is bypassed. The application includes conversational output, automatic
+Decisions grading, Cloudflare D1 history, Logfire and per-call metrics. D1 uses
+a separate account API token with D1 Write access; the local SQLite history was
+not migrated. The completed 525-trial sweep was graded through this Decisions
+path, and its stored results are preserved rather than regraded. Artificial tool
+latency must remain disabled for timing measurements.

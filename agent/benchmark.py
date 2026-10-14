@@ -149,9 +149,8 @@ async def finish_thread(function, *args, propagate_cancel=True):
 
 
 class Benchmark:
-    def __init__(self, client, judge_client=None):
+    def __init__(self, client):
         self.client = client
-        self.judge_client = judge_client
         self.active = None
         self.task = None
         self.stop_requested = False
@@ -287,7 +286,7 @@ class Benchmark:
                 await save_chat()
                 if evaluation["status"] == "pending":
                     key = (cell["conversation_id"], cell["message_id"], "judge")
-                    judge.launch(key[0], key[1], "judge", judge.evaluate(self.judge_client, key[0], key[1], evaluation, persist=persist))
+                    judge.launch(key[0], key[1], "judge", judge.evaluate(self.client, key[0], key[1], evaluation, persist=persist))
                     await judge.JOBS[key]
                 if self.stop_requested:
                     cell["status"] = "cancelled"

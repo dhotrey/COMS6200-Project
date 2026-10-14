@@ -41,13 +41,9 @@ class FakeClient:
                 yield {"type": "response.output_text.delta", "delta": item["content"][0]["text"]}
         yield {"type": "response.completed", "response": result}
 
-    async def create_judgment(self, payload):
+    async def create_decision(self, payload):
         self.decisions.append(payload)
-        probabilities = {value: 0.0 for value in ("correct", "mostly_correct", "partially_correct", "incorrect")}
-        probabilities[self.decision] = 1.0
-        return {"answers": {"diagnosis_correctness": {
-            "type": "choice", "choice": self.decision, "confidence": 1.0,
-            "probabilities": probabilities}},
+        return {"answers": [{"name": "diagnosis_correctness", "type": "choice", "choice": self.decision}],
                 "usage": {"input_tokens": 2000, "output_tokens": 10}}
 
     async def close(self):
@@ -147,15 +143,15 @@ def test_preflight_uses_the_loop_without_tools(monkeypatch):
 def test_judge_grades_with_the_topology_rubric(monkeypatch):
     client = FakeClient(decision="partially_correct")
     monkeypatch.setattr(config, "configured", lambda: True)
-    monkeypatch.setattr(config, "make_judge_client", lambda: client)
+    monkeypatch.setattr(config, "make_client", lambda: client)
     evaluation = sweep.judge_diagnosis("ring5s5h", "F3", "h1 can no longer reach h5.", "A drop rule on s2.")
     assert (evaluation["status"], evaluation["verdict"]) == ("completed", "partially_correct")
-    assert evaluation["rubric_path"] == "judge/ring5s5h/Fault3.md" and evaluation["model"] == "jev-1.13.0"
-    assert evaluation["cost_usd"] == pytest.approx(2000 * .042 / 1e6)
-    assert client.decisions[0]["state"]["agent_diagnosis"] == "A drop rule on s2." and client.closed
+    assert evaluation["rubric_path"] == "judge/ring5s5h/Fault3.md" and evaluation["model"] == "gpt-6-luna"
+    assert evaluation["cost_usd"] == pytest.approx(2000 * .1 / 1e6 + 10 * .5 / 1e6)
+    assert "A drop rule on s2." in client.decisions[0]["input"] and client.closed
 
     silent = FakeClient()
-    monkeypatch.setattr(config, "make_judge_client", lambda: silent)
+    monkeypatch.setattr(config, "make_client", lambda: silent)
     empty = sweep.judge_diagnosis("ring5s5h", "F3", "h1 can no longer reach h5.", "  ")
     assert (empty["status"], empty["verdict"], empty["label"]) == ("completed", "incorrect", "Incorrect (no answer)")
     assert silent.decisions == [], "no judge call for an empty answer"

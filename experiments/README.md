@@ -30,7 +30,7 @@ scoring version, and seeds 6200 and 6201. The approved model id in metadata must
 `evidence/experiments/sweep/<run-id>/`. The protocol v1 runner above is unchanged
 and still main6s8h-only.
 
-The committed run is `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 525 completed trials, 527 `trials.jsonl` rows, two retried infrastructure failures. Its judge verdicts came from the OpenAI Decisions judge (`gpt-6-luna`) used when the sweep ran. Current UI grading uses TypeSafe Jev (`jev-1.13.0`) and does not rewrite those files.
+The committed run is `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 525 completed trials, 527 `trials.jsonl` rows, two retried infrastructure failures. Its judge verdicts came from the OpenAI Decisions judge (`gpt-6-luna`) used by the final implementation. Those stored results are preserved and are not recomputed or rewritten.
 
 The rule cross-check and the semantic judge are different instruments. The rule scorer reads one conclusion paragraph. The judge reads the answer against a rubric and cannot see the tool trace. Disagreement is expected. Neither score is protocol-v1 formal data.
 

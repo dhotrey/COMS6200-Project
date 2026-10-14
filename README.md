@@ -434,7 +434,7 @@ COMS6200-Project/
 │   └── results/                    # LLM diagnosis test results summary
 │       └── part-a/
 │
-├── agent/                          # chat harness, operator UI, Jev grading client
+├── agent/                          # chat harness, operator UI, Decisions grading client
 ├── baseline/                       # scripted troubleshooting baseline v1
 ├── experiments/                    # protocol-v1 evaluator/runner and exploratory sweep
 └── judge/                          # evaluator-only rubrics (not model tools)
@@ -455,10 +455,11 @@ loads F1–F5 from its UI. Test results and remaining runs:
 Do not start formal LLM episodes until gateway caching policy and model freeze
 are applied (`docs/decisions/llm-api-gateway.md`). Do not commit `.env` secrets.
 
-Automatic answer grading uses TypeSafe Jev (`jev-1.13.0`) directly, with
-`TYPESAFE_API_KEY` in the root `.env`. Diagnosis and optional explanations use
-the existing Cloudflare BYOK gateway. See [agent setup](agent/README.md#credentials)
-and [grading behavior](agent/README.md#automatic-diagnosis-assessment).
+Automatic answer grading uses the OpenAI Decisions API (`gpt-6-luna`) through
+the existing Cloudflare BYOK gateway. Diagnosis and optional explanations use
+the OpenAI Responses API through the same gateway; no separate judge key is
+required. See [agent setup](agent/README.md#credentials) and
+[grading behavior](agent/README.md#automatic-diagnosis-assessment).
 
 ## 15. Project Reports
 
