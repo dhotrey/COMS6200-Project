@@ -524,7 +524,7 @@ def judge_diagnosis(topology: str, scenario: str, prompt: str, answer: str) -> d
         return evaluation
 
     async def grade() -> None:
-        client = config.make_judge_client()
+        client = config.make_client()
 
         async def keep(_evaluation: dict[str, Any]) -> None:
             return None  # the sweep stores the result itself
@@ -532,8 +532,7 @@ def judge_diagnosis(topology: str, scenario: str, prompt: str, answer: str) -> d
         try:
             await judge.evaluate(client, None, None, evaluation, persist=keep)
         finally:
-            if client is not None:
-                await client.close()
+            await client.close()
 
     asyncio.run(grade())
     return evaluation

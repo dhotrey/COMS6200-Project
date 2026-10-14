@@ -48,7 +48,6 @@ Existing environment variables take precedence. Restart after configuration chan
 - `CLOUDFLARE_AI_GATEWAY_API_TOKEN`: authenticated gateway token.
 - Store your **OpenAI API key in Cloudflare AI Gateway BYOK**; it is not needed locally.
 - `CLOUDFLARE_BYOK_ALIAS`: optional stored-key alias (otherwise Cloudflare's default).
-- `TYPESAFE_API_KEY`: server-side TypeSafe key for the Jev diagnosis judge.
 - `LOGFIRE_TOKEN`: optional Logfire project write token. Missing means export disabled.
 - Existing `ONOS_USER` / `ONOS_PASSWORD` configure telemetry; never sent to the model.
   If omitted, the harness uses the reference lab pair `onos` / `rocks`. You can also
@@ -58,16 +57,14 @@ The D1 account token and AI Gateway authentication token are different
 credentials. Do not substitute `CLOUDFLARE_AI_GATEWAY_API_TOKEN` for
 `CLOUDFLARE_API_TOKEN`.
 
-Diagnosis and explanation requests use the gateway's `/openai/responses` endpoint. Provider
+The server sends requests to the gateway's `/openai/responses` endpoint. Provider
 Authorization is omitted so Cloudflare supplies its stored key. Gateway response
-caching is bypassed, with no automatic gateway retries. Grading goes directly to
-`https://api.typesafe.ai/v1/systemone` with the TypeSafe key; no Cloudflare headers
-or OpenAI credentials are sent to TypeSafe. Keep `.env` Git-ignored with mode `0600`.
+caching is bypassed. No automatic retries hide extra calls or delays.
 
 ## Automatic diagnosis assessment
 
 After a successfully completed answer with F1–F5 selected, the backend automatically
-uses **TypeSafe Jev** (pinned to `jev-1.13.0`) to compare the final answer with
+uses the OpenAI **Decisions API** (`gpt-6-luna`) to compare the final answer with
 the captured `judge/<topology>/Fault<id>.md` rubric and shared `judge/grading.md`.
 The user question and earlier visible exchanges are supplied as reference context;
 tool traces are not supplied. Only the final primary diagnosis receives credit.
@@ -86,37 +83,16 @@ verdict. Explanation failures can be retried by clicking the button again.
 
 Judging runs independently of the diagnosis stream and survives browser navigation.
 Verdicts and explanations are saved in each assistant message's operator payload,
-with the rubric snapshot/hashes, raw judge response and separate usage/cost.
+with the rubric snapshot/hashes, raw decision response and separate usage/cost.
 They are never added to the diagnosing agent's history or its token/tool statistics.
 Opening history reuses saved results; it never automatically bills another judge call.
 A server restart marks interrupted work as failed when its status is checked.
 Older conversations have no automatic assessment. No D1 schema migration is needed.
 
-Jev receives structured `state` and one Choice question with the four labels as
-`criteria`. Its keyed answer supplies the verdict, confidence and probabilities.
-The UI's existing probability list is preserved; the raw result retains TypeSafe's
-map. Confidence describes the probability distribution, not proof of correctness;
-no confidence threshold changes the recorded grade. Validate grading on representative
-diagnoses before using it for formal evaluation.
-
-Grading costs $0.042 per million input tokens; output tokens are free (reviewed
-11 October 2026). TypeSafe overload/rate-limit responses (`529`/`429`) receive at
-most three attempts with backoff, respecting numeric `Retry-After` within the
-120-second grading deadline. Usage/cost records describe the returned response.
-Other errors fail the evaluation without changing the diagnosis. A missing
-`TYPESAFE_API_KEY` also shows **Evaluation failed**; configure it and restart.
-
-Existing saved Decisions results remain readable and explainable. This change
-does not rewrite stored results or change the D1 schema or infrastructure.
-No local OpenAI key is required. See the [TypeSafe API](https://docs.typesafe.ai/api),
-[model/pricing reference](https://docs.typesafe.ai/models) and [judge criteria](../judge/grading.md).
-
-Migration verification (11 October 2026): all 162 offline agent tests passed,
-using the existing wakeful loop workaround for this host's Python 3.14 runner
-shutdown hang. Six direct Jev smoke calls matched the expected verdicts: all
-four labels on Main F1, plus correct Tree F3 and Ring F5 diagnoses. The live
-checks used an in-memory persistence callback and did not connect to D1 or
-the testbed. These examples check the integration, not full grading accuracy.
+Both requests use the existing gateway's `/openai/decisions` and `/openai/responses`
+routes and stored BYOK key. No local OpenAI key is required. See the
+[Decisions documentation](https://developers.openai.com/api/docs/guides/decisions)
+and [judge criteria](../judge/grading.md).
 
 ## Exploratory benchmark matrix
 
@@ -352,7 +328,7 @@ observations may be exported to that Logfire project.
 - `fault_control.py`: operator F1–F5 load/reset for the UI (not an LLM tool).
 - `topology_control.py`: operator testbed switching and topology recognition.
 - `loop.py`: complete model/tool loop and measurements.
-- `judge.py`: Jev assessment, rubric capture and separate explanations.
+- `judge.py`: Decisions assessment, rubric capture and separate explanations.
 - `benchmark.py`, `results.html`: exploratory coordinator and results matrices.
 - `tools.py`: tool adapter around `TelemetryGateway`, including `nmap`.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.

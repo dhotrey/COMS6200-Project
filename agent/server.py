@@ -28,8 +28,7 @@ async def lifespan(app):
     logfire.configure(service_name="network-agent", send_to_logfire="if-token-present",
                       console=False)
     app.state.client = config.make_client() if config.configured() else None
-    app.state.judge_client = config.make_judge_client()
-    app.state.benchmark = benchmark.Benchmark(app.state.client, app.state.judge_client)
+    app.state.benchmark = benchmark.Benchmark(app.state.client)
     if app.state.client:
         logfire.instrument_httpx(app.state.client.http, capture_all=False, capture_headers=False,
                                  capture_request_body=False, capture_response_body=False)
@@ -41,8 +40,6 @@ async def lifespan(app):
             await judge.shutdown()
             if app.state.client:
                 await app.state.client.close()
-            if app.state.judge_client:
-                await app.state.judge_client.close()
         finally:
             await asyncio.to_thread(store.close)
 
@@ -468,7 +465,7 @@ async def chat(body: ChatRequest):
                 )
                 if completed and evaluation["status"] == "pending":
                     judge.launch(body.conversation_id, message_id, "judge",
-                                 judge.evaluate(app.state.judge_client, body.conversation_id, message_id, evaluation))
+                                 judge.evaluate(app.state.client, body.conversation_id, message_id, evaluation))
             finally:
                 busy = False
         yield "data: " + json.dumps({"type": "evaluation", "message_id": message_id,

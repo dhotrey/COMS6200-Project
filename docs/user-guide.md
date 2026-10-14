@@ -54,7 +54,7 @@ sections must not invent CLIs.
 
 Model-facing tools: `get_topology`, `ping`, `nmap`, `get_port_status`, `get_port_stats`, `get_link_metrics`, `get_flow_table`, `iperf`. They follow the selected topology and do not return fault labels. Gateway iperf uses port 5201. F2 background traffic uses port 5202 until reset.
 
-Jev grading (`jev-1.13.0`) needs `TYPESAFE_API_KEY` in the root `.env`. Diagnosis does not. Without the key, grading reports that it is not configured. Explanation stays a separate Cloudflare Responses call (`gpt-6.1-sol` / `high`) and does not change the verdict.
+Automatic grading uses the OpenAI Decisions API (`gpt-6-luna`) through the existing Cloudflare AI Gateway and BYOK configuration. Diagnosis and the separate optional explanation call use the OpenAI Responses API through the same gateway. No separate judge credential is required, and explanations do not change the verdict.
 
 **Two different “baseline” terms**
 
@@ -1082,11 +1082,11 @@ tc qdisc del dev s3-eth5 root 2>/dev/null || true
 
 Use the repository-root `.env` with mode `600`; it is Git-ignored. It contains
 the D1 account API token and AI Gateway authentication token, while the OpenAI
-provider key remains in Cloudflare BYOK. Automatic diagnosis grading uses Jev
-(`jev-1.13.0`) directly through TypeSafe, with a separate `TYPESAFE_API_KEY` in
-the same `.env`. Optional explanations continue through Cloudflare. Restart the
-agent after changing credentials. This API swap requires no D1 schema or
-infrastructure change. See [agent credentials](../agent/README.md#credentials) and
+provider key remains in Cloudflare BYOK. Automatic diagnosis grading uses the
+OpenAI Decisions API (`gpt-6-luna`) through that gateway. Optional explanations
+use the Responses API through the same gateway; there is no separate judge key.
+Restart the agent after changing credentials. See
+[agent credentials](../agent/README.md#credentials) and
 `docs/decisions/llm-api-gateway.md`. Do not commit API keys.
 
 Developer notes: `faults/README.md`.
@@ -1346,7 +1346,7 @@ python3 -m experiments formal   # refused
 | Infrastructure | 2 first attempts (ring round 3, `gpt-6-astra` F3 and F4), both completed on attempt 2 |
 | Recorded spend | about $22.98 |
 
-Those stored judge verdicts were produced by the previous OpenAI Decisions judge (`gpt-6-luna`), not by the current TypeSafe Jev grader. The protocol v1 runner is unchanged and stays `main6s8h`-only. Headline pattern, not a formal result: the stronger reasoning models outscore Mini and Nano; the baseline misses ring F1 and F2 because it searches the shortest configured path; the judge and the rule scorer often disagree.
+Those stored judge verdicts were produced by the OpenAI Decisions judge (`gpt-6-luna`) used by the final implementation. They remain preserved and were not regraded. The protocol v1 runner is unchanged and stays `main6s8h`-only. Headline pattern, not a formal result: the stronger reasoning models outscore Mini and Nano; the baseline misses ring F1 and F2 because it searches the shortest configured path; the judge and the rule scorer often disagree.
 
 
 `experiments/sweep.py` is the command-line counterpart of the results page's **Benchmarks / Evals** runner. It differs from it in three ways:
@@ -1452,7 +1452,7 @@ python3 -m experiments.sweep summary --run-id sweep-2026-10
 
 Three things from the first live round (`ring5s5h`) that affect how the tables read:
 
-- **The judge and the rule scorer measure different things.** The rule-based score reads one paragraph, picked by the protocol v1 heuristic: the last paragraph with a conclusion cue such as "therefore", or a fault keyword. Free-form answers often end with a side paragraph or a next step, and that paragraph is what gets scored. Across the committed 525 trials, both called success on 119, the judge alone on 200, and the rule scorer alone on 14. Do not treat either score as universally correct. The stored sweep verdicts came from the Decisions judge (`gpt-6-luna`), not from Jev.
+- **The judge and the rule scorer measure different things.** The rule-based score reads one paragraph, picked by the protocol v1 heuristic: the last paragraph with a conclusion cue such as "therefore", or a fault keyword. Free-form answers often end with a side paragraph or a next step, and that paragraph is what gets scored. Across the committed 525 trials, both called success on 119, the judge alone on 200, and the rule scorer alone on 14. Do not treat either score as universally correct. The stored sweep verdicts came from the OpenAI Decisions judge (`gpt-6-luna`).
 - **Small models often stop to ask the user.** A trial is one turn, so a closing question such as "Would you like me to proceed?" is never answered, and the answer is usually judged Incorrect. In round 1, 9 of the 10 `gpt-4.1-mini` and `gpt-4.1-nano` answers ended this way, often after 1–3 tool calls. The system prompt (`agent/prompt.md`) allows a next step and clarifying questions, and every model gets the same prompt, so this is scored as it stands. The summary's **Ended by asking the user** table separates this from wrong diagnoses. It changes no score.
 - **The scripted baseline cannot find F1 or F2 on `ring5s5h`.** It looks for a down link (F1) or a congested egress (F2) only on the *shortest* configured path between the two hosts' switches. On the ring, that is the direct s1–s5 link. But the ring's baseline forwarding never uses that link and sends h1→h5 the long way, s1→s2→s3→s4→s5. The F1 link (s3–s4) and the F2 bottleneck (s2–s3) are therefore off the path the baseline checks. F3–F5 are found from the flow tables and are unaffected. `tree5s8h` has only one path between any two switches, and `main6s8h` is the topology the baseline was written for. The baseline is protocol v1 code and stays unchanged, so read its ring F1/F2 results as a limit of that heuristic, not of the testbed.
 

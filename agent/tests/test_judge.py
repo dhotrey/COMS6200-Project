@@ -18,26 +18,25 @@ def assessment(answer="The s3–s1 link is down at s3 port 1."):
     return result
 
 
-def judgment(verdict="correct"):
-    return {"model": judge.MODEL, "answers": {"diagnosis_correctness": {"type": "choice",
-            "choice": verdict, "confidence": .91,
-            "probabilities": {value: .91 if value == verdict else .03 for value in judge.VERDICTS}}},
-            "usage": {"input_tokens": 100, "output_tokens": 20}}
+def decision(verdict="correct"):
+    return {"model": "gpt-6-luna", "answers": [{"type": "choice", "name": "diagnosis_correctness",
+            "choice": verdict, "confidence": .91, "probabilities": [{"value": verdict, "probability": .91}]}],
+            "usage": {"input_tokens": 100, "output_tokens": 0, "input_tokens_details": {"cached_tokens": 20}}}
 
 
 class Provider:
     def __init__(self):
-        self.judgments = []
+        self.decisions = []
         self.responses = []
         self.hold_judge = False
         self.hold_explanation = False
         self.verdict = "correct"
 
-    async def create_judgment(self, payload):
-        self.judgments.append(copy.deepcopy(payload))
+    async def create_decision(self, payload):
+        self.decisions.append(copy.deepcopy(payload))
         while self.hold_judge:
             await asyncio.sleep(.01)
-        return judgment(self.verdict)
+        return decision(self.verdict)
 
     async def create_response(self, payload):
         self.responses.append(copy.deepcopy(payload))
@@ -56,16 +55,16 @@ class Provider:
 def test_rubric_capture_and_typed_choice(topology, fault):
     result = judge.prepare({"topology": topology, "scenario": fault}, "Test prompt", [])
     result["answer"] = "Test answer"
-    payload = judge.judgment_payload(result)
+    payload = judge.decision_payload(result)
     assert result["status"] == "pending"
     assert result["rubric_path"] == f"judge/{topology}/Fault{fault[1:]}.md"
     assert len(result["rubric_sha256"]) == 64
-    question = payload["questions"]["diagnosis_correctness"]
-    assert question["type"] == "choice" and payload["model"] == "jev-1.13.0"
-    assert list(question["criteria"]) == list(judge.VERDICTS)
+    question = payload["questions"][0]
+    assert question["type"] == "choice" and payload["model"] == "gpt-6-luna"
+    assert [c["value"] for c in question["choices"]] == list(judge.VERDICTS)
     assert "## Judge output" not in question["instructions"]
     assert "Missing optional observations is not an error" in question["instructions"]
-    evidence = payload["state"]
+    evidence = json.loads(payload["input"])
     assert evidence["question"] == "Test prompt" and evidence["agent_diagnosis"] == "Test answer"
 
 
@@ -77,7 +76,7 @@ def test_missing_rubric_and_invalid_paths_are_not_graded(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("verdict", list(judge.VERDICTS))
-def test_judgment_verdict_and_criteria_are_preserved(monkeypatch, verdict):
+def test_decision_verdict_and_criteria_are_preserved(monkeypatch, verdict):
     saved = []
     monkeypatch.setattr(store, "update_evaluation", lambda cid, mid, value: saved.append(copy.deepcopy(value)))
     provider = Provider()
@@ -87,42 +86,23 @@ def test_judgment_verdict_and_criteria_are_preserved(monkeypatch, verdict):
     assert result["status"] == "completed"
     assert result["label"] == judge.VERDICTS[verdict]
     assert result["criteria_text"] == result["criteria"][verdict]
-    assert result["cost_usd"] == pytest.approx(100 * .042 / 1e6)
-    assert result["raw_result"] == judgment(verdict)
-    assert result["model"] == "jev-1.13.0"
+    assert result["cost_usd"] == pytest.approx((80 * .1 + 20 * .01) / 1e6)
+    assert result["raw_result"] == decision(verdict)
     assert saved[-1] == result
     assert all(k not in judge.public(result) for k in ("rubric", "question", "answer", "context"))
 
 
 @pytest.mark.parametrize("response", [
-    {"answers": {"diagnosis_correctness": {"type": "refusal"}}},
-    {"answers": {"diagnosis_correctness": {"type": "choice", "choice": "unknown"}}},
+    {"answers": [{"type": "refusal", "name": "diagnosis_correctness"}]},
+    {"answers": [{"type": "choice", "name": "diagnosis_correctness", "choice": "unknown"}]},
     {"answers": []},
 ])
 def test_invalid_results_are_errors_not_incorrect(monkeypatch, response):
     monkeypatch.setattr(store, "update_evaluation", lambda *_: True)
     provider = Provider()
-    provider.create_judgment = AsyncMock(return_value=response)
+    provider.create_decision = AsyncMock(return_value=response)
     result = assessment()
     asyncio.run(judge.evaluate(provider, "chat", "answer", result))
-    assert result["status"] == "error" and "verdict" not in result
-
-
-@pytest.mark.parametrize("changes", [
-    {"probabilities": []},
-    {"probabilities": {"correct": 1.0}},
-    {"probabilities": {v: .5 for v in judge.VERDICTS}},
-    {"probabilities": {v: float("nan") for v in judge.VERDICTS}},
-    {"confidence": None},
-    {"confidence": 1.1},
-])
-def test_malformed_probabilities_are_errors(changes):
-    response = judgment()
-    response["answers"]["diagnosis_correctness"].update(changes)
-    provider = Provider()
-    provider.create_judgment = AsyncMock(return_value=response)
-    result = assessment()
-    asyncio.run(judge.evaluate(provider, None, None, result, persist=AsyncMock()))
     assert result["status"] == "error" and "verdict" not in result
 
 
@@ -138,7 +118,6 @@ def finish(client, url, kind="judge"):
 
 def setup_diagnosis(client, monkeypatch, provider):
     monkeypatch.setattr(server.app.state, "client", provider)
-    monkeypatch.setattr(server.app.state, "judge_client", provider)
     monkeypatch.setattr(server, "network_settings", lambda: {"topology": "main6s8h", "scenario": "F1"})
     seen = []
     async def run(_provider, history, model, effort, state):
@@ -167,7 +146,7 @@ def test_automatic_job_persistence_and_explanation_isolation(client, monkeypatch
     provider.hold_judge = False
     result = finish(client, url)
     assert result["verdict"] == "correct"
-    assert len(provider.judgments) == 1
+    assert len(provider.decisions) == 1
     assert "rubric" not in client.get(f"/api/conversations/{cid}").json()["messages"][1]["evaluation"]
     provider.hold_explanation = True
     assert client.post(url + "/explain").json()["explanation"]["status"] == "pending"
@@ -181,7 +160,7 @@ def test_automatic_job_persistence_and_explanation_isolation(client, monkeypatch
     evidence = json.loads(payload["input"][0]["content"])
     assert evidence["fault"] == "F1" and evidence["question"] == "Check the network"
     assert "s3 port 1" in evidence["expected_result"]
-    assert evidence["judge_result"]["answers"]["diagnosis_correctness"]["choice"] == "correct"
+    assert evidence["decision_api_result"]["answers"][0]["choice"] == "correct"
     assert client.post(url + "/explain").json()["explanation"]["status"] == "completed"
     assert len(provider.responses) == 1
     assert client.post("/api/chat", json=body(cid)).status_code == 200
@@ -209,7 +188,7 @@ def test_saved_pending_job_recovers_without_provider_calls(client):
 
 def test_provider_failure_keeps_diagnosis_and_statistics(client, monkeypatch):
     provider = Provider()
-    provider.create_judgment = AsyncMock(side_effect=RuntimeError("TypeSafe judgment request failed with status 401."))
+    provider.create_decision = AsyncMock(side_effect=RuntimeError("Gateway decisions request failed with status 404."))
     cid, event, url, _ = setup_diagnosis(client, monkeypatch, provider)
     result = finish(client, url)
     assert result["status"] == "error" and "verdict" not in result

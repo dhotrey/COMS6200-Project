@@ -60,7 +60,6 @@ def client(monkeypatch):
     monkeypatch.setattr(store, "_database", SQLiteD1())
     monkeypatch.setattr(server.config, "configured", lambda: False)
     monkeypatch.setattr(server.config, "make_client", lambda: pytest.fail("Unexpected provider client"))
-    monkeypatch.setattr(server.config, "make_judge_client", lambda: None)
     monkeypatch.setattr(server.logfire, "configure", lambda **_: None)
     monkeypatch.setattr(server, "busy", False)
     monkeypatch.setattr(server, "network_changing", False)
