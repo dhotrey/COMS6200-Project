@@ -1,9 +1,12 @@
 # LLM Diagnosis Test Results
 
-Summary of LLM diagnosis tests against Fault Catalogue v1 (F1–F5), run through
-the `agent/` chat harness. This is the single place to record results: update
-it when new runs are added. Raw per-run records stay in dated evidence files
-under `evidence/progress/llm/`.
+September 2026 pilots. These 20 WSL2 runs are not the completed evaluation.
+The completed dataset is `evidence/experiments/sweep/sweep-2026-10/`
+(525 final trials, 527 attempt rows).
+
+Summary of early LLM diagnosis tests against Fault Catalogue v1 (F1–F5), run through
+the `agent/` chat harness. Raw per-run records stay in dated evidence files
+under `evidence/progress/llm/`. Do not add the later sweep results to this file.
 
 **Status:** 🟡 one run per scenario and model (20 runs) on WSL2. Not yet run on
 the Ubuntu reference host. Scoring is provisional (team review pending).

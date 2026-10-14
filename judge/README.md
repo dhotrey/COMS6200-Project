@@ -20,8 +20,8 @@ These rubrics contain evaluator-only ground truth. Keep them out of the diagnosi
 Sources:
 
 - `faults/scenarios.py`: frozen main catalogue v1.
-- `faults/ring_scenarios.py`: draft ring catalogue.
-- `faults/tree_scenarios.py`: draft tree catalogue.
+- `faults/ring_scenarios.py`: ring catalogue. Source status remains `draft`; the completed sweep used it.
+- `faults/tree_scenarios.py`: tree catalogue. Source status remains `draft`; the completed sweep used it. The selector `tree5s8h` is a 7-switch / 8-host tree.
 - `forwarding/baseline_forwarding.py` and `topologies/*_spec.py`: forwarding paths, ports and host attachments.
 - `docs/experiments/protocol-v1.md`, sections 7 and 9: existing symptom prompts and main-topology family/location scoring.
 
@@ -55,6 +55,7 @@ Decisions judge (`gpt-6-luna`). Those stored verdicts are preserved and are not
 recomputed by this implementation change.
 
 `experiments/evaluator.py` and the frozen protocol's binary scoring are unchanged.
-That evaluator continues to use main-topology locations. Ring/tree rubrics describe
-the implemented catalogues and do not certify a live testbed run.
+That evaluator continues to use main-topology locations. Ring and tree rubrics
+describe the catalogues used by the completed sweep. Their source status field
+was not changed to a frozen version.
 

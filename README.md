@@ -6,9 +6,9 @@ This project evaluates whether a tool-using LLM can diagnose and localise contro
 
 ## Documentation
 
-- **[User Manual](docs/user-guide.md)** — comprehensive setup, operation, fault scenarios, troubleshooting workflow, expected behaviour, reset procedures and experimental usage.
-- **[Part A report](docs/reports/part-a/)** — proposal/progress report (Markdown source, generated Word/PDF).
-- **[LLM diagnosis test results](docs/results/llm-diagnosis.md)** — which fault scenarios each model diagnoses correctly.
+- **[User Manual](docs/user-guide.md)** — setup, testbed operation, the three topologies, fault injection, the agent, the scripted baseline, the completed benchmark and troubleshooting.
+- **[Part A report](docs/reports/part-a/)** — September 2026 progress report. It is a historical snapshot and does not describe the finished agent or the 525-trial evaluation.
+- **[Completed benchmark](evidence/experiments/sweep/sweep-2026-10/summary.md)** — 525 final trials and 527 attempt rows. Early pilots in [docs/results/](docs/results/llm-diagnosis.md) are not that dataset.
 
 ## Chat harness
 
@@ -29,7 +29,7 @@ The research question is:
 
 > How accurately and efficiently can a tool-using LLM agent diagnose and localise common faults in an OpenFlow-controlled Mininet network compared with a deterministic scripted troubleshooting baseline?
 
-The study is deliberately small: one Layer-2 topology, five controlled fault types, one OpenAI tool-using agent, one scripted baseline, and repeatable experiments with structured logging.
+The finished study uses three Layer-2 topologies, five fault families, eight diagnostic tools, one OpenAI tool-using agent and one scripted baseline. The completed repeated evaluation is archived under `evidence/experiments/sweep/sweep-2026-10/`.
 
 ## 2. Project Status
 
@@ -42,11 +42,9 @@ The study is deliberately small: one Layer-2 topology, five controlled fault typ
 | M4 | Structured Telemetry Gateway | **Completed** |
 | M5 | First Automated Fault + Reset | **Completed** (F1) |
 | M5B | Complete Fault Catalogue v1 | **Completed** (F1–F5 frozen) |
-| M6 | First LLM Tool-Calling Diagnosis | **Implemented** ([results](docs/results/llm-diagnosis.md)). Formal 80-trial collection has not started. |
+| M6 | LLM tool-calling diagnosis, scripted baseline and repeated evaluation | **Completed.** The archived dataset is the 525-trial sweep below, not the earlier protocol-v1 80-trial design. |
 
-The scripted baseline, evaluator, and dry-run runner are implemented. The 80-trial formal comparison has not started.
-
-Completed so far:
+Completed implementation:
 
 - verified base Mininet / Open vSwitch environment on the team Ubuntu server
 - implemented enhanced six-switch / eight-host Layer-2 topology
@@ -56,22 +54,23 @@ Completed so far:
 - structured telemetry gateway (`scripts/verify_telemetry.sh` ALL CHECKS PASSED, 27 August 2026)
 - Fault Catalogue v1 frozen: F1–F5 inject/reset verified (`scripts/verify_fault_catalogue.sh` ALL FIVE PASSED, 27 August 2026)
 
-Implemented, and not the formal dataset:
+Completed evaluation:
 
-- LLM tool-calling diagnosis (`agent/`): operator UI for topology, F1–F5, benchmarks, and grading. Early tests are in [LLM diagnosis test results](docs/results/llm-diagnosis.md).
-- scripted troubleshooting baseline v1 (`baseline/`)
-- protocol v1 rule evaluator and dry-run runner (`experiments/`)
-- exploratory multi-topology sweep (`experiments/sweep.py`). Committed evidence: `evidence/experiments/sweep/sweep-2026-10/`. Label: **EXPLORATORY SWEEP / NOT PROTOCOL V1**. 525 completed trials (3 topologies × 5 faults × 7 methods × 5 rounds). Two infrastructure first attempts were retried.
+- `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 3 topologies × 5 faults × 7 methods × 5 rounds = **525 final trials**. `trials.jsonl` has **527 attempt rows**. Two Ring round-3 GPT-6 Astra first attempts (F3 read timeout, F4 read error) completed on attempt 2. No final trial was excluded.
+- Methods: scripted baseline, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra` (reasoning effort `medium`), and `gpt-4.1-mini` / `gpt-4.1-nano` (no reasoning effort).
+- Diagnosis uses the OpenAI Responses API through Cloudflare AI Gateway. Semantic grading uses the OpenAI Decisions API (`gpt-6-luna`) through the same gateway. Stored verdicts were not regraded.
+- Gateway response caching was bypassed (`cf-aig-skip-cache`). Provider storage was off (`store=false`). Provider prompt caching stayed on, and cached input tokens were recorded. Each trial restarted the network and used a fresh conversation.
+- The stored records keep the label `EXPLORATORY SWEEP / NOT PROTOCOL V1`. That label means the sweep is not the earlier main-only 80-trial protocol. It is the completed dataset. Do not rewrite the evidence files.
+- Under the semantic-judge metric, reasoning-capable models succeeded on 76–92% of trials, the scripted baseline on 73.3% (55/75), and the two smaller models on 10.7% and 2.7%. Counts, cost and time are in `summary.md`. Collection spanned more than one source state; per-trial metadata was kept.
 
-Not started:
+Historical, and not the completed dataset:
 
-- the 80-trial protocol-v1 formal comparison
+- September pilots in `docs/results/`.
+- [Experimental Protocol v1](docs/experiments/protocol-v1.md): an earlier `main6s8h` design whose `formal` command still refuses to start. Its 80-trial matrix was not collected. Dry runs are not the 525-trial dataset.
 
-[Experimental Protocol v1](docs/experiments/protocol-v1.md) is still pre-collection. Formal mode refuses to run. The approved primary model is `gpt-5.6-sol` at effort `medium`. Formal trials have not been collected.
+Not implemented: constrained automatic repair, and an h6 failover experiment.
 
 ## 3. Architecture
-
-Implemented (M0–M5B verified on the Ubuntu reference host; LLM agent implemented, M6 in progress):
 
 ```
 Mininet / Open vSwitch
@@ -80,9 +79,16 @@ OpenFlow 1.3
         ↓
 ONOS 2.7.0
         ↓
-Telemetry / Tool Gateway
-        ↓
-OpenAI LLM agent (agent/ chat harness) → conversational diagnosis
+Telemetry / Tool Gateway (eight read-only tools)
+       ↙                        ↘
+OpenAI Responses API          scripted baseline
+(Cloudflare AI Gateway)       (baseline/)
+       ↘                        ↙
+        free-text diagnosis
+                ↓
+OpenAI Decisions API (gpt-6-luna)  +  protocol-v1 rule cross-check
+                ↓
+Cloudflare D1 and archived JSON; Logfire is optional
 ```
 
 Operator/evaluator only (not an LLM tool):
@@ -92,25 +98,11 @@ Fault injector (F1–F5) → Mininet/OVS / ONOS experiment flows
 Fault injector → evaluator ground truth (/run/coms6200/fault-state.json)
 ```
 
-Comparison pipeline (implemented; formal collection not started):
+The LLM does **not** receive unrestricted ONOS REST access, controller credentials, fault labels or injector state. The gateway tools are `get_topology`, `ping`, `nmap`, `get_port_status`, `get_port_stats`, `get_link_metrics`, `get_flow_table`, and `iperf`. Allow-lists follow the selected topology. Gateway iperf uses port 5201. F2 background load uses port 5202 and lasts until reset. Constrained automatic repair is not implemented.
 
-```
-Telemetry / Tool Gateway
-       ↙                        ↘
-OpenAI LLM agent             deterministic baseline v1
-       ↘                        ↙
-   free-text diagnosis
-                ↓
-   protocol-v1 rule evaluator, and a separate exploratory judge
-                ↓
-   optional constrained repair (not implemented)
-```
+**Chat UI default** (`/api/config`): `gpt-6.1-sol`, reasoning `low`. The completed sweep used the six model identifiers above, not that UI default. The unused protocol-v1 runner still expects `gpt-5.6-sol` / `medium`, 14 calls, 300 seconds, delay 0/0 and `main6s8h`, and its `formal` command remains disarmed.
 
-The LLM does **not** receive unrestricted ONOS REST access, controller credentials, or fault labels. The gateway tools are `get_topology`, `ping`, `nmap`, `get_port_status`, `get_port_stats`, `get_link_metrics`, `get_flow_table`, and `iperf`. Allow-lists follow the selected topology. Gateway iperf uses port 5201. F2 background load uses port 5202 and lasts until reset.
-
-**Application default** (what `/api/config` advertises): `gpt-6.1-sol`, reasoning `low`. **Protocol-v1 frozen pair**, unchanged: `gpt-5.6-sol` / `medium`, 14 calls, 300 seconds, delay 0/0, topology `main6s8h`. The formal runner still requires that frozen pair and is disarmed.
-
-Topologies: `main6s8h` is primary (6 switches, 8 hosts). `ring5s5h` (5 switches, 5 hosts) and `tree5s8h` are additional catalogues. The selector `tree5s8h` names the current binary tree, which has 7 switches and 8 hosts. Part A is an earlier milestone report and does not describe this later work.
+Topologies: `main6s8h` (6 switches, 8 hosts), `ring5s5h` (5 switches, 5 hosts) and `tree5s8h` (selector name retained; 7 switches, 8 hosts). Part A does not describe this later work.
 
 The selected controller is **ONOS 2.7.0**. The earlier Ryu / OS-Ken plan was replaced after ONOS passed runtime verification; see `docs/decisions/onos-controller-decision.md`.
 
@@ -214,11 +206,12 @@ These commands assume you have permission to access the team repository. Run set
 ```bash
 git clone https://github.com/dhotrey/COMS6200-Project.git
 cd COMS6200-Project
-git switch develop
 chmod +x setup/*.sh scripts/*.sh
 ./setup/setup_ubuntu.sh
 ./setup/verify_environment.sh
 ```
+
+Stay on `master`. That branch is the submission snapshot. Mininet and ONOS run on Linux, not on macOS or Windows.
 
 ONOS is a **separate** step. Do not expect `setup_ubuntu.sh` to install it:
 
@@ -281,11 +274,11 @@ ONOS installation is **not** merged into `setup_ubuntu.sh`. Keep the two environ
 | `scripts/verify_telemetry.sh` | Live M4 telemetry tools vs healthy baseline |
 | `scripts/verify_fault_f1.sh` … `verify_fault_f5.sh` | Live per-scenario fault inject/observe/reset |
 | `scripts/verify_fault_catalogue.sh` | Sequential F1–F5 catalogue verifier |
-| `scripts/verify_faults.py` | Data-driven F1–F5 verifier for the selected topology's catalogue (ring5s5h draft) |
+| `scripts/verify_faults.py` | Data-driven F1–F5 verifier for the selected topology |
 | `scripts/list_models.py` | Lists the model IDs the Cloudflare AI Gateway key can reach |
 | `scripts/verify_agent_scenarios.sh` | F1–F5 through the chat harness path (UI load → agent tools → UI reset); no model requests |
-| `forwarding/baseline_forwarding.py` | Deterministic s1-core baseline flow install/status/verify/remove |
-| `faults/` | Operator Fault Catalogue v1 injector/reset, plus draft ring5s5h-v1 catalogue (not an LLM tool) |
+| `forwarding/baseline_forwarding.py` | Deterministic baseline flow install/status/verify/remove |
+| `faults/` | Operator fault injector/reset for all three catalogues (not an LLM tool) |
 
 A future `--with-onos` convenience flag on the Ubuntu setup script could be added later. It is **not** implemented now. Do not duplicate `setup_onos.sh` logic here; see `docs/setup/onos-setup.md`.
 
@@ -330,13 +323,13 @@ Do not redesign the project to run Mininet natively on macOS. Do not treat every
 
 | Branch | Purpose |
 | --- | --- |
-| `master` | Stable / submission-ready |
-| `develop` | Shared integration / development |
-| `feature/*` | Individual tasks |
+| `master` | Submission snapshot. Implementation is complete. |
+| `develop` | Earlier integration branch |
+| `feature/*` | Historical individual tasks |
 
-Do not do normal development on `master`.
+New feature work is not planned. Do not commit `.env`, credentials, `incoming/`, or generated report drafts.
 
-Example workflow:
+The earlier development workflow was:
 
 ```bash
 git switch develop
@@ -352,9 +345,7 @@ git commit -m "..."
 git push -u origin feature/<short-name>
 ```
 
-Feature branches should normally be reviewed and merged into `develop`. Do not push experimental work directly to `master`.
-
-Git operations (commit, push, merge, rebase) are controlled by the human team, not by automated agents.
+Feature branches were reviewed before integration. Git operations remain human-controlled.
 
 ## 12. Secrets and OpenAI API
 
@@ -398,76 +389,65 @@ COMS6200-Project/
 │   └── verify_agent_scenarios.sh    # F1–F5 through the chat harness path
 │
 ├── topologies/
-│   ├── main_topology.py
-│   ├── spec.py                     # shared host/switch/port identities
-│   ├── ring_topology.py            # ring5s5h (optional; not protocol v1)
-│   ├── ring_spec.py
+│   ├── main_topology.py            # main6s8h
+│   ├── ring_topology.py            # ring5s5h
 │   ├── tree_topology.py            # selector tree5s8h: 7 switches, 8 hosts
-│   ├── tree_spec.py
-│   ├── active.py                   # COMS6200_TOPOLOGY selection (default main6s8h)
-│   ├── progress_custom_topology.py
-│   └── progress_tc_topology.py
+│   ├── spec.py, ring_spec.py, tree_spec.py
+│   └── active.py                   # COMS6200_TOPOLOGY selection (default main6s8h)
 │
 ├── forwarding/
 │   └── baseline_forwarding.py      # ONOS REST baseline provisioner
 │
-├── telemetry/                      # M4 bounded diagnostic gateway
+├── telemetry/                      # eight bounded diagnostic tools
 │
-├── faults/                         # M5B operator F1–F5 injector/reset
+├── faults/                         # operator F1–F5 injector/reset (not an LLM tool)
 │
 ├── controllers/
 │   └── main_controller.py          # superseded design reference; not used
 │
-├── tests/
-│   ├── test_main_static.py
-│   ├── test_baseline_forwarding.py
-│   ├── test_telemetry.py
-│   └── test_faults.py
+├── tests/                          # repository tests (no network, no API spend)
 │
 ├── evidence/
-│   └── progress/
+│   ├── progress/                   # milestone evidence
+│   └── experiments/sweep/sweep-2026-10/  # completed 525-trial dataset
 │
 ├── docs/
+│   ├── user-guide.md
 │   ├── setup/
 │   ├── decisions/
-│   ├── reports/
-│   └── results/                    # LLM diagnosis test results summary
-│       └── part-a/
+│   ├── experiments/protocol-v1.md  # earlier design; formal runner disarmed
+│   ├── reports/part-a/             # historical Part A report
+│   └── results/                    # September pilots, not the 525-trial dataset
 │
-├── agent/                          # chat harness, operator UI, Decisions grading client
-├── baseline/                       # scripted troubleshooting baseline v1
-├── experiments/                    # protocol-v1 evaluator/runner and exploratory sweep
+├── agent/                          # chat harness, operator UI, Decisions grading
+├── baseline/                       # scripted troubleshooting baseline
+├── experiments/                    # protocol-v1 runner and the completed sweep
 └── judge/                          # evaluator-only rubrics (not model tools)
 ```
 
 `controllers/main_controller.py` is retained as a forwarding-design reference only. It is not the runtime controller.
 
-## 14. Current Milestone
+## 14. Current state
 
-**M6 — LLM tool-calling diagnosis** is implemented. Formal protocol-v1 collection has not started.
+Implementation is complete on `master`. The operator manual is `docs/user-guide.md`.
 
-M5B is complete: Fault Catalogue **v1** is frozen (F1–F5) on the Ubuntu reference
-server (27 August 2026). Evidence: `evidence/progress/faults/fault-catalogue-v1-2026-08-27.txt`.
+Diagnosis uses the OpenAI Responses API through Cloudflare AI Gateway. Automatic grading uses the OpenAI Decisions API (`gpt-6-luna`) through the same gateway. No separate judge key is required. See [agent setup](agent/README.md#credentials).
 
-M6 status: the chat harness (`agent/`) diagnoses through the telemetry gateway and
-loads F1–F5 from its UI. Test results and remaining runs:
-[LLM diagnosis test results](docs/results/llm-diagnosis.md).
-Do not start formal LLM episodes until gateway caching policy and model freeze
-are applied (`docs/decisions/llm-api-gateway.md`). Do not commit `.env` secrets.
+The completed dataset is `evidence/experiments/sweep/sweep-2026-10/`. Do not rerun or rewrite it. The protocol-v1 `formal` command still exits without collecting trials.
 
-Automatic answer grading uses the OpenAI Decisions API (`gpt-6-luna`) through
-the existing Cloudflare BYOK gateway. Diagnosis and optional explanations use
-the OpenAI Responses API through the same gateway; no separate judge key is
-required. See [agent setup](agent/README.md#credentials) and
-[grading behavior](agent/README.md#automatic-diagnosis-assessment).
+## 15. Tests
 
-## 15. Project Reports
+Offline tests do not call Cloudflare, spend API credits, or change a network:
 
-The current Part A proposal/progress report, generated Word/PDF outputs, and reproducible build instructions are available under:
+```bash
+source .venv/bin/activate
+python3 -m pytest tests
+uv run --project agent python -m pytest agent/tests
+```
 
-`docs/reports/part-a/`
+## 16. Project reports
 
-Future report edits should be made in `docs/reports/part-a/part-a-source.md`, then regenerated. The Part A snapshot is not automatically updated when later implementation milestones are completed.
+The Part A progress report, its Word/PDF outputs and build instructions are under `docs/reports/part-a/`. Edit `docs/reports/part-a/part-a-source.md` only when changing that historical report, then regenerate it. Later milestones are not back-ported into Part A.
 
 ## Team Journal
 

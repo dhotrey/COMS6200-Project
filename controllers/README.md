@@ -1,33 +1,23 @@
 # Controllers
 
-## Status: provisional, superseded as executable code
+## Status: historical Ryu reference
 
-ONOS 2.7.0 was adopted as the project SDN controller on 20 August 2026 after
-runtime verification on the team server. See
+ONOS 2.7.0 is the runtime controller. See
 `docs/decisions/onos-controller-decision.md` and `docs/setup/onos-setup.md`.
+Deterministic forwarding is installed by `forwarding/baseline_forwarding.py`
+(unicast priority 41000, ARP-tree priority 42000).
 
-`main_controller.py` was written for the earlier Ryu plan. Ryu is not installed
-and is no longer on the critical path, so this file is **not currently
-runnable** in the project environment.
-
-It is kept deliberately, not deleted, because its design is still the
-specification for the next milestone:
-
-- s1 as the active core, s2 as a redundant core excluded from baseline forwarding
-- a deterministic loop-free active tree over the physically cyclic topology
-- the explicit destination-MAC to output-port map for s1 and s3–s6
-- loop-free ARP handling restricted to active-tree ports
-- baseline flow identity: priority 100, cookie `0x1000`
-
-That forwarding design must be re-expressed against ONOS (for example through
-flow objectives or intents) rather than as a Ryu application. Removing or
-refactoring these files will be a separate, deliberate commit.
+`main_controller.py` was written for the earlier Ryu plan. Ryu is not installed.
+Do not run this file. It is kept as a design note, not as the next milestone.
+Its priorities and cookie do not match the implemented ONOS baseline. The
+historical sketch used priority 100 and cookie `0x1000`. The running provisioner
+uses priorities 41000 and 42000. Do not re-implement this file.
 
 ## Ryu-era files
 
 | File | Status |
 | --- | --- |
-| `main_controller.py` | Provisional Ryu implementation. Not runnable. Design reference only. |
+| `main_controller.py` | Historical Ryu sketch. Not runnable. Not the ONOS baseline. |
 
 Do not run `topologies/main_topology.py` in standalone `ovsbr` mode. It has
 redundant physical links and must be driven by a controller.

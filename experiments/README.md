@@ -1,4 +1,4 @@
-# Protocol v1 evaluator and dry-run runner
+# Protocol v1 evaluator and the completed sweep
 
 `experiments/evaluator.py` scores a diagnosis with the protocol v1 family,
 location, and hedge rules. LLM scoring uses the final conclusion paragraph, not a markdown heading.
@@ -7,7 +7,8 @@ location, and hedge rules. LLM scoring uses the final conclusion paragraph, not 
 diagnosis, score, reset, healthy gate. The diagnostic method is given the
 symptom prompt only. Records go to
 `evidence/experiments/protocol-v1/dry-runs.jsonl` and are labelled
-`DRY RUN / NOT FORMAL DATA`. Formal `runs.jsonl` is not written.
+`DRY RUN / NOT FORMAL DATA`. Formal `runs.jsonl` is not written. These dry runs
+are not the completed dataset.
 
 ```bash
 python3 -m experiments check-order
@@ -21,18 +22,18 @@ metadata that this tree does not have: approved model id, effort `medium`,
 14 tool calls, 300 seconds, zero tool delay, frozen commit, baseline version,
 scoring version, and seeds 6200 and 6201. The approved model id in metadata must be `gpt-5.6-sol`.
 
-## Exploratory multi-topology sweep (not protocol v1)
+## Completed multi-topology evaluation
 
 `experiments/sweep.py` compares the scripted baseline and the study models
 (`gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6-astra`, `gpt-4.1-mini`,
 `gpt-4.1-nano`) on every topology (`main6s8h`, `ring5s5h`, `tree5s8h`) and fault
-(F1–F5). Records are labelled `EXPLORATORY SWEEP / NOT PROTOCOL V1` and go to
-`evidence/experiments/sweep/<run-id>/`. The protocol v1 runner above is unchanged
-and still main6s8h-only.
+(F1–F5). The archived records are labelled `EXPLORATORY SWEEP / NOT PROTOCOL V1`
+because they are not the protocol-v1 80-trial matrix above. That label is left
+unchanged. The sweep is the project's completed repeated evaluation.
 
-The committed run is `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 525 completed trials, 527 `trials.jsonl` rows, two retried infrastructure failures. Its judge verdicts came from the OpenAI Decisions judge (`gpt-6-luna`) used by the final implementation. Those stored results are preserved and are not recomputed or rewritten.
+The committed run is `evidence/experiments/sweep/sweep-2026-10/` (seed 6202): 525 completed trials, 527 `trials.jsonl` rows, two retried infrastructure failures. Its judge verdicts came from the OpenAI Decisions judge (`gpt-6-luna`). Those stored results are preserved and are not recomputed or rewritten. The protocol-v1 runner above is unchanged and still `main6s8h`-only.
 
-The rule cross-check and the semantic judge are different instruments. The rule scorer reads one conclusion paragraph. The judge reads the answer against a rubric and cannot see the tool trace. Disagreement is expected. Neither score is protocol-v1 formal data.
+The rule cross-check and the semantic judge are different instruments. The rule scorer reads one conclusion paragraph. The judge reads the answer against a rubric and cannot see the tool trace. Disagreement is expected.
 
 On `ring5s5h`, baseline v1 looks for F1 and F2 on the shortest configured path. Ring forwarding does not use that shortcut, so those two faults sit off the path the baseline checks. That is a baseline limitation, not a testbed failure. The baseline was not changed to match the sweep.
 

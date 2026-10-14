@@ -1,14 +1,27 @@
 # Experimental Protocol v1
 
+**Earlier design. Not the completed dataset.**
+
+This document freezes a main-only comparison that was not collected. Its
+`formal` command still refuses to start. The completed evaluation is
+`evidence/experiments/sweep/sweep-2026-10/`: 525 final trials and 527 attempt
+rows, graded by the OpenAI Decisions API (`gpt-6-luna`). Those records keep
+the separate label `EXPLORATORY SWEEP / NOT PROTOCOL V1` and must not be
+rewritten as protocol-v1 results.
+
 **EXPERIMENTAL PROTOCOL V1**
 **PRE-FORMAL-DATA-COLLECTION**
 
-This document freezes the procedure for the formal COMS6200 comparison.
-It is a review document. It does not contain formal results.
+This document freezes the procedure for a formal COMS6200 comparison that was
+not run. It does not contain those formal results, and it is not the 525-trial
+dataset.
 
-No formal diagnostic trial has been run under this protocol.
-The scripted troubleshooting baseline specified here is implemented and has been exercised with non-formal dry runs only.
-Fault Catalogue v1 (F1–F5) is unchanged. Formal collection has not started. Dry runs are not part of the formal dataset.
+No diagnostic trial has been run under this protocol.
+The scripted troubleshooting baseline specified here is implemented. It has
+non-formal dry runs, and it was also a method in the completed sweep.
+Fault Catalogue v1 (F1–F5) on `main6s8h` is unchanged. This protocol's formal
+collection was not started. Dry runs are not part of either dataset's accuracy
+denominator.
 
 ## Status of earlier runs
 
@@ -63,10 +76,12 @@ Formal collection still waits on all of the following:
 
 1. A clean Git commit of the frozen source, prompt, tool schemas, and this protocol.
 2. Formal metadata whose `approved_model_id` is `gpt-5.6-sol` and whose effort is `medium`.
-3. The scripted baseline against the contract in section 11. This is implemented and has been dry-run only.
+3. The scripted baseline against the contract in section 11. The baseline is implemented. Protocol-v1 use of it is dry-run only; the completed sweep also included it.
 4. A runner that asserts the effective limits in section 5 before the first trial. Formal mode stays refused until the launcher is armed and the live agent matches this protocol.
 
-This file is not an authorisation to collect data until that freeze commit exists and formal mode is armed.
+This file is not an authorisation to collect protocol-v1 data. The completed
+project used `experiments/sweep.py` instead. Do not arm this runner in order to
+recreate the archived sweep.
 
 ## 3. Platform held constant
 
@@ -552,15 +567,15 @@ Part A is left unchanged. Later report writing will need to reconcile at least t
 
 | Part A statement | Current state this protocol uses |
 | --- | --- |
-| Abstract: fault injection and LLM integration remain pending. | Catalogue v1 is frozen. The harness exists. Formal comparison data do not. |
-| GPT-5 mini, snapshot `gpt-5-mini-2025-08-07`, as the single primary model (about lines 60 and 116). Model comparison declared out of scope. | The harness exposes four newer ids. Protocol v1 pins `gpt-5.6-sol` at effort `medium`. Multi-model runs stay secondary. |
+| Abstract: fault injection and LLM integration remain pending. | Catalogue v1 is frozen. The harness, baseline and 525-trial sweep now exist. This protocol's own formal matrix was not collected. |
+| GPT-5 mini, snapshot `gpt-5-mini-2025-08-07`, as the single primary model (about lines 60 and 116). Model comparison declared out of scope. | The completed sweep compared six models with the scripted baseline. This protocol still pins `gpt-5.6-sol` at effort `medium`, and that pin was not the collected design. |
 | Six diagnostic tools in section 5.2 and Table 1. No nmap. No `get_link_metrics`. Iperf described as duration, transfer, and Mbit/s. | Eight model-facing tools. Iperf exposes sender and receiver fields. `get_link_metrics` is the eighth. |
-| Section 5.2: baseline and LLM agent are not yet implemented. | LLM harness is implemented. The scripted baseline, evaluator, and dry-run runner now exist. Formal trials have not been collected. |
-| Section 5.5: eight repetitions, with room to move to ten if variance is high. | Eight is frozen. The option to move to ten after seeing results is closed. |
+| Section 5.2: baseline and LLM agent are not yet implemented. | Both are implemented. The completed comparison is the sweep, not this protocol. |
+| Section 5.5: eight repetitions, with room to move to ten if variance is high. | Eight remains this protocol's unused freeze. The sweep used five rounds. |
 | Metrics in Table 3, including optional repair success and secondary token cost. | Primary metrics match Table 3 except repair success, which stays out of the matrix. |
-| Section 6 schedule: M6 next; baseline 12–18 Sep 2026; protocol freeze 19–25 Sep; paired experiments 26 Sep–7 Oct. | M6 harness and pilots exist. The baseline, evaluator, and dry-run runner exist. Formal paired collection has not started. The September dates have passed. |
-| `docs/results/llm-diagnosis.md`: 10 tool calls, provisional scores, WSL2. | Historical pilot. Formal budget candidate is 14. Formal scores use section 9, on the Ubuntu reference host. |
-| User-guide and README milestone lines that still describe repeated experiments and the scripted baseline as only planned. | Formal collection is still not started. The baseline, evaluator, and dry-run runner are implemented and must be described that way. Dry runs are not the formal dataset. |
+| Section 6 schedule: M6 next; baseline 12–18 Sep 2026; protocol freeze 19–25 Sep; paired experiments 26 Sep–7 Oct. | Those dates passed. The agent, baseline and sweep are complete. This protocol's paired matrix was not collected. |
+| `docs/results/llm-diagnosis.md`: 10 tool calls, provisional scores, WSL2. | Historical pilot. It is not the 525-trial dataset. |
+| User-guide and README milestone lines that still describe repeated experiments and the scripted baseline as only planned. | Corrected. The baseline is implemented and was in the sweep. This protocol's formal collection remains unstarted. |
 
 ## 17. Collection gate
 

@@ -200,13 +200,13 @@ Configured identities and the port map live in `ring_spec.py`.
 `ring_topology.py` builds the Mininet topology directly from that spec, so
 there is no second port map to keep in sync.
 
-Registered Mininet topo name: `ring5s5h`
-
-**Status:** implemented and covered by static tests; **not yet run against
-ONOS**. Selected with `COMS6200_TOPOLOGY=ring5s5h` (`topologies/active.py`),
-which switches baseline forwarding, the telemetry gateway and
-`scripts/testbed.sh` to this topology, and the fault catalogue to the draft
-`ring5s5h-v1` (F1–F5 at ring locations; see `faults/README.md`).
+Registered Mininet topo name: `ring5s5h`. Select it with
+`COMS6200_TOPOLOGY=ring5s5h`, which switches baseline forwarding, the telemetry
+gateway, `scripts/testbed.sh` and the fault catalogue. The completed sweep ran
+five rounds on this topology. `CATALOGUE_STATUS` in `ring_scenarios.py` is still
+`draft`. A healthy session is 5 OF_13 devices, 10 directed links and 38 baseline
+flows. `verify_main_openflow.sh` does not check the ring. Live checks for the
+selected catalogue are `scripts/verify_faults.py`. See `faults/README.md`.
 
 ```
               h1
@@ -379,9 +379,11 @@ project ONOS controller rather than standalone `ovsbr` mode.
 
 The physical tree is rooted at s1. Intermediate switches s2 and s3 each have
 two leaf switches: s4 carries h1-h2, s5 carries h3-h4, s6 carries h5-h6,
-and s7 carries h7-h8. Baseline forwarding uses all six links. Tree DPIDs are
-`0x201`-`0x207`, separate from the main and ring testbeds, and its draft F1-F5
-catalogue is selected automatically by the same environment variable.
+and s7 carries h7-h8. Baseline forwarding uses all six links and installs 76
+flows. Tree DPIDs are `0x201`-`0x207`, separate from the main and ring testbeds.
+`COMS6200_TOPOLOGY=tree5s8h` selects this topology and its F1–F5 catalogue.
+The completed sweep ran five rounds here. The catalogue source status remains
+`draft`.
 
 ### Port map
 
@@ -462,9 +464,9 @@ python3 forwarding/baseline_forwarding.py verify
 ```
 
 The generic tree derivation installs 56 destination-MAC unicast rules and
-the corresponding ARP-tree rules. `pingall` is expected to work only after
-those rules are installed. The topology is covered by static tests but has
-not yet been runtime-verified against ONOS.
+the corresponding ARP-tree rules, 76 flows in total (`expected_flow_count()`).
+The completed sweep ran this topology for five rounds. `verify_main_openflow.sh`
+does not check it.
 
 ### Cleanup
 

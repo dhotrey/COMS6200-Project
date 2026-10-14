@@ -21,7 +21,7 @@ Mininet / OVS → OpenFlow 1.3 → ONOS 2.7.0
 
 - Python, Mininet, Open vSwitch, OpenFlow 1.3, Layer 2, `10.0.0.0/24`
 - Controller: ONOS 2.7.0 in the version-pinned Docker image `onosproject/onos:2.7.0`
-- One OpenAI tool-using agent and one deterministic scripted baseline (both planned)
+- One OpenAI tool-using agent and one deterministic scripted baseline (both implemented)
 - Ubuntu 24.04.4 is the **verified reference** Linux environment
 - The UQ-provided Kali VM is a **supported course compatibility target**, not a fully milestone-verified substitute
 
@@ -54,10 +54,11 @@ M3 forwarding facts: application `org.coms6200.baseline` (numeric id 176); 56 AD
 - **M4 Structured Telemetry Gateway — completed**
 - **M5 First Automated Fault + Reset — completed (F1)**
 - **M5B Fault Catalogue v1 — completed / frozen (F1–F5)**
-- **M6 First LLM Tool-Calling Diagnosis — current / next**
+- **M6 LLM tool-calling diagnosis, scripted baseline and repeated evaluation — completed**
+- Completed dataset: `evidence/experiments/sweep/sweep-2026-10/` (525 final trials, 527 attempt rows). Do not rerun or rewrite it.
+- Diagnosis: OpenAI Responses API through Cloudflare AI Gateway. Semantic grading: OpenAI Decisions API (`gpt-6-luna`). No Jev or TypeSafe judge.
 
-Do **not** start LLM implementation before catalogue v1 is frozen (already frozen).
-Deterministic baseline and repeated experiments come after the M6 vertical slice.
+Do not add features. The protocol-v1 `formal` command remains disarmed and is not the completed dataset.
 
 ## M3 forwarding constraints
 
@@ -71,7 +72,7 @@ Baseline must remain deterministic and loop-free. Do **not** enable OVS NORMAL, 
 
 Mandatory faults only: F1–F5. **Catalogue v1 frozen** — all five implemented (operator `faults/` CLI; not an LLM tool). Use s3–s4 for F4. h6 dual-home is optional advanced work, not a sixth required scenario.
 
-Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)`, `get_port_stats(sw)`, `get_flow_table(sw)`, `iperf(src,dst)` via `telemetry/`. Do not expose arbitrary shell or REST. Do not expose fault CLI/status/ground truth to the LLM.
+Implemented agent tools: `get_topology()`, `ping(src,dst)`, `nmap(src,dst,proto,port)`, `get_port_status(sw)`, `get_port_stats(sw)`, `get_link_metrics(sw,port)`, `get_flow_table(sw)`, `iperf(src,dst)` via `telemetry/`. Do not expose arbitrary shell or REST. Do not expose fault CLI/status/ground truth to the LLM. The August 2026 M4 evidence recorded the earlier six-tool gateway; `nmap` and `get_link_metrics` are part of the final interface.
 
 ## Setup and paths
 
@@ -85,13 +86,13 @@ Implemented agent tools: `get_topology()`, `ping(src,dst)`, `get_port_status(sw)
 - `forwarding/baseline_forwarding.py` — M3 ONOS baseline provisioner
 - `telemetry/` — bounded agent-facing diagnostic gateway (M4)
 - `faults/` — operator Fault Catalogue v1 injector/reset (not an LLM tool)
-- `docs/decisions/llm-api-gateway.md` — planned OpenAI via Cloudflare AI Gateway (M6)
+- `docs/decisions/llm-api-gateway.md` — OpenAI via Cloudflare AI Gateway (implemented)
 
 Do not merge ONOS install into `setup_ubuntu.sh` or duplicate install logic. Use actual directories: `topologies/`, `controllers/`, `forwarding/`, `telemetry/`, `faults/`, `setup/`, `scripts/`, `tests/`, `evidence/`, `docs/`. Do not create `topology/` or `controller/`. `controllers/` is not the runtime controller.
 
 Canonical Part A source: `docs/reports/part-a/part-a-source.md`. Bibliography: `docs/reports/part-a/references.bib`. Builder: `docs/reports/part-a/build_report.py`. Use `[@key]` citations; never hard-code IEEE numbers. DOCX/PDF are generated artifacts.
 
-Part A truth: ONOS/OpenFlow, deterministic forwarding, structured telemetry, and Fault Catalogue v1 (F1–F5) completed on Ubuntu 27 August 2026; OpenAI diagnosis not yet evidenced. `.env` is Git-ignored; never commit API keys.
+Part A is the September 2026 progress snapshot: ONOS/OpenFlow, deterministic forwarding, structured telemetry, and Fault Catalogue v1 (F1–F5) were complete on Ubuntu 27 August 2026, and that report does not include the later agent or the 525-trial sweep. Current master includes the Responses API agent, the Decisions API judge (`gpt-6-luna`), the scripted baseline and the archived sweep. `.env` is Git-ignored; never commit API keys. Do not edit the Part B report from this rule.
 
 ## Hard constraints
 

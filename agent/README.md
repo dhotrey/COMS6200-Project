@@ -173,9 +173,10 @@ trial links to its conversation in the regular sidebar. Saved results survive
 navigation/reloads; JSON export includes the captured prompt, rubric, raw
 verdict, usage, traces and matrix distributions. A restart marks unfinished
 runs/trials interrupted and never automatically reruns them or resets the live
-testbed. Inspect that testbed before starting another run. The normal formal
-protocol runner is unchanged; these matrix comparisons are exploratory,
-and the ring/tree catalogues remain draft pending live verification.
+testbed. Inspect that testbed before starting another run. The UI matrix is an
+operator tool. It is not the archived 525-trial sweep, and it does not restart
+the network before every diagnosis. The ring and tree catalogues were used by
+that sweep; their source status field remains `draft`.
 
 The command-line sweep (`python -m experiments.sweep`, see the user guide's
 "Multi-topology model sweep") also publishes here. It restarts the network
@@ -233,8 +234,9 @@ The testbed helper records the running topology in `mininet.ready`, and the
 agent also recognises the switch-port layout after a server/dev reload.
 The picker requires the existing Linux Mininet/OVS/ONOS installation and a root
 agent process; it does not install those dependencies. File preview offers the
-nested menus but cannot load a network. Ring/tree catalogue definitions remain
-draft pending their separate live verification.
+nested menus but cannot load a network. Ring and tree catalogues were used in
+the completed sweep. Their source status remains `draft` because they were not
+promoted through the frozen `main6s8h` catalogue verifier.
 
 F2 also requires `tc` and `iperf3`; F4 requires `tc` for its safety limiter.
 On Fedora, install them with `sudo dnf install -y iproute-tc iperf3`.
@@ -329,7 +331,7 @@ observations may be exported to that Logfire project.
 - `topology_control.py`: operator testbed switching and topology recognition.
 - `loop.py`: complete model/tool loop and measurements.
 - `judge.py`: Decisions assessment, rubric capture and separate explanations.
-- `benchmark.py`, `results.html`: exploratory coordinator and results matrices.
+- `benchmark.py`, `results.html`: operator benchmark matrices and sweep history.
 - `tools.py`: tool adapter around `TelemetryGateway`, including `nmap`.
 - `store.py`, `d1_schema.py`: D1 persistence and idempotent schema.
 - `setup_d1.py`: explicit D1 schema setup and verification command.

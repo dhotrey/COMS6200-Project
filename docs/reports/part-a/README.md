@@ -1,5 +1,11 @@
 # Part A Report
 
+This directory is the September 2026 progress report. It predates the finished
+agent, the scripted baseline and the 525-trial evaluation. Do not back-port
+later results into `part-a-source.md`. Current operation is documented in
+`docs/user-guide.md` and the root `README.md`. The completed dataset is
+`evidence/experiments/sweep/sweep-2026-10/`.
+
 Canonical editable prose:
 
 `part-a-source.md`

@@ -1,8 +1,8 @@
 # F2 link-metrics pilot
 
-**PILOT / NOT FORMAL EXPERIMENTAL RESULTS**
+**PILOT / NOT THE 525-TRIAL EVALUATION**
 
-One run per model. This does not replace `docs/results/llm-diagnosis.md` or `docs/results/f2-observability-pilot.md`.
+One run per model. This does not replace `docs/results/llm-diagnosis.md`, `docs/results/f2-observability-pilot.md`, or the completed sweep.
 
 ## Setup
 
