@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import sys
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,28 +13,36 @@ from agent import server, store
 
 
 class SQLiteD1:
-    """D1-compatible persistence double for offline API tests."""
+    """D1-compatible persistence double for offline API tests.
+
+    The TestClient thread and ``asyncio.to_thread`` share this connection.
+    SQLite raises "cannot commit transaction - SQL statements in progress"
+    when those calls overlap, which the full suite can trigger even though
+    the same test passes alone. One lock keeps the statements ordered.
+    """
 
     def __init__(self):
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        self._lock = threading.Lock()
 
     def query(self, sql, params=None):
-        with self.connection:
+        with self._lock, self.connection:
             cursor = self.connection.execute(sql, params or [])
             return [dict(row) for row in cursor.fetchall()]
 
     def batch(self, statements):
         results = []
-        with self.connection:
+        with self._lock, self.connection:
             for sql, params in statements:
                 cursor = self.connection.execute(sql, params)
                 results.append([dict(row) for row in cursor.fetchall()])
         return results
 
     def close(self):
-        self.connection.close()
+        with self._lock:
+            self.connection.close()
 
 
 def _wakeful_loop_factory():
